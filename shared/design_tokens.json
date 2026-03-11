@@ -1,0 +1,27 @@
+{
+  "colors": {
+    "primary": "#0f172a",
+    "secondary": "#334155",
+    "accent": "#3b82f6",
+    "background": "#ffffff",
+    "foreground": "#020617",
+    "card": "#ffffff",
+    "muted": "#f1f5f9"
+  },
+  "dark_mode": {
+    "background": "#020617",
+    "foreground": "#f8fafc",
+    "card": "#0f172a",
+    "muted": "#1e293b"
+  },
+  "components": {
+    "button": {
+      "radius": "0.5rem",
+      "font_weight": "600"
+    },
+    "terminal": {
+      "background": "#000000",
+      "font": "JetBrains Mono, monospace"
+    }
+  }
+}

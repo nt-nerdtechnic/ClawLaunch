@@ -1,0 +1,6 @@
+{"session_timestamp": "2026-03-10T10:00:00Z", "model": "google-antigravity/gemini-3-flash", "input_tokens": 1200, "output_tokens": 300}
+{"session_timestamp": "2026-03-10T11:00:00Z", "model": "google-antigravity/gemini-3-flash", "input_tokens": 2500, "output_tokens": 800}
+{"session_timestamp": "2026-03-10T14:00:00Z", "model": "ollama/llama3.2:3b", "input_tokens": 500, "output_tokens": 100}
+{"session_timestamp": "2026-03-11T09:00:00Z", "model": "google-antigravity/gemini-3-flash", "input_tokens": 4000, "output_tokens": 1200}
+{"session_timestamp": "2026-03-11T12:00:00Z", "model": "google-antigravity/gemini-3-flash", "input_tokens": 3000, "output_tokens": 900}
+{"session_timestamp": "2026-03-11T15:00:00Z", "model": "ollama/llama3.2:3b", "input_tokens": 1500, "output_tokens": 400}

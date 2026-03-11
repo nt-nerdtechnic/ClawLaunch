@@ -1,0 +1,29 @@
+{
+  "api_version": "1.0.0",
+  "mode": "CLI_ORCHESTRATION",
+  "command_templates": {
+    "system": {
+      "check_node": "node -v",
+      "check_git": "git --version",
+      "check_pnpm": "pnpm -v"
+    },
+    "installer": {
+      "clone": "git clone https://github.com/OpenClaw/openclaw.git",
+      "install": "pnpm install"
+    },
+    "gateway": {
+      "start": "pnpm openclaw gateway start",
+      "stop": "pnpm openclaw gateway stop",
+      "status": "pnpm openclaw gateway status"
+    },
+    "analytics": {
+      "usage": "cat ~/.openclaw/workspace/memory/usage/log.jsonl",
+      "summary": "python3 /Users/neillu/Desktop/clawdbot-main/skills/model-usage/scripts/summary.py"
+    }
+  },
+  "ipc_channels": {
+    "to_main": "shell:exec",
+    "from_main": "shell:stdout",
+    "status_update": "claw:status"
+  }
+}
