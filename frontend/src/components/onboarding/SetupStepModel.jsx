@@ -33,14 +33,17 @@ const SetupStepModel = ({ onNext }) => {
   const { 
     config, setConfig, envStatus, setEnvStatus, 
     detectedConfig, userType, detectingPaths, 
-    pathsConfirmed, setPathsConfirmed 
+    pathsConfirmed, setPathsConfirmed, setDetectedConfig
   } = useStore();
+
+  const [probingKey, setProbingKey] = useState(null);
 
   const handleBrowse = async (key) => {
     if (window.electronAPI && window.electronAPI.selectDirectory) {
       const selectedPath = await window.electronAPI.selectDirectory();
       if (selectedPath) {
         setConfig({ [key]: selectedPath });
+        setProbingKey(key);
         
         // 自動探針：掃描新選取的路徑是否含有配置
         try {
@@ -53,7 +56,8 @@ const SetupStepModel = ({ onNext }) => {
                         model: probed.model || config.model,
                         configPath: probed.configPath || config.configPath
                     });
-                    // 如果偵測到關鍵資訊，給予提示或直接確認
+                    
+                    // 同步更新偵測到的配置
                     setDetectedConfig({ 
                         apiKey: probed.apiKey, 
                         model: probed.model,
@@ -65,6 +69,8 @@ const SetupStepModel = ({ onNext }) => {
             }
         } catch(e) {
             console.error("Probe failed", e);
+        } finally {
+            setTimeout(() => setProbingKey(null), 500); // 稍微延遲讓校驗感更明顯
         }
       }
     }
@@ -120,8 +126,8 @@ const SetupStepModel = ({ onNext }) => {
           <Bot size={24} />
         </div>
         <h2 className="text-2xl font-bold text-gray-800">為您的龍蝦注入靈魂</h2>
-        <p className="text-gray-500 mt-2">
-            {!pathsConfirmed ? '首先，讓我們確認您的機甲佈置環境' : '現在，請選擇一個核心大語言模型'}
+        <p className="text-gray-500 mt-2 italic text-sm">
+            {!pathsConfirmed ? '「若要啟動機甲，必先對齊三區路徑」' : '「三區對位成功，正在加載靈魂核心」'}
         </p>
       </div>
 
@@ -133,7 +139,7 @@ const SetupStepModel = ({ onNext }) => {
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${envStatus.node !== 'loading' && envStatus.git !== 'loading' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
-                <span className="text-sm font-medium text-gray-700">組建環境狀態</span>
+                <span className="text-sm font-medium text-gray-700 font-black">組建環境狀態</span>
               </div>
               <div className="flex gap-4">
                 <div className="flex flex-col items-center">
@@ -152,48 +158,85 @@ const SetupStepModel = ({ onNext }) => {
             </div>
 
             {/* 三區分治路徑確認區 */}
-            <div className="p-5 bg-slate-900 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
-                <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em]">三區路徑分治偵測</h4>
-                    {detectingPaths && <Loader2 size={12} className="text-blue-400 animate-spin" />}
+            <div className="p-5 bg-slate-900 rounded-3xl border border-slate-800 space-y-5 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 pointer-events-none">
+                    <Database size={80} className="text-blue-500" />
                 </div>
-                <div className="grid grid-cols-1 gap-4">
-                    <PathItem 
-                        label="主核心區 (Core)" 
-                        path={config.corePath || '未定位'} 
-                        icon={<Package size={14}/>} 
-                        onBrowse={() => handleBrowse('corePath')}
-                    />
-                    <PathItem 
-                        label="設定區資料夾 (Config Folder)" 
-                        path={config.configPath || '未定位'} 
-                        icon={<Settings size={14}/>} 
-                        onBrowse={() => handleBrowse('configPath')}
-                    />
-                    <PathItem 
-                        label="工作區 (Workspace)" 
-                        path={config.workspacePath || '未定位'} 
-                        icon={<Database size={14}/>} 
-                        onBrowse={() => handleBrowse('workspacePath')}
-                    />
+                
+                <div className="flex justify-between items-center relative z-10">
+                    <h4 className="text-[11px] font-black text-blue-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                        機甲三區路徑分治系統
+                    </h4>
+                    {(detectingPaths || probingKey) && <Loader2 size={14} className="text-blue-400 animate-spin" />}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 relative z-10">
+                    <div className="relative group">
+                        <PathItem 
+                            label="主核心區 (Core Path)" 
+                            path={config.corePath || '未定位'} 
+                            icon={<Package size={14}/>} 
+                            onBrowse={() => handleBrowse('corePath')}
+                        />
+                        {probingKey === 'corePath' && (
+                            <div className="absolute inset-0 bg-blue-600/5 backdrop-blur-[1px] rounded-xl flex items-center justify-center border border-blue-500/20 animate-pulse">
+                                <span className="text-[10px] font-black text-blue-400 uppercase">正在校驗核心內容...</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="relative group">
+                        <PathItem 
+                            label="設定區資料夾 (Config Folder)" 
+                            path={config.configPath || '未定位'} 
+                            icon={<Settings size={14}/>} 
+                            onBrowse={() => handleBrowse('configPath')}
+                        />
+                        {probingKey === 'configPath' && (
+                            <div className="absolute inset-0 bg-blue-600/5 backdrop-blur-[1px] rounded-xl flex items-center justify-center border border-blue-500/20 animate-pulse">
+                                <span className="text-[10px] font-black text-blue-400 uppercase">讀取設定檔案中...</span>
+                            </div>
+                        )}
+                        {config.configPath && detectedConfig?.apiKey && (
+                            <div className="absolute -top-2 -right-2 bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)] border border-white/20 animate-bounce">
+                                配置已自動對齊
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="relative group">
+                        <PathItem 
+                            label="工作區資料夾 (Workspace Folder)" 
+                            path={config.workspacePath || '未定位'} 
+                            icon={<Database size={14}/>} 
+                            onBrowse={() => handleBrowse('workspacePath')}
+                        />
+                        {probingKey === 'workspacePath' && (
+                            <div className="absolute inset-0 bg-blue-600/5 backdrop-blur-[1px] rounded-xl flex items-center justify-center border border-blue-500/20 animate-pulse">
+                                <span className="text-[10px] font-black text-blue-400 uppercase">確認工作空間...</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* 自動偵測提示區 */}
             {detectedConfig && (
-                <div className="p-4 bg-blue-600 rounded-xl shadow-lg shadow-blue-500/20 text-white flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <ArrowRight size={20} className="text-white" />
+                <div className="p-4 bg-gradient-to-r from-blue-700 to-blue-600 rounded-2xl shadow-xl shadow-blue-500/20 text-white flex items-center justify-between border border-blue-400/20 animate-in zoom-in-95">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
+                            <Bot size={20} className="text-white" />
+                        </div>
                         <div>
-                            <h4 className="text-sm font-bold">偵測到現有靈魂！</h4>
-                            <p className="text-[10px] opacity-80">已為您對齊既存的 API 與模型設定</p>
+                            <h4 className="text-sm font-black tracking-tight">偵測到既存靈魂！</h4>
+                            <p className="text-[10px] opacity-90 font-medium">已讀取到模型授權，準備好一鍵注入機甲</p>
                         </div>
                     </div>
                     <button 
                         onClick={handleImport}
-                        className="px-4 py-2 bg-white text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-50 transition-colors"
+                        className="px-5 py-2.5 bg-white text-blue-700 text-[11px] font-black rounded-xl hover:bg-blue-50 transition-all shadow-lg active:scale-95 flex items-center gap-2"
                     >
-                        一鍵對接並繼續
+                        一鍵注入機甲 <ArrowRight size={14} />
                     </button>
                 </div>
             )}
@@ -201,9 +244,10 @@ const SetupStepModel = ({ onNext }) => {
             {!detectedConfig && (
                 <button 
                   onClick={() => setPathsConfirmed(true)} 
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/20"
+                  disabled={!config.corePath || !config.configPath}
+                  className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-gray-100 disabled:text-gray-300 text-white font-black py-4 rounded-2xl transition-all shadow-2xl flex items-center justify-center gap-2 px-8 uppercase tracking-widest text-xs"
                 >
-                  確認路徑並手動配置靈魂
+                  確認路徑並手動設定核心 <ArrowRight size={16} />
                 </button>
             )}
           </div>
