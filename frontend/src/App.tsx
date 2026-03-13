@@ -43,6 +43,8 @@ function App() {
   };
 
   const detectPaths = async () => {
+    const { setDetectingPaths } = useStore.getState();
+    setDetectingPaths(true);
     // Only auto-detect if config paths are empty
     if (!config.corePath || !config.workspacePath) {
       if (window.electronAPI) {
@@ -70,6 +72,7 @@ function App() {
         }
       }
     }
+    setDetectingPaths(false);
   };
 
   const loadConfig = async () => {

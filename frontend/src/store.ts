@@ -28,8 +28,12 @@ interface AppState {
   setEnvStatus: (status: { node: string; git: string; pnpm: string }) => void;
   config: Config;
   detectedConfig: { apiKey?: string; model?: string } | null;
+  detectingPaths: boolean;
+  pathsConfirmed: boolean;
   setConfig: (patch: Partial<Config>) => void;
   setDetectedConfig: (config: { apiKey?: string; model?: string } | null) => void;
+  setDetectingPaths: (status: boolean) => void;
+  setPathsConfirmed: (status: boolean) => void;
   toggleSkill: (skillId: string) => void;
   usage: {
     input: number;
@@ -63,10 +67,14 @@ export const useStore = create<AppState>((set) => ({
     workspacePath: '~/.openclaw'
   },
   detectedConfig: null,
+  detectingPaths: false,
+  pathsConfirmed: false,
   userType: null,
   setUserType: (type) => set({ userType: type }),
   setConfig: (patch) => set((state) => ({ config: { ...state.config, ...patch } })),
   setDetectedConfig: (config) => set({ detectedConfig: config }),
+  setDetectingPaths: (status) => set({ detectingPaths: status }),
+  setPathsConfirmed: (status) => set({ pathsConfirmed: status }),
   toggleSkill: (skillId) => set((state) => ({
     config: {
       ...state.config,
