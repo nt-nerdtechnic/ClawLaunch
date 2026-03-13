@@ -37,6 +37,7 @@ const SetupStepModel = ({ onNext }) => {
   } = useStore();
 
   const [probingKey, setProbingKey] = useState(null);
+  const [showFullSetup, setShowFullSetup] = useState(false);
 
   const handleBrowse = async (key) => {
     if (window.electronAPI && window.electronAPI.selectDirectory) {
@@ -70,7 +71,7 @@ const SetupStepModel = ({ onNext }) => {
         } catch(e) {
             console.error("Probe failed", e);
         } finally {
-            setTimeout(() => setProbingKey(null), 500); // 稍微延遲讓校驗感更明顯
+            setTimeout(() => setProbingKey(null), 500); 
         }
       }
     }
@@ -78,14 +79,21 @@ const SetupStepModel = ({ onNext }) => {
 
   const handleImport = () => {
     if (detectedConfig) {
-      setConfig({
+      const newConfig = {
         apiKey: detectedConfig.apiKey || config.apiKey,
         model: detectedConfig.model || config.model,
         corePath: detectedConfig.corePath || config.corePath,
         configPath: detectedConfig.configPath || config.configPath,
         workspacePath: detectedConfig.workspacePath || config.workspacePath
-      });
-      setPathsConfirmed(true);
+      };
+      setConfig(newConfig);
+      
+      // 智慧跳轉：如果已經有靈魂（API Key），直接進入下一步
+      if (newConfig.apiKey && newConfig.apiKey.length > 5) {
+          onNext();
+      } else {
+          setPathsConfirmed(true);
+      }
     }
   };
 
@@ -127,7 +135,7 @@ const SetupStepModel = ({ onNext }) => {
         </div>
         <h2 className="text-2xl font-bold text-gray-800">為您的龍蝦注入靈魂</h2>
         <p className="text-gray-500 mt-2 italic text-sm">
-            {!pathsConfirmed ? '「若要啟動機甲，必先對齊三區路徑」' : '「三區對位成功，正在加載靈魂核心」'}
+            {!pathsConfirmed ? '「若要啟動機甲，必先對齊三區路徑」' : '「三區對位成功，準備加載核心靈魂」'}
         </p>
       </div>
 
@@ -229,14 +237,14 @@ const SetupStepModel = ({ onNext }) => {
                         </div>
                         <div>
                             <h4 className="text-sm font-black tracking-tight">偵測到既存靈魂！</h4>
-                            <p className="text-[10px] opacity-90 font-medium">已讀取到模型授權，準備好一鍵注入機甲</p>
+                            <p className="text-[10px] opacity-90 font-medium tracking-wide">模型與 API 已對齊，準備好啟動機甲</p>
                         </div>
                     </div>
                     <button 
                         onClick={handleImport}
-                        className="px-5 py-2.5 bg-white text-blue-700 text-[11px] font-black rounded-xl hover:bg-blue-50 transition-all shadow-lg active:scale-95 flex items-center gap-2"
+                        className="px-5 py-2.5 bg-white text-blue-700 text-[11px] font-black rounded-xl hover:bg-blue-50 transition-all shadow-lg active:scale-95 flex items-center gap-2 uppercase tracking-tighter"
                     >
-                        一鍵注入機甲 <ArrowRight size={14} />
+                        一鍵注入並啟動 <ArrowRight size={14} />
                     </button>
                 </div>
             )}
@@ -258,77 +266,111 @@ const SetupStepModel = ({ onNext }) => {
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
              <button 
                 onClick={() => setPathsConfirmed(false)}
-                className="text-xs text-gray-400 hover:text-blue-600 flex items-center gap-1 transition-colors"
+                className="text-[10px] font-black text-gray-400 hover:text-blue-600 flex items-center gap-1 transition-colors uppercase tracking-widest"
              >
                 ← 返回修改路徑
              </button>
 
-            {/* 模型選擇卡片 */}
-            <div className="space-y-3">
-              <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
-                <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">1</span>
-                選擇主理模型
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                <div 
-                  onClick={() => setConfig({ model: 'claude-3-5' })}
-                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    config.model === 'claude-3-5' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-200'
-                  }`}
-                >
-                  <h3 className="font-bold text-gray-800 text-sm">Claude 3.5 Sonnet</h3>
-                  <p className="text-[10px] text-gray-500 mt-1">程式碼與邏輯能力頂級，推薦首選。</p>
+            {/* 配置摘要 (若已有資料) */}
+            {config.apiKey && !showFullSetup && (
+                <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">當前準備注入的靈魂</h4>
+                        <button 
+                            onClick={() => setShowFullSetup(true)}
+                            className="text-[10px] font-black text-blue-600 hover:underline"
+                        >
+                            更換其他模型
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <p className="text-[9px] text-gray-400 uppercase font-black">核心模型</p>
+                            <p className="text-xs font-bold text-slate-700">{config.model === 'claude-3-5' ? 'Claude 3.5 Sonnet' : 'GPT-4o'}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                            <p className="text-[9px] text-gray-400 uppercase font-black">API 密鑰</p>
+                            <p className="text-xs font-mono text-slate-700">••••••••{config.apiKey.slice(-4)}</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={handleNext}
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-2xl transition-all shadow-xl shadow-blue-500/20 uppercase tracking-widest text-xs"
+                    >
+                        準備就緒：注入靈魂核心
+                    </button>
                 </div>
-                <div 
-                  onClick={() => setConfig({ model: 'gpt-4o' })}
-                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    config.model === 'gpt-4o' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-200'
-                  }`}
-                >
-                  <h3 className="font-bold text-gray-800 text-sm">GPT-4o</h3>
-                  <p className="text-[10px] text-gray-500 mt-1">綜合能力強，反應速度快，生態系完善。</p>
-                </div>
-              </div>
-            </div>
+            )}
 
-            {/* API 密鑰輸入區 */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center px-1">
-                <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
-                    <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">2</span>
-                    填寫 API Key
-                </label>
-                <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                  獲取密鑰 <ExternalLink size={10} />
-                </a>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Key size={16} />
-                </div>
-                <input 
-                  type="password" 
-                  placeholder="sk-..." 
-                  value={config.apiKey} 
-                  onChange={(e) => setConfig({ apiKey: e.target.value })} 
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-sm font-mono" 
-                />
-              </div>
-              <p className="text-[10px] text-gray-400">
-                密鑰僅會加密儲存於您的本地電腦，絕對安全。
-              </p>
-            </div>
+            {/* 模型選擇卡片 (僅在需要修改或無資料時顯示) */}
+            {(showFullSetup || !config.apiKey) && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
+                    <div className="space-y-3">
+                        <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
+                            <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">1</span>
+                            選擇主理模型
+                        </label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div 
+                            onClick={() => setConfig({ model: 'claude-3-5' })}
+                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                config.model === 'claude-3-5' ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-500/5' : 'border-gray-200 hover:border-blue-200'
+                            }`}
+                            >
+                            <h3 className="font-bold text-gray-800 text-sm">Claude 3.5 Sonnet</h3>
+                            <p className="text-[10px] text-gray-500 mt-1">程式碼與邏輯能力頂級，推薦首選。</p>
+                            </div>
+                            <div 
+                            onClick={() => setConfig({ model: 'gpt-4o' })}
+                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                config.model === 'gpt-4o' ? 'border-green-500 bg-green-50 shadow-lg shadow-green-500/5' : 'border-gray-200 hover:border-green-200'
+                            }`}
+                            >
+                            <h3 className="font-bold text-gray-800 text-sm">GPT-4o</h3>
+                            <p className="text-[10px] text-gray-500 mt-1">綜合能力強，反應速度快，生態系完善。</p>
+                            </div>
+                        </div>
+                    </div>
 
-            {/* 下一步按鈕 */}
-            <div className="pt-6">
-              <button 
-                onClick={handleNext} 
-                disabled={!config.apiKey}
-                className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 px-8 rounded-xl transition-all shadow-xl shadow-slate-900/10"
-              >
-                下一步：綁定通訊軟體 <ArrowRight size={18} />
-              </button>
-            </div>
+                    {/* API 密鑰輸入區 */}
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center px-1">
+                            <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
+                                <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">2</span>
+                                填寫 API Key
+                            </label>
+                            <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 font-bold">
+                            獲取密鑰 <ExternalLink size={10} />
+                            </a>
+                        </div>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <Key size={16} />
+                            </div>
+                            <input 
+                            type="password" 
+                            placeholder="sk-..." 
+                            value={config.apiKey} 
+                            onChange={(e) => setConfig({ apiKey: e.target.value })} 
+                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-sm font-mono shadow-inner" 
+                            />
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-medium">
+                            密鑰僅會加密儲存於您的本地電腦，絕對安全。
+                        </p>
+                    </div>
+
+                    <div className="pt-6">
+                        <button 
+                            onClick={handleNext} 
+                            disabled={!config.apiKey}
+                            className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs"
+                        >
+                            確認並綁定通訊軟體 <ArrowRight size={18} />
+                        </button>
+                    </div>
+                </div>
+            )}
           </div>
         )}
       </div>
