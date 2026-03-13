@@ -5,6 +5,36 @@
 @source "./src/**/*.{js,ts,jsx,tsx}";
 
 
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #f8fafc;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --input: #f1f5f9;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #f1f5f9;
+  --card: #1e293b; /* bg-slate-900 with some transparency or slight adjustment */
+  --card-foreground: #f1f5f9;
+  --border: #1e293b;
+  --input: #0f172a;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #f1f5f9;
+}
+
 html,
 body,
 #root {
@@ -12,10 +42,11 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow: auto; /* Allow overflow at root if needed, or better managed by App */
-  background-color: #020617;
-  color: #f1f5f9;
+  overflow: auto;
+  background-color: var(--background);
+  color: var(--foreground);
   font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Standard scrollbar for better UX visibility */

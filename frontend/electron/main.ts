@@ -160,9 +160,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const config = JSON.parse(configStr);
       const configPath = path.join(app.getPath('userData'), 'config.json');
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-      return { code: 0, stdout: `Config saved to ${configPath}`, stderr: '' };
+      return { code: 0, stdout: `Config saved to ${configPath}`, stderr: '', exitCode: 0 };
     } catch (e: any) {
-      return { code: 1, stdout: '', stderr: e.message };
+      return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
 
@@ -170,9 +170,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const configPath = path.join(app.getPath('userData'), 'config.json');
       const content = await fs.readFile(configPath, 'utf-8');
-      return { code: 0, stdout: content, stderr: '' };
+      return { code: 0, stdout: content, stderr: '', exitCode: 0 };
     } catch (e: any) {
-      return { code: 1, stdout: '', stderr: 'No config file found' };
+      return { code: 1, stdout: '', stderr: 'No config file found', exitCode: 1 };
     }
   }
 
@@ -227,7 +227,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
     return { 
         code: 0, 
-        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig: { ...existingConfig, installedSkills } }) 
+        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig: { ...existingConfig, installedSkills } }),
+        exitCode: 0
     };
   }
 
@@ -263,12 +264,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             const installedSkills = await scanInstalledSkills(finalConfigDirPath);
             return {
                 code: 0,
-                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath, installedSkills })
+                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath, installedSkills }),
+                exitCode: 0
             };
         }
-        return { code: 1, stdout: '', stderr: 'No config found at path' };
+        return { code: 1, stdout: '', stderr: 'No config found at path', exitCode: 1 };
     } catch(e: any) {
-        return { code: 1, stdout: '', stderr: e.message };
+        return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
 

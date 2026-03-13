@@ -49,6 +49,8 @@ interface AppState {
     history: { name: string; tokens: number }[];
   };
   setUsage: (data: any) => void;
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -97,4 +99,9 @@ export const useStore = create<AppState>((set) => ({
     history: []
   },
   setUsage: (data) => set((state) => ({ usage: { ...state.usage, ...data } })),
+  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'dark',
+  setTheme: (theme) => {
+    localStorage.setItem('theme', theme);
+    set({ theme });
+  },
 }));

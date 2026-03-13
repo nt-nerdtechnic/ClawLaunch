@@ -40,7 +40,7 @@ const SetupStepLaunch = ({ onComplete }) => {
       // In a real scenario, we might git clone or pnpm install here
       // For this phase, we simulate the install command to the backend
       const res = await window.electronAPI.exec('node -v'); // Just to verify connection
-      if (res.exitCode !== 0) throw new Error('環境檢查失敗，請確保已安裝 Node.js');
+      if (res.exitCode !== 0 && res.code !== 0) throw new Error('環境檢查失敗，請確保已安裝 Node.js');
       
       setProgress(60);
       await new Promise(r => setTimeout(r, 1500));
@@ -48,12 +48,20 @@ const SetupStepLaunch = ({ onComplete }) => {
 
       // Step 3: Finishing (Saving config)
       setStatus('finishing');
-      addLog(`>>> [WIZARD] 正在將模型配置 (${config.model}) 寫入本地安全存儲...`, 'system');
       
-      // Real Action: Write config
-      // We use a clean stringified JSON for the persistence layer
-      const configRes = await window.electronAPI.exec(`config:write ${JSON.stringify(config, null, 2)}`);
-      if (configRes.exitCode !== 0) throw new Error('配置文件保存失敗');
+      // [OPTIMIZATION] 如果是連結現有且配置未變動（暫時以 userType 簡單判定，或未來比對內容）
+      // 此處我們增加一個防禦性判定：如果 config 已完整且是 existing，我們僅作同步確認
+      const isQuickSync = config.userType === 'existing' && !config.manuallyModified; 
+      
+      if (isQuickSync) {
+        addLog(`>>> [WIZARD] 偵測到配置已存在，跳過重複寫入，直接進行連線對位...`, 'system');
+        await new Promise(r => setTimeout(r, 800));
+      } else {
+        addLog(`>>> [WIZARD] 正在將模型配置 (${config.model || 'Gemini'}) 寫入本地安全存儲...`, 'system');
+        const configRes = await window.electronAPI.exec(`config:write ${JSON.stringify(config, null, 2)}`);
+        if (configRes.exitCode !== 0 && configRes.code !== 0) throw new Error('配置文件保存失敗');
+        addLog('>>> [WIZARD] 配置保存成功。', 'system');
+      }
       
       addLog('>>> [WIZARD] 正在綁定 Telegram Bot 頻道...', 'system');
       await new Promise(r => setTimeout(r, 1000));

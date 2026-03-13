@@ -89,8 +89,12 @@ const SetupStepModel = ({ onNext }) => {
       };
       setConfig(newConfig);
       
-      // 智慧跳轉：如果已經有靈魂（API Key 或模型），直接進入下一步
-      if ((newConfig.apiKey && newConfig.apiKey.length > 0) || newConfig.model) {
+      // [QUICK PASS] 快捷通道：如果用戶是已有安裝且偵測到核心，直接完成安裝
+      if (userType === 'existing' && ((newConfig.apiKey && newConfig.apiKey.length > 5) || newConfig.model)) {
+          // 直接寫入完成標記並回調
+          localStorage.setItem('onboarding_finished', 'true');
+          onNext(); // 此處的 onNext 在 SetupWizard 中會觸發 handleComplete
+      } else if ((newConfig.apiKey && newConfig.apiKey.length > 0) || newConfig.model) {
           onNext();
       } else {
           setPathsConfirmed(true);
