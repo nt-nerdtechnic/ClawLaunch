@@ -3,20 +3,28 @@ import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database } from 
 import { useStore } from '../../store';
 
 const PathItem = ({ label, path, icon, onBrowse }) => (
-    <div 
-        onClick={onBrowse}
-        className="flex items-center justify-between bg-black/20 p-3 rounded-xl border border-white/5 cursor-pointer hover:bg-black/30 hover:border-blue-500/30 transition-all group"
-    >
-        <div className="flex items-center gap-3">
-            <div className="text-blue-400 opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all">{icon}</div>
-            <div>
-                <p className="text-[9px] text-gray-500 uppercase font-black group-hover:text-blue-400 transition-colors">{label}</p>
-                <p className="text-[11px] text-gray-400 font-mono truncate max-w-[200px]">{path}</p>
-            </div>
+    <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between items-center px-1">
+            <p className="text-[10px] text-gray-500 uppercase font-black tracking-wider flex items-center gap-1.5">
+                <span className="text-blue-500 opacity-60">{icon}</span>
+                {label}
+            </p>
+            <div className={`w-1.5 h-1.5 rounded-full ${path && path !== '未定位' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500 animate-pulse'}`} />
         </div>
-        <div className="flex items-center gap-2">
-            <span className="text-[8px] font-bold text-blue-500/50 uppercase opacity-0 group-hover:opacity-100 transition-opacity">點擊更改</span>
-            <div className={`w-2 h-2 rounded-full ${path && path !== '未定位' ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`} />
+        <div 
+            onClick={onBrowse}
+            className="group flex items-center gap-3 bg-black/40 hover:bg-black/60 border border-white/5 hover:border-blue-500/30 p-2.5 rounded-xl transition-all cursor-pointer shadow-inner"
+        >
+            <div className="flex-1 min-w-0">
+                <p className="text-[12px] text-slate-300 font-mono truncate px-1">
+                    {path || '點擊選擇路徑...'}
+                </p>
+            </div>
+            <button 
+                className="shrink-0 px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600 text-blue-400 group-hover:text-white text-[10px] font-black rounded-lg border border-blue-500/20 transition-all uppercase tracking-tighter"
+            >
+                瀏覽
+            </button>
         </div>
     </div>
 );
