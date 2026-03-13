@@ -214,6 +214,41 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     };
   }
 
+  // Config Probe Handler (New: for manual path selection)
+  if (fullCommand.startsWith('config:probe')) {
+    const probePath = fullCommand.replace('config:probe ', '').trim();
+    try {
+        const stats = await fs.stat(probePath);
+        let finalConfigPath = '';
+        
+        if (stats.isDirectory()) {
+            const possible = path.join(probePath, 'openclaw.json');
+            try {
+                await fs.access(possible);
+                finalConfigPath = possible;
+            } catch(e) {}
+        } else if (probePath.endsWith('openclaw.json')) {
+            finalConfigPath = probePath;
+        }
+
+        if (finalConfigPath) {
+            const content = await fs.readFile(finalConfigPath, 'utf-8');
+            const parsed = JSON.parse(content);
+            return {
+                code: 0,
+                stdout: JSON.stringify({
+                    apiKey: parsed.apiKey || parsed.api_key || '',
+                    model: parsed.model || '',
+                    configPath: finalConfigPath
+                })
+            };
+        }
+        return { code: 1, stdout: '', stderr: 'No config found at path' };
+    } catch(e: any) {
+        return { code: 1, stdout: '', stderr: e.message };
+    }
+  }
+
   return new Promise((resolve) => {
     const child = spawn(fullCommand, { shell: true });
     let stdout = '';

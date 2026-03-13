@@ -41,6 +41,31 @@ const SetupStepModel = ({ onNext }) => {
       const selectedPath = await window.electronAPI.selectDirectory();
       if (selectedPath) {
         setConfig({ [key]: selectedPath });
+        
+        // 自動探針：掃描新選取的路徑是否含有配置
+        try {
+            const res = await window.electronAPI.exec(`config:probe ${selectedPath}`);
+            if (res.code === 0 && res.stdout) {
+                const probed = JSON.parse(res.stdout);
+                if (probed.apiKey || probed.model) {
+                    setConfig({
+                        apiKey: probed.apiKey || config.apiKey,
+                        model: probed.model || config.model,
+                        configPath: probed.configPath || config.configPath
+                    });
+                    // 如果偵測到關鍵資訊，給予提示或直接確認
+                    setDetectedConfig({ 
+                        apiKey: probed.apiKey, 
+                        model: probed.model,
+                        corePath: key === 'corePath' ? selectedPath : config.corePath,
+                        configPath: probed.configPath || config.configPath,
+                        workspacePath: key === 'workspacePath' ? selectedPath : config.workspacePath
+                    });
+                }
+            }
+        } catch(e) {
+            console.error("Probe failed", e);
+        }
       }
     }
   };
