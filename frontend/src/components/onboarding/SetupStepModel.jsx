@@ -62,6 +62,7 @@ const SetupStepModel = ({ onNext }) => {
                     setDetectedConfig({ 
                         apiKey: probed.apiKey, 
                         model: probed.model,
+                        botToken: probed.botToken,
                         corePath: key === 'corePath' ? selectedPath : config.corePath,
                         configPath: probed.configPath || config.configPath,
                         workspacePath: key === 'workspacePath' ? selectedPath : config.workspacePath

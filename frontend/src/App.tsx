@@ -61,7 +61,7 @@ function App() {
             }
 
             // [NEW] 緩存完整配置訊息以便「一鍵對接」
-            if (detected.existingConfig && (detected.existingConfig.apiKey || detected.existingConfig.model)) {
+            if (detected.existingConfig && (detected.existingConfig.apiKey || detected.existingConfig.model || detected.existingConfig.botToken)) {
                 setDetectedConfig({
                     ...detected.existingConfig,
                     corePath: detected.corePath,

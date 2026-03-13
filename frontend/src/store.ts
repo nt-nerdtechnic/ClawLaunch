@@ -30,6 +30,7 @@ interface AppState {
   detectedConfig: { 
     apiKey?: string; 
     model?: string;
+    botToken?: string;
     corePath?: string;
     configPath?: string;
     workspacePath?: string;
