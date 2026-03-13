@@ -88,8 +88,8 @@ const SetupStepModel = ({ onNext }) => {
       };
       setConfig(newConfig);
       
-      // 智慧跳轉：如果已經有靈魂（API Key），直接進入下一步
-      if (newConfig.apiKey && newConfig.apiKey.length > 0) {
+      // 智慧跳轉：如果已經有靈魂（API Key 或模型），直接進入下一步
+      if ((newConfig.apiKey && newConfig.apiKey.length > 0) || newConfig.model) {
           onNext();
       } else {
           setPathsConfirmed(true);
@@ -121,7 +121,8 @@ const SetupStepModel = ({ onNext }) => {
   }, []);
   
   const handleNext = () => {
-    if (config.apiKey) {
+    // 只要有金鑰或模型，即視為配置就緒
+    if (config.apiKey || config.model) {
       onNext();
     }
   };
