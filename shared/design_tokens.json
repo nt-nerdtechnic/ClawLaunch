@@ -1,27 +1,15 @@
 {
   "colors": {
-    "primary": "#0f172a",
-    "secondary": "#334155",
-    "accent": "#3b82f6",
-    "background": "#ffffff",
-    "foreground": "#020617",
-    "card": "#ffffff",
-    "muted": "#f1f5f9"
+    "update_banner_bg": "#eff6ff",
+    "update_banner_border": "#3b82f6",
+    "update_banner_text": "#1e40af",
+    "progress_bar_fill": "#3b82f6"
   },
-  "dark_mode": {
-    "background": "#020617",
-    "foreground": "#f8fafc",
-    "card": "#0f172a",
-    "muted": "#1e293b"
+  "typography": {
+    "banner_title_size": "14px",
+    "banner_desc_size": "12px"
   },
-  "components": {
-    "button": {
-      "radius": "0.5rem",
-      "font_weight": "600"
-    },
-    "terminal": {
-      "background": "#000000",
-      "font": "JetBrains Mono, monospace"
-    }
+  "spacing": {
+    "banner_padding": "16px"
   }
 }

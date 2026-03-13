@@ -6,13 +6,31 @@ interface LogEntry {
   source: 'stdout' | 'stderr' | 'system';
 }
 
+interface Config {
+  model: string;
+  apiKey: string;
+  platform: string;
+  botToken: string;
+  enabledSkills: string[];
+  corePath: string;    // 主核心區
+  configPath: string;  // 設定區
+  workspacePath: string; // 工作區
+}
+
 interface AppState {
+  userType: 'new' | 'existing' | null;
+  setUserType: (type: 'new' | 'existing' | null) => void;
   running: boolean;
   setRunning: (status: boolean) => void;
   logs: LogEntry[];
   addLog: (text: string, source?: 'stdout' | 'stderr' | 'system') => void;
   envStatus: { node: string; git: string; pnpm: string };
   setEnvStatus: (status: { node: string; git: string; pnpm: string }) => void;
+  config: Config;
+  detectedConfig: { apiKey?: string; model?: string } | null;
+  setConfig: (patch: Partial<Config>) => void;
+  setDetectedConfig: (config: { apiKey?: string; model?: string } | null) => void;
+  toggleSkill: (skillId: string) => void;
   usage: {
     input: number;
     output: number;
@@ -34,18 +52,33 @@ export const useStore = create<AppState>((set) => ({
   })),
   envStatus: { node: 'loading', git: 'loading', pnpm: 'loading' },
   setEnvStatus: (status) => set({ envStatus: status }),
+  config: { 
+    model: 'claude-3-5', 
+    apiKey: '', 
+    platform: 'telegram', 
+    botToken: '',
+    enabledSkills: ['browser', 'coding', 'market', 'cron'],
+    corePath: '',
+    configPath: '',
+    workspacePath: '~/.openclaw'
+  },
+  detectedConfig: null,
+  userType: null,
+  setUserType: (type) => set({ userType: type }),
+  setConfig: (patch) => set((state) => ({ config: { ...state.config, ...patch } })),
+  setDetectedConfig: (config) => set({ detectedConfig: config }),
+  toggleSkill: (skillId) => set((state) => ({
+    config: {
+      ...state.config,
+      enabledSkills: state.config.enabledSkills.includes(skillId)
+        ? state.config.enabledSkills.filter(id => id !== skillId)
+        : [...state.config.enabledSkills, skillId]
+    }
+  })),
   usage: {
     input: 0,
     output: 0,
-    history: [
-      { name: '3/05', tokens: 12000 },
-      { name: '3/06', tokens: 19000 },
-      { name: '3/07', tokens: 15000 },
-      { name: '3/08', tokens: 27800 },
-      { name: '3/09', tokens: 18900 },
-      { name: '3/10', tokens: 23900 },
-      { name: '3/11', tokens: 34900 },
-    ]
+    history: []
   },
   setUsage: (data) => set((state) => ({ usage: { ...state.usage, ...data } })),
 }));

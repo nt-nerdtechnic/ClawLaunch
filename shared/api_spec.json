@@ -1,29 +1,23 @@
 {
-  "api_version": "1.0.0",
-  "mode": "CLI_ORCHESTRATION",
-  "command_templates": {
-    "system": {
-      "check_node": "node -v",
-      "check_git": "git --version",
-      "check_pnpm": "pnpm -v"
+  "endpoints": [
+    {
+      "id": "check_version",
+      "method": "IPC",
+      "description": "獲取本地與遠端版本號",
+      "returns": {
+        "local": "string",
+        "remote": "string",
+        "hasUpdate": "boolean"
+      }
     },
-    "installer": {
-      "clone": "git clone https://github.com/OpenClaw/openclaw.git",
-      "install": "pnpm install"
-    },
-    "gateway": {
-      "start": "pnpm openclaw gateway start",
-      "stop": "pnpm openclaw gateway stop",
-      "status": "pnpm openclaw gateway status"
-    },
-    "analytics": {
-      "usage": "cat ~/.openclaw/workspace/memory/usage/log.jsonl",
-      "summary": "python3 /Users/neillu/Desktop/clawdbot-main/skills/model-usage/scripts/summary.py"
+    {
+      "id": "execute_update",
+      "method": "IPC",
+      "description": "執行 git pull 與 pnpm install",
+      "returns": {
+        "success": "boolean",
+        "logs": "string[]"
+      }
     }
-  },
-  "ipc_channels": {
-    "to_main": "shell:exec",
-    "from_main": "shell:stdout",
-    "status_update": "claw:status"
-  }
+  ]
 }

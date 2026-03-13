@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { useStore } from '../store';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line } from 'recharts';
 import { Loader2 } from 'lucide-react';
 
 export function Analytics() {
+  const { setUsage, config } = useStore();
   const [chartData, setChartData] = useState<any[]>([]);
   const [stats, setStats] = useState({ 
     input: { value: '0', delta: '+0%' }, 
@@ -17,7 +19,10 @@ export function Analytics() {
 
   const fetchRealData = async () => {
     try {
-      const result = await window.electronAPI.exec('cat ~/.openclaw/workspace/memory/usage/log.jsonl');
+      const logPath = config.workspacePath 
+        ? `${config.workspacePath}/gateway.log` // Optimized for the detected clawdbot structure
+        : '~/.openclaw/workspace/memory/usage/log.jsonl';
+      const result = await window.electronAPI.exec(`cat ${logPath}`);
       if (result.code === 0 && result.stdout) {
         const lines = result.stdout.trim().split('\n');
         const dailyMap = new Map();
@@ -70,6 +75,13 @@ export function Analytics() {
           output: { value: (totalOut / 1000).toFixed(1) + 'K', delta: outDelta },
           cost: { value: ( (totalIn + totalOut * 2) / 1000000 * 0.5 ).toFixed(2), delta: costDelta }
         });
+
+        // 同步至全域 Store
+        setUsage({
+          input: totalIn,
+          output: totalOut,
+          history: formatted
+        });
       }
     } catch (e) {
       console.error("Failed to fetch analytics", e);
@@ -88,57 +100,110 @@ export function Analytics() {
         <StatCard label="預估支出 (USD)" value={`$${stats.cost.value}`} delta={stats.cost.delta} />
       </div>
 
-      <div className="bg-slate-900/20 border border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"></div>
-        
-        <div className="flex items-center justify-between mb-10">
-          <div>
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-100">實時 Token 消耗趨勢</h3>
-            <p className="text-xs text-slate-500 mt-1">數據源：~/.openclaw/workspace/memory/usage/log.jsonl</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Main Consumption Trend */}
+        <div className="bg-slate-900/20 border border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"></div>
+          
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-widest text-slate-100">Token 消耗趨勢</h3>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">Daily Total Consumption (Stacked)</p>
+            </div>
+            <button onClick={fetchRealData} className="bg-slate-800/50 hover:bg-slate-700 border border-slate-700 text-[10px] font-bold uppercase tracking-widest rounded-full px-4 py-2 text-slate-400 transition-all">
+              Sync
+            </button>
           </div>
-          <button onClick={fetchRealData} className="bg-slate-800/50 hover:bg-slate-700 border border-slate-700 text-[10px] font-bold uppercase tracking-widest rounded-full px-4 py-2 text-slate-400 transition-all">
-            Refresh Data
-          </button>
+
+          <div className="h-[300px] w-full">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorOut" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#475569', fontSize: 10, fontWeight: 700}}
+                    dy={10}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#475569', fontSize: 10, fontWeight: 700}}
+                  />
+                  <Tooltip 
+                    cursor={{stroke: '#1e293b', strokeWidth: 2}}
+                    contentStyle={{ 
+                        backgroundColor: '#0f172a', 
+                        border: '1px solid #1e293b', 
+                        borderRadius: '16px',
+                        boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                        fontSize: '11px'
+                    }}
+                  />
+                  <Area type="monotone" dataKey="in" name="Input" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorIn)" stackId="1" />
+                  <Area type="monotone" dataKey="out" name="Output" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorOut)" stackId="1" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-700 italic">暫無消耗數據記錄</div>
+            )}
+          </div>
         </div>
 
-        <div className="h-[300px] w-full">
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{fill: '#475569', fontSize: 10, fontWeight: 700}}
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{fill: '#475569', fontSize: 10, fontWeight: 700}}
-                />
-                <Tooltip 
-                  cursor={{fill: '#1e293b', opacity: 0.4}}
-                  contentStyle={{ 
-                      backgroundColor: '#0f172a', 
-                      border: '1px solid #1e293b', 
-                      borderRadius: '16px',
-                      boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                      fontSize: '12px'
-                  }}
-                  itemStyle={{ color: '#3b82f6', fontWeight: 800 }}
-                />
-                <Bar dataKey="tokens" radius={[6, 6, 0, 0]} barSize={40}>
-                  {chartData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={index === chartData.length - 1 ? '#3b82f6' : '#1e293b'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex items-center justify-center text-slate-700 italic">暫無消耗數據記錄</div>
-          )}
+        {/* Efficiency Chart */}
+        <div className="bg-slate-900/20 border border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent"></div>
+          
+          <div className="mb-8">
+            <h3 className="text-lg font-black uppercase tracking-widest text-slate-100">推論效率分析</h3>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">Input vs Output Ratio</p>
+          </div>
+
+          <div className="h-[300px] w-full">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#475569', fontSize: 10, fontWeight: 700}}
+                    dy={10}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#475569', fontSize: 10, fontWeight: 700}}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                        backgroundColor: '#0f172a', 
+                        border: '1px solid #1e293b', 
+                        borderRadius: '16px',
+                        fontSize: '11px'
+                    }}
+                  />
+                  <Line type="stepAfter" dataKey="in" name="Input Load" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }} />
+                  <Line type="stepAfter" dataKey="out" name="Output Density" stroke="#fbbf24" strokeWidth={2} dot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-700 italic">等待數據注入...</div>
+            )}
+          </div>
         </div>
       </div>
     </div>

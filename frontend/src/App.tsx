@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Layout, Terminal, Settings, Download, Activity, CheckCircle2, Play, Square, Loader2, User, Boxes, MonitorPlay, BarChart3, AlertCircle } from 'lucide-react';
+import { Layout, Settings, Activity, CheckCircle2, Play, Square, Loader2, User, Boxes, MonitorPlay, BarChart3 } from 'lucide-react';
 import { MiniView } from './components/MiniView';
 import { SkillManager } from './components/SkillManager';
 import { Analytics } from './components/Analytics';
+// @ts-ignore
+import SetupWizard from './components/onboarding/SetupWizard';
+import UpdateBanner from './components/UpdateBanner';
 import { useStore } from './store';
 
 declare global {
@@ -16,15 +19,13 @@ declare global {
 }
 
 function App() {
-  const { running, setRunning, logs, addLog, envStatus, setEnvStatus } = useStore();
+  const { running, setRunning, logs, addLog, envStatus, setEnvStatus, config, setConfig, setDetectedConfig } = useStore();
   const [viewMode, setViewMode] = useState<'mini' | 'expanded'>('expanded');
-  const [activeTab, setActiveTab] = useState('installer');
-  const [installing, setInstalling] = useState(false);
-  const [installed, setInstalled] = useState(false);
+  const [activeTab, setActiveTab] = useState('monitor'); // Default to monitor if onboarding finished
+  const [onboardingFinished, setOnboardingFinished] = useState(false);
 
   useEffect(() => {
-    checkEnvironment();
-    syncGatewayStatus();
+    initializeApp();
     
     if (window.electronAPI) {
       window.electronAPI.onLog((payload) => {
@@ -32,6 +33,75 @@ function App() {
       });
     }
   }, []);
+
+  const initializeApp = async () => {
+    await checkEnvironment();
+    await loadConfig();
+    await detectPaths(); // New: Auto detect if not set
+    await syncGatewayStatus();
+    checkOnboardingStatus();
+  };
+
+  const detectPaths = async () => {
+    // Only auto-detect if config paths are empty
+    if (!config.corePath || !config.workspacePath) {
+      if (window.electronAPI) {
+        try {
+          const res = await window.electronAPI.exec('detect:paths');
+          if (res.code === 0 && res.stdout) {
+            const detected = JSON.parse(res.stdout);
+            const patch: any = {};
+            if (!config.corePath && detected.corePath) patch.corePath = detected.corePath;
+            if (!config.configPath && detected.configPath) patch.configPath = detected.configPath;
+            if (!config.workspacePath && detected.workspacePath) patch.workspacePath = detected.workspacePath;
+            
+            // [NEW] Cache the existing configuration info
+            if (detected.existingConfig && (detected.existingConfig.apiKey || detected.existingConfig.model)) {
+                setDetectedConfig(detected.existingConfig);
+            }
+
+            if (Object.keys(patch).length > 0) {
+              setConfig(patch);
+              addLog(`>>> 自動偵測完成: 已連結至 ${detected.openClawPath || '預設路徑'}`, 'system');
+            }
+          }
+        } catch (e) {
+          console.error("Auto detection failed", e);
+        }
+      }
+    }
+  };
+
+  const loadConfig = async () => {
+    if (window.electronAPI) {
+      try {
+        const res = await window.electronAPI.exec('config:read');
+        if (res.code === 0 && res.stdout) {
+          const savedConfig = JSON.parse(res.stdout);
+          const { setConfig } = useStore.getState(); // Directly get from store to avoid stale closure
+          setConfig(savedConfig);
+        }
+      } catch (e) {
+        console.error("Failed to load config", e);
+      }
+    }
+  };
+
+  const checkOnboardingStatus = () => {
+    // Logic to check if OpenClaw is already configured
+    // For now, let's keep it in onboarding if not explicitly finished
+    const finished = localStorage.getItem('onboarding_finished') === 'true';
+    setOnboardingFinished(finished);
+    if (!finished) {
+      setActiveTab('onboarding');
+    }
+  };
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('onboarding_finished', 'true');
+    setOnboardingFinished(true);
+    setActiveTab('monitor');
+  };
 
   const toggleViewMode = () => {
     const newMode = viewMode === 'expanded' ? 'mini' : 'expanded';
@@ -41,7 +111,10 @@ function App() {
 
   const syncGatewayStatus = async () => {
       try {
-          const res = await window.electronAPI.exec('pnpm openclaw gateway status');
+          const cmd = config.corePath 
+            ? `cd ${config.corePath} && pnpm openclaw gateway status` 
+            : 'pnpm openclaw gateway status';
+          const res = await window.electronAPI.exec(cmd);
           if (res.stdout.includes('online') || res.stdout.includes('running')) {
               setRunning(true);
           }
@@ -49,8 +122,6 @@ function App() {
   }
 
   const checkEnvironment = async () => {
-    addLog("[*] 正在診斷本地環境...");
-    
     const check = async (cmd: string) => {
         try {
             const res = await window.electronAPI.exec(cmd);
@@ -65,44 +136,49 @@ function App() {
     const pnpm = await check('pnpm -v');
 
     setEnvStatus({ node, git, pnpm });
-    addLog("[+] 環境診斷完成。");
-  };
-
-  const handleInstall = async () => {
-    setInstalling(true);
-    addLog(">>> 開始一鍵安裝 OpenClaw...", 'system');
-    
-    try {
-      addLog("[1/2] 正在克隆儲存庫...", 'system');
-      const clone = await window.electronAPI.exec('git clone https://github.com/OpenClaw/openclaw.git OpenClaw-Instance');
-      
-      if (clone.stdout.includes('fatal') && !clone.stdout.includes('already exists')) {
-          throw new Error("Clone failed");
-      }
-
-      addLog("[2/2] 正在安裝依賴...", 'system');
-      const install = await window.electronAPI.exec('cd OpenClaw-Instance && pnpm install');
-      
-      if (install.exitCode === 0 || install.code === 0) {
-        addLog("✅ OpenClaw 安裝成功！", 'system');
-        setInstalled(true);
-      }
-    } catch (e) {
-      addLog("[!] 安裝失敗，請手動檢查環境。", 'stderr');
-    } finally {
-      setInstalling(false);
-    }
   };
 
   const toggleGateway = async () => {
     if (running) {
       addLog(">>> 正在停止 Gateway...", 'system');
-      await window.electronAPI.exec('pnpm openclaw gateway stop');
-      setRunning(false);
+      try {
+        await window.electronAPI.exec('pnpm openclaw gateway stop');
+        setRunning(false);
+        addLog(">>> Gateway 已停止", 'system');
+      } catch (e: any) {
+        addLog(`誤差: 停止 Gateway 失敗 - ${e.message}`, 'stderr');
+      }
     } else {
       addLog(">>> 正在啟動 OpenClaw Gateway...", 'system');
-      window.electronAPI.exec('pnpm openclaw gateway start');
-      setRunning(true);
+      try {
+        const cmd = config.corePath 
+            ? `cd ${config.corePath} && pnpm openclaw gateway start` 
+            : 'pnpm openclaw gateway start';
+        const res = await window.electronAPI.exec(cmd);
+        if (res.code === 0) {
+          setRunning(true);
+          addLog(">>> Gateway 啟動指令已發送", 'system');
+        } else {
+          addLog(`錯誤: ${res.stderr}`, 'stderr');
+        }
+      } catch (e: any) {
+        addLog(`誤差: 啟動 Gateway 失敗 - ${e.message}`, 'stderr');
+      }
+    }
+  };
+
+  const handleSaveConfig = async () => {
+    if (!window.electronAPI) return;
+    addLog(">>> 正在保存配置...", 'system');
+    try {
+      const res = await window.electronAPI.exec(`config:write ${JSON.stringify(config)}`);
+      if (res.code === 0) {
+        addLog(">>> 配置已成功保存到本地磁碟", 'system');
+      } else {
+        addLog(`誤差: 保存配置失敗 - ${res.stderr}`, 'stderr');
+      }
+    } catch (e: any) {
+      addLog(`誤差: 通訊失敗 - ${e.message}`, 'stderr');
     }
   };
 
@@ -110,8 +186,13 @@ function App() {
     return <MiniView running={running} onToggle={toggleGateway} onExpand={toggleViewMode} />;
   }
 
+  // If not finished onboarding, show the wizard
+  if (!onboardingFinished) {
+    return <SetupWizard onFinished={handleOnboardingComplete} />;
+  }
+
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
+    <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden animate-in fade-in duration-700">
       {/* Sidebar */}
       <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col p-4 space-y-6">
         <div className="flex items-center space-y-1 py-4 px-2">
@@ -125,7 +206,6 @@ function App() {
         </div>
         
         <nav className="flex-1 space-y-1">
-          <NavItem icon={<Download size={18}/>} label="安裝導引" active={activeTab === 'installer'} onClick={() => setActiveTab('installer')} />
           <NavItem icon={<Activity size={18}/>} label="進程監控" active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} />
           <NavItem icon={<BarChart3 size={18}/>} label="數據看板" active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
           <NavItem icon={<Boxes size={18}/>} label="技能管理" active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
@@ -148,7 +228,7 @@ function App() {
         <header className="h-20 border-b border-slate-800/50 flex items-center px-10 justify-between relative backdrop-blur-md bg-slate-950/20">
           <div>
             <h2 className="font-bold text-xl text-slate-100 uppercase tracking-tight">
-                {activeTab === 'installer' ? '一鍵部署中心' : activeTab === 'monitor' ? '核心進程哨兵' : activeTab === 'analytics' ? 'Token 消耗透視' : activeTab === 'skills' ? '技能插件矩陣' : '全局配置矩陣'}
+                {activeTab === 'monitor' ? '核心進程哨兵' : activeTab === 'analytics' ? 'Token 消耗透視' : activeTab === 'skills' ? '技能插件矩陣' : '全局配置矩陣'}
             </h2>
           </div>
           <div className="flex items-center space-x-4">
@@ -164,55 +244,8 @@ function App() {
           </div>
         </header>
 
-        <div className="flex-1 p-10 overflow-y-auto relative scrollbar-hide">
-          {activeTab === 'installer' && (
-            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <section className="grid grid-cols-3 gap-8">
-                <StatusCard label="Node.js Engine" status={envStatus.node} />
-                <StatusCard label="Git Version Control" status={envStatus.git} />
-                <StatusCard label="pnpm Manager" status={envStatus.pnpm} />
-              </section>
-
-              {Object.values(envStatus).includes('error') && (
-                  <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-3xl flex items-start space-x-4">
-                      <AlertCircle className="text-red-500 shrink-0" />
-                      <div>
-                          <h4 className="font-bold text-red-400 text-sm">偵測到環境缺失</h4>
-                          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                              請確保系統已安裝 Node.js 22+ 與 Git。您可以從 <a href="https://nodejs.org" className="text-blue-500 underline">官網</a> 下載。
-                          </p>
-                      </div>
-                  </div>
-              )}
-
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 flex items-center">
-                        <Terminal size={14} className="mr-2" /> 部署日誌串流
-                    </h3>
-                </div>
-                <div className="bg-black/80 backdrop-blur-xl rounded-2xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col h-[300px]">
-                  <div className="p-6 font-mono text-[12px] space-y-2 overflow-y-auto flex-1 scrollbar-hide text-blue-400/90 leading-relaxed">
-                    {logs.map((log, i) => (
-                        <div key={i} className="flex">
-                            <span className="text-slate-600 mr-3 select-none">[{log.time}]</span>
-                            <span className={log.source === 'stderr' ? 'text-red-400' : log.source === 'system' ? 'text-emerald-400' : 'text-blue-300'}>{log.text}</span>
-                        </div>
-                    ))}
-                    <div className="animate-pulse w-2 h-4 bg-blue-500 mt-2" />
-                  </div>
-                </div>
-              </section>
-
-              <div className="flex justify-center">
-                <button onClick={handleInstall} disabled={installing || installed || Object.values(envStatus).includes('error')} className={`group relative px-10 py-5 rounded-2xl font-black text-lg transition-all duration-500 flex items-center ${installed ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-2xl active:scale-95 disabled:opacity-50'}`}>
-                    {installing ? <Loader2 className="mr-3 animate-spin" /> : <Download className="mr-3" />}
-                    {installed ? 'OpenClaw 已成功就緒' : installing ? '正在建立主權實例...' : '啟動一鍵部署程序'}
-                </button>
-              </div>
-            </div>
-          )}
-
+        <div className="flex-1 p-10 overflow-y-auto relative">
+          {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
           {activeTab === 'skills' && <SkillManager />}
 
           {activeTab === 'analytics' && <Analytics />}
@@ -229,10 +262,20 @@ function App() {
                   {running ? '中斷連線' : '啟動服務'}
                 </button>
               </div>
+
+              <div className="grid grid-cols-3 gap-8">
+                <StatusCard label="Node.js Engine" status={envStatus.node} />
+                <StatusCard label="Git Version Control" status={envStatus.git} />
+                <StatusCard label="pnpm Manager" status={envStatus.pnpm} />
+              </div>
+
               <div className="bg-black/90 rounded-3xl border border-slate-800 flex flex-col h-[400px] overflow-hidden shadow-2xl">
                  <div className="bg-slate-900 px-6 py-3 border-b border-slate-800 text-[10px] font-black text-slate-500 uppercase tracking-widest">Live Stream</div>
                  <div className="p-6 font-mono text-[12px] space-y-1.5 overflow-y-auto flex-1 text-slate-300">
-                    {logs.map((log, i) => <div key={i}>[{log.time}] {log.text}</div>)}
+                    {logs.map((log, i) => <div key={i} className="flex">
+                        <span className="text-slate-600 mr-3">[{log.time}]</span>
+                        <span>{log.text}</span>
+                    </div>)}
                  </div>
               </div>
             </div>
@@ -243,17 +286,65 @@ function App() {
                   <div className="p-8 bg-slate-900/30 border border-slate-800 rounded-[32px] space-y-6">
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Telegram Bot Token</label>
-                        <input type="password" value="••••••••••••••••••••••••" className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-blue-400 font-mono outline-none" readOnly />
+                        <input 
+                          type="password" 
+                          value={config.botToken} 
+                          onChange={(e) => setConfig({ botToken: e.target.value })}
+                          placeholder="輸入您的 Bot Token..."
+                          className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-blue-400 font-mono outline-none focus:border-blue-500/50 transition-colors" 
+                        />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Primary Inference Engine</label>
-                        <select className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-blue-400 outline-none">
-                            <option>google-antigravity/gemini-3-flash</option>
-                            <option>ollama/llama3.2:3b</option>
+                        <select 
+                          value={config.model}
+                          onChange={(e) => setConfig({ model: e.target.value })}
+                          className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-blue-400 outline-none focus:border-blue-500/50 transition-colors"
+                        >
+                            <option value="google-antigravity/gemini-3-flash">google-antigravity/gemini-3-flash</option>
+                            <option value="ollama/llama3.2:3b">ollama/llama3.2:3b</option>
+                            <option value="claude-3-5">anthropic/claude-3.5-sonnet</option>
                         </select>
                       </div>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">OpenClaw 主核心區 (Core)</label>
+                            <input 
+                                type="text" 
+                                value={config.corePath} 
+                                onChange={(e) => setConfig({ corePath: e.target.value })}
+                                placeholder="留空則使用系統預設路徑"
+                                className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-slate-300 font-mono text-xs outline-none focus:border-blue-500/50 transition-colors" 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">OpenClaw 設定區 (Config)</label>
+                            <input 
+                                type="text" 
+                                value={config.configPath} 
+                                onChange={(e) => setConfig({ configPath: e.target.value })}
+                                placeholder="留空則使用預設路徑"
+                                className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-slate-300 font-mono text-xs outline-none focus:border-blue-500/50 transition-colors" 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">工作區 (Workspace)</label>
+                            <input 
+                                type="text" 
+                                value={config.workspacePath} 
+                                onChange={(e) => setConfig({ workspacePath: e.target.value })}
+                                placeholder="例如: ~/.openclaw"
+                                className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-slate-300 font-mono text-xs outline-none focus:border-blue-500/50 transition-colors" 
+                            />
+                        </div>
+                      </div>
                   </div>
-                  <button className="w-full bg-blue-600 py-4 rounded-2xl font-black text-white shadow-xl">保存配置變更</button>
+                  <button 
+                    onClick={handleSaveConfig}
+                    className="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] py-4 rounded-2xl font-black text-white shadow-xl shadow-blue-600/20 transition-all"
+                  >
+                    保存配置變更
+                  </button>
               </div>
           )}
         </div>

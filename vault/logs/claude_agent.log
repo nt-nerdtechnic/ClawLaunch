@@ -1,0 +1,5 @@
+npm warn Unknown env config "npm-globalconfig". This will stop working in the next major version of npm.
+npm warn Unknown env config "allow-build-scripts". This will stop working in the next major version of npm.
+npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm.
+Failed to authenticate. API Error: 403 {"error":{"type":"forbidden","message":"Request not allowed"}}
