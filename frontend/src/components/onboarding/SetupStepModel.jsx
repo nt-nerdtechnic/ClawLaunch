@@ -133,9 +133,13 @@ const SetupStepModel = ({ onNext }) => {
         <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-50 rounded-full text-blue-600 mb-4">
           <Bot size={24} />
         </div>
-        <h2 className="text-2xl font-bold text-gray-800">為您的龍蝦注入靈魂</h2>
+        <h2 className="text-2xl font-bold text-gray-800">
+            {detectedConfig ? '連結並回歸機甲核心' : '為您的龍蝦注入靈魂'}
+        </h2>
         <p className="text-gray-500 mt-2 italic text-sm">
-            {!pathsConfirmed ? '「若要啟動機甲，必先對齊三區路徑」' : '「三區對位成功，準備加載核心靈魂」'}
+            {detectedConfig 
+              ? '「偵測到熟悉的靈魂頻率，正在準備重新連線...」' 
+              : (!pathsConfirmed ? '「若要啟動機甲，必先對齊三區路徑」' : '「三區對位成功，準備加載核心靈魂」')}
         </p>
       </div>
 
@@ -244,7 +248,7 @@ const SetupStepModel = ({ onNext }) => {
                         onClick={handleImport}
                         className="px-5 py-2.5 bg-white text-blue-700 text-[11px] font-black rounded-xl hover:bg-blue-50 transition-all shadow-lg active:scale-95 flex items-center gap-2 uppercase tracking-tighter"
                     >
-                        一鍵注入並啟動 <ArrowRight size={14} />
+                        快速對接並啟動 <ArrowRight size={14} />
                     </button>
                 </div>
             )}
