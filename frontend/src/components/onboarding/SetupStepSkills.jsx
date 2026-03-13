@@ -1,65 +1,60 @@
-import React, { useState } from 'react';
-import { Package, Globe, Brain, Cpu, Music, Shield, Check, ArrowRight } from 'lucide-react';
+import React from 'react';
+import { Package, Globe, Brain, Cpu, Shield, Check, ArrowRight } from 'lucide-react';
+import { useStore } from '../../store';
 
 /**
  * NT-ClawLaunch Onboarding: Skill Selection Step
  * Ref: Neil's Strategy - "Jargon Translation & Stepper UI" (2026-03-12)
  */
 const SetupStepSkills = ({ onNext }) => {
-  const [selectedSkills, setSelectedSkills] = useState(['browser', 'memory']);
+  const { config, toggleSkill } = useStore();
 
   const skills = [
     {
-      id: 'browser',
+      id: 'browser-automation',
       icon: <Globe size={20} />,
       title: '網路導航員 (Browser)',
-      desc: '讓 AI 能上網查資料、操作瀏覽器，甚至是幫您訂機票。',
+      desc: '具備自主識別與操作瀏覽器的能力，能完成查詢、訂購甚至複雜網頁自動化。',
       color: 'blue'
     },
     {
-      id: 'memory',
-      icon: <Brain size={20} />,
-      title: '長效記憶系統 (Memory)',
-      desc: '記住您的偏好、過去的對話與工作習慣，越聊越懂您。',
-      color: 'purple'
-    },
-    {
-      id: 'system',
+      id: 'coding-agent',
       icon: <Cpu size={20} />,
-      title: '系統工程師 (Core)',
-      desc: '具備執行終端機代碼、管理檔案與自動化指令的能力。',
+      title: '開發自動化 (Coding)',
+      desc: '整合 Codex 與 Claude Code，能自主進行代碼編寫、審查與修復 Bug。',
       color: 'orange'
     },
     {
-      id: 'security',
+      id: 'healthcheck',
       icon: <Shield size={20} />,
-      title: '治安哨兵 (Security)',
-      desc: '實時監控系統安全，防止惡意攻擊與敏感資料外洩。',
+      title: '系統監控官 (Monitor)',
+      desc: '即時監控機甲狀態（如 Port 衝突、DB 連網），具備自主診斷與自癒能力。',
       color: 'red'
     },
     {
-      id: 'voice',
-      icon: <Music size={20} />,
-      title: '語音中樞 (Voice)',
-      desc: '支援語音對談、語音轉文字，像真人一樣與您交流。',
+      id: 'memory-compactor',
+      icon: <Brain size={20} />,
+      title: '長效脈絡記憶 (Memory)',
+      desc: '智慧壓縮並跨 session 保持您的偏好與工作記憶，越用越聰明。',
+      color: 'purple'
+    },
+    {
+      id: 'task-manager',
+      icon: <Package size={20} />,
+      title: '任務協調官 (Tasks)',
+      desc: '管理並跟蹤多線程任務進度，確保異步工作流程能按時回報。',
       color: 'green'
     },
     {
-      id: 'custom',
-      icon: <Package size={20} />,
-      title: '擴展技能庫 (Plugins)',
-      desc: '未來可隨時從 ClawHub 下載更多行業專屬技能。',
+      id: 'nt-safe-evolution-architect',
+      icon: <Shield size={20} />,
+      title: '安全演進架構 (Safety)',
+      desc: '核心演進的守護者，確保每一次技能加載與系統變更都符合安全規範。',
       color: 'gray'
     }
   ];
 
-  const toggleSkill = (id) => {
-    if (selectedSkills.includes(id)) {
-      setSelectedSkills(selectedSkills.filter(s => s !== id));
-    } else {
-      setSelectedSkills([...selectedSkills, id]);
-    }
-  };
+  const selectedSkills = config.enabledSkills || [];
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
