@@ -134,10 +134,10 @@ const SetupStepModel = ({ onNext }) => {
           <Bot size={24} />
         </div>
         <h2 className="text-2xl font-bold text-gray-800">
-            {detectedConfig ? '連結並回歸機甲核心' : '為您的龍蝦注入靈魂'}
+            {(detectedConfig || config.model) ? '連結並回歸機甲核心' : '為您的龍蝦注入靈魂'}
         </h2>
         <p className="text-gray-500 mt-2 italic text-sm">
-            {detectedConfig 
+            {(detectedConfig || config.model) 
               ? '「偵測到熟悉的靈魂頻率，正在準備重新連線...」' 
               : (!pathsConfirmed ? '「若要啟動機甲，必先對齊三區路徑」' : '「三區對位成功，準備加載核心靈魂」')}
         </p>
@@ -279,7 +279,9 @@ const SetupStepModel = ({ onNext }) => {
             {(config.apiKey || config.model) && !showFullSetup && (
                 <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-4">
                     <div className="flex justify-between items-center">
-                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">當前準備注入的靈魂</h4>
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
+                            {(detectedConfig || config.model) ? '偵測到的核心配置' : '當前準備注入的靈魂'}
+                        </h4>
                         <button 
                             onClick={() => setShowFullSetup(true)}
                             className="text-[10px] font-black text-blue-600 hover:underline"
@@ -303,7 +305,7 @@ const SetupStepModel = ({ onNext }) => {
                         onClick={handleNext}
                         className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-2xl transition-all shadow-xl shadow-blue-500/20 uppercase tracking-widest text-xs"
                     >
-                        準備就緒：注入靈魂核心
+                        {(detectedConfig || config.model) ? '準備就緒：快速對接並啟動' : '準備就緒：注入靈魂核心'}
                     </button>
                 </div>
             )}
