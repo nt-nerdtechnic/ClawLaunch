@@ -68,7 +68,7 @@ export const useStore = create<AppState>((set) => ({
     apiKey: '', 
     platform: 'telegram', 
     botToken: '',
-    enabledSkills: ['browser', 'coding', 'market', 'cron'],
+    enabledSkills: [], // 初始擴展技能為空，核心技能已預設啟動
     corePath: '',
     configPath: '',
     workspacePath: '~/.openclaw'
