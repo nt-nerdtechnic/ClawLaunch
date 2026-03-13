@@ -11,25 +11,33 @@ const SetupStepSkills = ({ onNext }) => {
 
   const marketplaceSkills = [
     {
-      id: 'discord',
-      icon: <Globe size={20} />,
-      title: 'Discord 連結器',
-      desc: '讓機器人入駐您的 Discord 伺服器，支援多頻道對話。',
+      id: 'telegram',
+      icon: <MessageSquare size={20} />,
+      title: 'Telegram 連結插件',
+      desc: 'OpenClaw 最推薦的通訊管道，支援完整的隱私對話與指令互動。',
       color: 'blue',
       recommended: true
     },
     {
-      id: 'slack',
+      id: 'discord',
+      icon: <Globe size={20} />,
+      title: 'Discord 連結插件',
+      desc: '入駐 Discord 伺服器，支援多頻道協作與複雜權限管理。',
+      color: 'blue',
+      recommended: true
+    },
+    {
+      id: 'whatsapp',
       icon: <MessageSquare size={20} />,
-      title: 'Slack 企業對接',
-      desc: '整合 Slack 工作區，讓 AI 成為您的企業數位助理。',
-      color: 'orange'
+      title: 'WhatsApp 連結插件',
+      desc: '整合 WhatsApp 商業帳號，讓 AI 直接在您的通訊軟體回覆。',
+      color: 'green'
     },
     {
       id: 'obsidian',
       icon: <FileText size={20} />,
-      title: 'Obsidian 第二大腦',
-      desc: '同步您的 Obsidian 筆記，讓 AI 具備完整的知識庫記憶。',
+      title: 'Obsidian 知識庫',
+      desc: '同步您的 Obsidian 筆記，讓 AI 具備持久的第二大腦記憶。',
       color: 'purple',
       recommended: true
     },
@@ -37,15 +45,8 @@ const SetupStepSkills = ({ onNext }) => {
       id: 'notion',
       icon: <Layout size={20} />,
       title: 'Notion 協同官',
-      desc: '自動整理任務、更新頁面，與您的 Notion 專案深度整合。',
+      desc: '自動整理任務並更新頁面，與 Notion 專案深度整合。',
       color: 'gray'
-    },
-    {
-      id: 'spotify-player',
-      icon: <Music size={20} />,
-      title: 'Spotify 音樂中樞',
-      desc: '語音或文字控制音樂播放，根據心情為您選曲。',
-      color: 'green'
     },
     {
       id: 'goplaces',
