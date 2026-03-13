@@ -165,7 +165,7 @@ const SetupStepModel = ({ onNext }) => {
                         onBrowse={() => handleBrowse('corePath')}
                     />
                     <PathItem 
-                        label="設定區 (Config)" 
+                        label="設定區資料夾 (Config Folder)" 
                         path={config.configPath || '未定位'} 
                         icon={<Settings size={14}/>} 
                         onBrowse={() => handleBrowse('configPath')}

@@ -174,7 +174,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     const possibleConfigPath = path.join(possibleWorkspace, 'openclaw.json');
     try {
         await fs.access(possibleConfigPath);
-        configPath = possibleConfigPath;
+        configPath = possibleWorkspace; // 返回資料夾路徑
         // 嘗試讀取現有核心配置
         const content = await fs.readFile(possibleConfigPath, 'utf-8');
         const parsed = JSON.parse(content);
@@ -219,27 +219,30 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     const probePath = fullCommand.replace('config:probe ', '').trim();
     try {
         const stats = await fs.stat(probePath);
-        let finalConfigPath = '';
+        let finalConfigFilePath = '';
+        let finalConfigDirPath = '';
         
         if (stats.isDirectory()) {
             const possible = path.join(probePath, 'openclaw.json');
             try {
                 await fs.access(possible);
-                finalConfigPath = possible;
+                finalConfigFilePath = possible;
+                finalConfigDirPath = probePath;
             } catch(e) {}
         } else if (probePath.endsWith('openclaw.json')) {
-            finalConfigPath = probePath;
+            finalConfigFilePath = probePath;
+            finalConfigDirPath = path.dirname(probePath);
         }
 
-        if (finalConfigPath) {
-            const content = await fs.readFile(finalConfigPath, 'utf-8');
+        if (finalConfigFilePath) {
+            const content = await fs.readFile(finalConfigFilePath, 'utf-8');
             const parsed = JSON.parse(content);
             return {
                 code: 0,
                 stdout: JSON.stringify({
                     apiKey: parsed.apiKey || parsed.api_key || '',
                     model: parsed.model || '',
-                    configPath: finalConfigPath
+                    configPath: finalConfigDirPath // 返回資料夾路徑
                 })
             };
         }
