@@ -36,6 +36,51 @@ function createWindow() {
   });
 }
 
+/**
+ * 深度解析 OpenClaw 配置檔
+ * 支援從 agents.defaults.model.primary 提取模型，並從 auth.profiles 提取金鑰
+ */
+function parseOpenClawConfig(content: string) {
+    try {
+        const parsed = JSON.parse(content);
+        let apiKey = parsed.apiKey || parsed.api_key || '';
+        let model = parsed.model || '';
+        let workspace = '';
+        let botToken = '';
+
+        // 1. 提取模型 (OpenClaw 標準路徑)
+        if (!model && parsed.agents?.defaults?.model?.primary) {
+            model = parsed.agents.defaults.model.primary;
+        }
+
+        // 2. 提取 Workspace (OpenClaw 標準路徑)
+        if (parsed.agents?.defaults?.workspace) {
+            workspace = parsed.agents.defaults.workspace;
+        }
+
+        // 3. 提取 Bot Token (OpenClaw 標準路徑)
+        if (parsed.channels?.telegram?.botToken) {
+            botToken = parsed.channels.telegram.botToken;
+        }
+
+        // 4. 提取 API Key (遍歷 profiles)
+        if (!apiKey && parsed.auth?.profiles) {
+            for (const key in parsed.auth.profiles) {
+                const profile = parsed.auth.profiles[key];
+                const possibleKey = profile.apiKey || profile.api_key || profile.token || profile.bearer;
+                if (possibleKey && typeof possibleKey === 'string' && possibleKey.length > 5) {
+                    apiKey = possibleKey;
+                    break;
+                }
+            }
+        }
+
+        return { apiKey, model, workspace, botToken };
+    } catch (e) {
+        return { apiKey: '', model: '', workspace: '', botToken: '' };
+    }
+}
+
 app.whenReady().then(createWindow);
 
 ipcMain.on('window:resize', (event, mode: 'mini' | 'expanded') => {
@@ -58,7 +103,6 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 });
 
 ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []) => {
-  // Support single string commands with && or cd
   const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
   
   if (fullCommand.includes('gateway start')) {
@@ -86,18 +130,6 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     return { code: 0, stdout: 'Gateway not running' };
   }
 
-  // Analytics helper
-  if (fullCommand.startsWith('cat') && fullCommand.includes('log.jsonl')) {
-    const logPath = fullCommand.split(' ')[1].replace(/^~/, app.getPath('home'));
-    try {
-      const content = await fs.readFile(logPath, 'utf-8');
-      return { code: 0, stdout: content, stderr: '' };
-    } catch (e: any) {
-      return { code: 1, stdout: '', stderr: e.message };
-    }
-  }
-
-  // Config persistence handler
   if (fullCommand.startsWith('config:write')) {
     try {
       const configStr = fullCommand.replace('config:write ', '');
@@ -120,69 +152,30 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     }
   }
 
-  // Version Check Handler
-  if (fullCommand === 'version:check') {
-    return new Promise((resolve) => {
-      // Execute git rev-parse HEAD to get local version and compare with origin/main
-      const cmd = 'git rev-parse --short HEAD && git ls-remote origin main | cut -f1 | cut -c1-7';
-      const child = spawn(cmd, { shell: true });
-      let output = '';
-      child.stdout.on('data', d => output += d.toString());
-      child.on('close', (code) => {
-        const parts = output.trim().split('\n');
-        const local = parts[0] || 'unknown';
-        const remote = parts[1] || local;
-        resolve({ code: 0, stdout: JSON.stringify({ local, remote, hasUpdate: local !== remote }) });
-      });
-    });
-  }
-
-  // Execute Update Handler
-  if (fullCommand === 'execute:update') {
-    return new Promise((resolve) => {
-      const cmd = 'git pull && pnpm install';
-      const child = spawn(cmd, { shell: true });
-      child.stdout.on('data', d => mainWindow?.webContents.send('shell:stdout', { data: d.toString(), source: 'stdout' }));
-      child.stderr.on('data', d => mainWindow?.webContents.send('shell:stdout', { data: d.toString(), source: 'stderr' }));
-      child.on('close', code => resolve({ code: code ?? 0, stdout: 'Update complete' }));
-    });
-  }
-
-  // Path Discovery Handler
   if (fullCommand === 'detect:paths') {
     const home = app.getPath('home');
     const possibleWorkspace = path.join(home, '.openclaw');
-    const searchScopes = [
-        home,
-        path.join(home, 'Desktop'),
-        path.join(home, 'Documents'),
-        path.dirname(app.getAppPath())
-    ];
+    const searchScopes = [home, path.join(home, 'Desktop'), path.join(home, 'Documents'), path.dirname(app.getAppPath())];
 
     let corePath = '';
     let configPath = '';
     let workspacePath = '';
     let existingConfig: any = {};
 
-    // 1. 偵測工作區 (Workspace) - 預設 ~/.openclaw
     try {
         await fs.access(possibleWorkspace);
         workspacePath = possibleWorkspace;
     } catch(e) {}
 
-    // 2. 偵測設定區 (Config) - 尋找 openclaw.json
     const possibleConfigPath = path.join(possibleWorkspace, 'openclaw.json');
     try {
         await fs.access(possibleConfigPath);
-        configPath = possibleWorkspace; // 返回資料夾路徑
-        // 嘗試讀取現有核心配置
+        configPath = possibleWorkspace;
         const content = await fs.readFile(possibleConfigPath, 'utf-8');
-        const parsed = JSON.parse(content);
-        existingConfig.apiKey = parsed.apiKey || parsed.api_key;
-        existingConfig.model = parsed.model;
+        existingConfig = parseOpenClawConfig(content);
+        if (existingConfig.workspace) workspacePath = existingConfig.workspace;
     } catch(e) {}
 
-    // 3. 偵測主核心區 (Core) - 尋找 clawdbot-main 或 openclaw
     for (const scope of searchScopes) {
         try {
             const files = await fs.readdir(scope);
@@ -205,16 +198,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
     return { 
         code: 0, 
-        stdout: JSON.stringify({ 
-            corePath, 
-            configPath,
-            workspacePath: workspacePath || possibleWorkspace,
-            existingConfig
-        }) 
+        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig }) 
     };
   }
 
-  // Config Probe Handler (New: for manual path selection)
   if (fullCommand.startsWith('config:probe')) {
     const probePath = fullCommand.replace('config:probe ', '').trim();
     try {
@@ -228,22 +215,25 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 await fs.access(possible);
                 finalConfigFilePath = possible;
                 finalConfigDirPath = probePath;
-            } catch(e) {}
-        } else if (probePath.endsWith('openclaw.json')) {
+            } catch(e) {
+                const possibleClaw = path.join(probePath, 'clawdbot.json');
+                try {
+                    await fs.access(possibleClaw);
+                    finalConfigFilePath = possibleClaw;
+                    finalConfigDirPath = probePath;
+                } catch(e2) {}
+            }
+        } else if (probePath.endsWith('.json')) {
             finalConfigFilePath = probePath;
             finalConfigDirPath = path.dirname(probePath);
         }
 
         if (finalConfigFilePath) {
             const content = await fs.readFile(finalConfigFilePath, 'utf-8');
-            const parsed = JSON.parse(content);
+            const configData = parseOpenClawConfig(content);
             return {
                 code: 0,
-                stdout: JSON.stringify({
-                    apiKey: parsed.apiKey || parsed.api_key || '',
-                    model: parsed.model || '',
-                    configPath: finalConfigDirPath // 返回資料夾路徑
-                })
+                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath })
             };
         }
         return { code: 1, stdout: '', stderr: 'No config found at path' };
@@ -267,7 +257,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       mainWindow?.webContents.send('shell:stdout', { data: chunk, source: 'stderr' });
     });
     child.on('close', (code) => {
-      resolve({ code: code ?? 0, stdout, stderr, exitCode: code ?? 0 }); // fixed: was code: stdout
+      resolve({ code: code ?? 0, stdout, stderr, exitCode: code ?? 0 });
     });
   });
 });

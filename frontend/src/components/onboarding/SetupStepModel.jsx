@@ -272,7 +272,7 @@ const SetupStepModel = ({ onNext }) => {
              </button>
 
             {/* 配置摘要 (若已有資料) */}
-            {config.apiKey && !showFullSetup && (
+            {(config.apiKey || config.model) && !showFullSetup && (
                 <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-4">
                     <div className="flex justify-between items-center">
                         <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">當前準備注入的靈魂</h4>
@@ -286,11 +286,13 @@ const SetupStepModel = ({ onNext }) => {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                             <p className="text-[9px] text-gray-400 uppercase font-black">核心模型</p>
-                            <p className="text-xs font-bold text-slate-700">{config.model === 'claude-3-5' ? 'Claude 3.5 Sonnet' : 'GPT-4o'}</p>
+                            <p className="text-xs font-bold text-slate-700 truncate">{config.model || '未設定'}</p>
                         </div>
                         <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                             <p className="text-[9px] text-gray-400 uppercase font-black">API 密鑰</p>
-                            <p className="text-xs font-mono text-slate-700">••••••••{config.apiKey.slice(-4)}</p>
+                            <p className="text-xs font-mono text-slate-700">
+                                {config.apiKey ? `••••••••${config.apiKey.slice(-4)}` : '(已透過環境對位)'}
+                            </p>
                         </div>
                     </div>
                     <button 
@@ -303,7 +305,7 @@ const SetupStepModel = ({ onNext }) => {
             )}
 
             {/* 模型選擇卡片 (僅在需要修改或無資料時顯示) */}
-            {(showFullSetup || !config.apiKey) && (
+            {(showFullSetup || (!config.apiKey && !config.model)) && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
                     <div className="space-y-3">
                         <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
@@ -356,21 +358,20 @@ const SetupStepModel = ({ onNext }) => {
                             />
                         </div>
                         <p className="text-[10px] text-gray-400 font-medium">
-                            密鑰僅會加密儲存於您的本地電腦，絕對安全。
+                            密鑰僅會加密儲存於您的本地電腦。若使用專屬模型或本地部署，此項可留空。
                         </p>
                     </div>
 
                     <div className="pt-6">
                         <button 
                             onClick={handleNext} 
-                            disabled={!config.apiKey}
                             className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs"
                         >
                             確認並綁定通訊軟體 <ArrowRight size={18} />
                         </button>
                     </div>
                 </div>
-            )}
+            ) [diff_block_end]}
           </div>
         )}
       </div>
