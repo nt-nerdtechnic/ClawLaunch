@@ -34,6 +34,7 @@ interface AppState {
     corePath?: string;
     configPath?: string;
     workspacePath?: string;
+    installedSkills?: string[];
   } | null;
   detectingPaths: boolean;
   pathsConfirmed: boolean;

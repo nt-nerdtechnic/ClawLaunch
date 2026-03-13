@@ -7,7 +7,7 @@ import { useStore } from '../../store';
  * Ref: Neil's Strategy - "Jargon Translation & Stepper UI" (2026-03-12)
  */
 const SetupStepSkills = ({ onNext }) => {
-  const { config, toggleSkill } = useStore();
+  const { config, toggleSkill, detectedConfig } = useStore();
 
   const marketplaceSkills = [
     {
@@ -15,7 +15,8 @@ const SetupStepSkills = ({ onNext }) => {
       icon: <Globe size={20} />,
       title: 'Discord 連結器',
       desc: '讓機器人入駐您的 Discord 伺服器，支援多頻道對話。',
-      color: 'blue'
+      color: 'blue',
+      recommended: true
     },
     {
       id: 'slack',
@@ -29,7 +30,8 @@ const SetupStepSkills = ({ onNext }) => {
       icon: <FileText size={20} />,
       title: 'Obsidian 第二大腦',
       desc: '同步您的 Obsidian 筆記，讓 AI 具備完整的知識庫記憶。',
-      color: 'purple'
+      color: 'purple',
+      recommended: true
     },
     {
       id: 'notion',
@@ -60,7 +62,17 @@ const SetupStepSkills = ({ onNext }) => {
     { name: '系統健康監控 (Monitor)', icon: <Shield size={14} /> }
   ];
 
+  const installedSkills = detectedConfig?.installedSkills || [];
   const selectedSkills = config.enabledSkills || [];
+
+  // 智慧預選：如果初次安裝且沒選過，預選推薦項
+  React.useEffect(() => {
+    if (selectedSkills.length === 0 && installedSkills.length === 0) {
+      marketplaceSkills.filter(s => s.recommended).forEach(s => {
+        toggleSkill(s.id);
+      });
+    }
+  }, []);
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
@@ -72,7 +84,9 @@ const SetupStepSkills = ({ onNext }) => {
           </div>
           <h2 className="text-2xl font-bold text-gray-800">擴展您的龍蝦超能力</h2>
         </div>
-        <p className="text-gray-500">從 ClawHub 勾選您想安裝的額外技能，核心模組已自動就緒。</p>
+        <p className="text-gray-500">
+          從 ClawHub 勾選您想安裝的額外技能{installedSkills.length > 0 && `（已為您偵測到 ${installedSkills.length} 個已安裝技能）`}。
+        </p>
       </div>
 
       {/* 核心狀態面板 */}
@@ -92,51 +106,66 @@ const SetupStepSkills = ({ onNext }) => {
 
       {/* 技能矩陣網格 */}
       <div className="grid grid-cols-2 gap-4">
-        {marketplaceSkills.map((skill) => (
-          <div 
-            key={skill.id}
-            onClick={() => toggleSkill(skill.id)}
-            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative group h-full flex flex-col ${
-              selectedSkills.includes(skill.id) 
-                ? 'border-blue-500 bg-blue-50/30' 
-                : 'border-gray-100 hover:border-blue-200'
-            }`}
-          >
-            {/* 選中標記 */}
-            {selectedSkills.includes(skill.id) && (
-              <div className="absolute top-3 right-3 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white">
-                <Check size={12} strokeWidth={4} />
-              </div>
-            )}
-
-            <div className={`w-10 h-10 rounded-xl mb-3 flex items-center justify-center ${
-              selectedSkills.includes(skill.id) ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
-            }`}>
-              {skill.icon}
-            </div>
-            <h3 className="font-bold text-gray-800 text-sm">{skill.title}</h3>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed flex-grow">
-              {skill.desc}
-            </p>
-            
-            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-gray-400">CLAW HUB</span>
-              {selectedSkills.includes(skill.id) && (
-                <span className="text-[10px] font-bold text-blue-600 uppercase">準備安裝</span>
+        {marketplaceSkills.map((skill) => {
+          const isInstalled = installedSkills.includes(skill.id);
+          const isSelected = selectedSkills.includes(skill.id);
+          
+          return (
+            <div 
+              key={skill.id}
+              onClick={() => toggleSkill(skill.id)}
+              className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative group h-full flex flex-col ${
+                isSelected || isInstalled
+                  ? 'border-blue-500 bg-blue-50/30' 
+                  : 'border-gray-100 hover:border-blue-200'
+              }`}
+            >
+              {/* 選中與安裝標記 */}
+              {(isSelected || isInstalled) && (
+                <div className="absolute top-3 right-3 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white">
+                  <Check size={12} strokeWidth={4} />
+                </div>
               )}
+
+              {/* 推薦標籤 */}
+              {skill.recommended && !isInstalled && (
+                <div className="absolute top-3 right-10 px-1.5 py-0.5 bg-orange-100 text-orange-600 text-[9px] font-bold rounded uppercase">
+                  推薦
+                </div>
+              )}
+
+              <div className={`w-10 h-10 rounded-xl mb-3 flex items-center justify-center ${
+                isSelected || isInstalled ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {skill.icon}
+              </div>
+              <h3 className="font-bold text-gray-800 text-sm">{skill.title}</h3>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed flex-grow">
+                {skill.desc}
+              </p>
+              
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-gray-400">CLAW HUB</span>
+                {isInstalled ? (
+                  <span className="text-[10px] font-bold text-green-600 uppercase">目前已安裝</span>
+                ) : isSelected ? (
+                  <span className="text-[10px] font-bold text-blue-600 uppercase">準備安裝</span>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* 下一步按鈕 */}
-      <div className="pt-8">
+      <div className="pt-8 text-center">
         <button 
           onClick={onNext} 
-          className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg shadow-gray-200"
+          className="w-full mb-3 flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg shadow-gray-200"
         >
           最後一步：點火啟動機甲 <ArrowRight size={18} />
         </button>
+        <p className="text-[11px] text-gray-400">註：核心技能模組由恩梯科技預設提供，穩定性優先。</p>
       </div>
     </div>
   );

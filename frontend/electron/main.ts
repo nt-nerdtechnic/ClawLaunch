@@ -81,6 +81,30 @@ function parseOpenClawConfig(content: string) {
     }
 }
 
+/**
+ * 掃描配置目錄中的已安裝技能
+ */
+async function scanInstalledSkills(configPath: string): Promise<string[]> {
+    if (!configPath) return [];
+    try {
+        const skillsDir = path.join(configPath, 'skills');
+        const stats = await fs.stat(skillsDir);
+        if (stats.isDirectory()) {
+            const items = await fs.readdir(skillsDir);
+            const installed = [];
+            for (const item of items) {
+                const fullPath = path.join(skillsDir, item);
+                const itemStats = await fs.stat(fullPath);
+                if (itemStats.isDirectory()) {
+                    installed.push(item);
+                }
+            }
+            return installed;
+        }
+    } catch (e) {}
+    return [];
+}
+
 app.whenReady().then(createWindow);
 
 ipcMain.on('window:resize', (event, mode: 'mini' | 'expanded') => {
@@ -196,9 +220,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         } catch(e) {}
     }
 
+    let installedSkills: string[] = [];
+    if (configPath) {
+        installedSkills = await scanInstalledSkills(configPath);
+    }
+
     return { 
         code: 0, 
-        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig }) 
+        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig: { ...existingConfig, installedSkills } }) 
     };
   }
 
@@ -231,9 +260,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         if (finalConfigFilePath) {
             const content = await fs.readFile(finalConfigFilePath, 'utf-8');
             const configData = parseOpenClawConfig(content);
+            const installedSkills = await scanInstalledSkills(finalConfigDirPath);
             return {
                 code: 0,
-                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath })
+                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath, installedSkills })
             };
         }
         return { code: 1, stdout: '', stderr: 'No config found at path' };
