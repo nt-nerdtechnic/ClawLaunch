@@ -45,31 +45,38 @@ function App() {
   const detectPaths = async () => {
     const { setDetectingPaths } = useStore.getState();
     setDetectingPaths(true);
-    // Only auto-detect if config paths are empty
-    if (!config.corePath || !config.workspacePath) {
-      if (window.electronAPI) {
-        try {
+    
+    if (window.electronAPI) {
+      try {
           const res = await window.electronAPI.exec('detect:paths');
           if (res.code === 0 && res.stdout) {
             const detected = JSON.parse(res.stdout);
             const patch: any = {};
+            
+            // 自動修補路徑
             if (!config.corePath && detected.corePath) patch.corePath = detected.corePath;
             if (!config.configPath && detected.configPath) patch.configPath = detected.configPath;
-            if (!config.workspacePath && detected.workspacePath) patch.workspacePath = detected.workspacePath;
-            
-            // [NEW] Cache the existing configuration info
+            if (!config.workspacePath && (detected.workspacePath || detected.configPath)) {
+                patch.workspacePath = detected.workspacePath || detected.configPath;
+            }
+
+            // [NEW] 緩存完整配置訊息以便「一鍵對接」
             if (detected.existingConfig && (detected.existingConfig.apiKey || detected.existingConfig.model)) {
-                setDetectedConfig(detected.existingConfig);
+                setDetectedConfig({
+                    ...detected.existingConfig,
+                    corePath: detected.corePath,
+                    configPath: detected.configPath,
+                    workspacePath: detected.workspacePath || detected.configPath
+                });
             }
 
             if (Object.keys(patch).length > 0) {
               setConfig(patch);
-              addLog(`>>> 自動偵測完成: 已連結至 ${detected.openClawPath || '預設路徑'}`, 'system');
+              addLog(`>>> 自動偵測完成: 已連結至機甲核心`, 'system');
             }
           }
-        } catch (e) {
+      } catch (e) {
           console.error("Auto detection failed", e);
-        }
       }
     }
     setDetectingPaths(false);

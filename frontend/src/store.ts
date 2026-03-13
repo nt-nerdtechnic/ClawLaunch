@@ -27,11 +27,17 @@ interface AppState {
   envStatus: { node: string; git: string; pnpm: string };
   setEnvStatus: (status: { node: string; git: string; pnpm: string }) => void;
   config: Config;
-  detectedConfig: { apiKey?: string; model?: string } | null;
+  detectedConfig: { 
+    apiKey?: string; 
+    model?: string;
+    corePath?: string;
+    configPath?: string;
+    workspacePath?: string;
+  } | null;
   detectingPaths: boolean;
   pathsConfirmed: boolean;
   setConfig: (patch: Partial<Config>) => void;
-  setDetectedConfig: (config: { apiKey?: string; model?: string } | null) => void;
+  setDetectedConfig: (config: AppState['detectedConfig']) => void;
   setDetectingPaths: (status: boolean) => void;
   setPathsConfirmed: (status: boolean) => void;
   toggleSkill: (skillId: string) => void;

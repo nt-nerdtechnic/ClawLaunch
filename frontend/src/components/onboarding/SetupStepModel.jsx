@@ -89,7 +89,7 @@ const SetupStepModel = ({ onNext }) => {
       setConfig(newConfig);
       
       // 智慧跳轉：如果已經有靈魂（API Key），直接進入下一步
-      if (newConfig.apiKey && newConfig.apiKey.length > 5) {
+      if (newConfig.apiKey && newConfig.apiKey.length > 0) {
           onNext();
       } else {
           setPathsConfirmed(true);
