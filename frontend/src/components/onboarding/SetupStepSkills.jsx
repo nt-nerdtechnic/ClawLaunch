@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Package, Globe, Cpu, Shield, Check, ArrowRight, FileText, Zap, Layout, Loader2, AlertCircle } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
+import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 
 /**
  * NT-ClawLaunch Onboarding: Skill Selection Step
@@ -10,14 +11,8 @@ import TerminalLog from '../common/TerminalLog';
  */
 const SetupStepSkills = ({ onNext }) => {
   const { t } = useTranslation();
-  const { config, toggleSkill, detectedConfig } = useStore();
-  const [connecting, setConnecting] = React.useState(false);
-  const [localLogs, setLocalLogs] = React.useState([]);
-  const [execError, setExecError] = React.useState(null);
-
-  const addLocalLog = (text, source = 'system') => {
-    setLocalLogs(prev => [...prev.slice(-49), { text, source, time: new Date().toLocaleTimeString() }]);
-  };
+  const { config, toggleSkill, detectedConfig, userType } = useStore();
+  const onboardingAction = useOnboardingAction();
 
   const powerUps = [
     {
@@ -73,69 +68,12 @@ const SetupStepSkills = ({ onNext }) => {
 
 
 
-  const validateRuntimePaths = () => {
-    const missing = [];
-    if (!config.corePath) missing.push('Core Path');
-    if (!config.configPath) missing.push('Config Path');
-    if (!config.workspacePath) missing.push('Workspace Path');
-    if (missing.length > 0) {
-      const msg = `請先完成路徑設定：${missing.join(' / ')}`;
-      setExecError(msg);
-      addLocalLog(`❌ ${msg}`, 'stderr');
-      return false;
-    }
-    return true;
-  };
+
 
   const handleNext = async () => {
-    if (!config.corePath || !config.configPath || !config.workspacePath) {
-      const missing = [
-        !config.corePath ? 'Core Path' : null,
-        !config.configPath ? 'Config Path' : null,
-        !config.workspacePath ? 'Workspace Path' : null
-      ].filter(Boolean);
-      setExecError(`缺少必要路徑：${missing.join(' / ')}。請先返回前一步完成路徑設定。`);
-      return;
-    }
-
-    if (!validateRuntimePaths()) return;
-
-    setConnecting(true);
-    setExecError(null);
-    setLocalLogs([]);
-
-    const selectedSkills = config.enabledSkills || [];
-    if (selectedSkills.length === 0) {
-        onNext();
-        return;
-    }
-
-    addLocalLog(`🧩 正在啟動能力注入程序 (${selectedSkills.length} 項模組)...`, "system");
-
-    try {
-        const corePath = config.corePath;
-        const execCmd = corePath && corePath.includes('npm') ? 'npm run' : 'pnpm';
-
-        for (const skillId of selectedSkills) {
-            addLocalLog(`> 正在注入: ${skillId}...`, "system");
-            const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR="${config.workspacePath}" ` : '';
-            const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH="${config.configPath}/config.json" ` : '';
-            const envPrefix = `${stateDirEnv}${configPathEnv}`;
-            const cmd = `cd "${corePath}" && ${envPrefix}${execCmd} openclaw config set skills.entries.${skillId}.enabled true`;
-            const res = await window.electronAPI.exec(cmd);
-            
-            if (res.exitCode !== 0 && res.code !== 0) {
-               addLocalLog(`⚠️ 模組 ${skillId} 注入回報異常: ${res.stderr}`, "stderr");
-            }
-        }
-
-        addLocalLog("✅ 所有選定能力注入完成！", "system");
-        await new Promise(r => setTimeout(r, 1000));
-        onNext();
-    } catch (err) {
-        setExecError(err.message);
-        addLocalLog(`❌ 技能注入系統出錯: ${err.message}`, "stderr");
-        setConnecting(false);
+    const success = await onboardingAction.execute('skills');
+    if (success) {
+      onNext();
     }
   };
 
@@ -183,12 +121,12 @@ const SetupStepSkills = ({ onNext }) => {
           return (
             <div 
               key={skill.id}
-              onClick={() => !connecting && toggleSkill(skill.id)}
+              onClick={() => !onboardingAction.executing && toggleSkill(skill.id)}
               className={`p-5 rounded-[2rem] border-2 cursor-pointer transition-all relative group h-full flex flex-col ${
                 isSelected || isInstalled
                   ? 'border-blue-500 bg-blue-50/30' 
                   : 'border-gray-100 hover:border-blue-200 bg-white'
-              } ${connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${onboardingAction.executing ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {/* 選中標記 */}
               {(isSelected || isInstalled) && (
@@ -229,29 +167,31 @@ const SetupStepSkills = ({ onNext }) => {
 
       {/* 下一步按鈕與日誌 */}
       <div className="space-y-4">
-        {connecting && (
+        {onboardingAction.executing && (
             <div className="space-y-2 animate-in fade-in duration-300">
                 <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
                     <Loader2 size={12} className="animate-spin" />
                     能力注入同步中 (Skill Injection Status)
                 </div>
-                <TerminalLog logs={localLogs} height="h-32" />
+                <TerminalLog logs={onboardingAction.logs} height="h-32" />
             </div>
         )}
 
-        {execError && (
+        {onboardingAction.error && (
             <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
                 <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                <p className="font-medium">{execError}</p>
+                <p className="font-medium">{onboardingAction.error}</p>
             </div>
         )}
 
         <button 
           onClick={handleNext} 
-          disabled={connecting}
-          className={`w-full flex items-center justify-center gap-3 ${connecting ? 'bg-blue-400' : 'bg-slate-900 hover:bg-slate-800'} text-white font-black py-4 px-8 rounded-2xl transition-all shadow-2xl uppercase tracking-widest text-xs`}
+          disabled={onboardingAction.executing}
+          className={`w-full flex items-center justify-center gap-3 ${onboardingAction.executing ? 'bg-blue-400' : 'bg-slate-900 hover:bg-slate-800'} text-white font-black py-4 px-8 rounded-2xl transition-all shadow-2xl uppercase tracking-widest text-xs`}
         >
-          {connecting ? (
+          {userType === 'existing' ? (
+              <>確認能力配置並繼續 <ArrowRight size={18} /></>
+          ) : onboardingAction.executing ? (
              <>
                 <Loader2 size={18} className="animate-spin" /> 正在賦予超級能力...
             </>

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
-    "dev:electron": "npm run build:electron && wait-on tcp:5173 && cross-env NODE_ENV=development electron .",
+    "dev:electron": "npm run build:electron && cross-env NODE_ENV=development electron .",
     "build:electron": "tsc electron/main.ts --outDir dist-electron --module esnext --target esnext --moduleResolution node --allowSyntheticDefaultImports true --skipLibCheck true && node -e \"require('fs').copyFileSync('electron/preload.js', 'dist-electron/preload.js')\"",
     "build": "tsc -b && vite build && npm run build:electron",
     "dist": "npm run build && electron-builder",

@@ -1,8 +1,8 @@
-import { MessageSquare, ExternalLink, HelpCircle, ArrowRight, CheckCircle2, Bot, Server, Hash, Mails, Waves, Shield, MessageCircle, Phone, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, AlertCircle, Loader2, HelpCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';
 import TerminalLog from '../common/TerminalLog';
-import { useState, useEffect, useRef } from 'react';
-import React from 'react';
+import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 
 /**
  * NT-ClawLaunch Onboarding: Messaging Platform Setup Step
@@ -24,29 +24,10 @@ const CHANNEL_OPTIONS = [
 
 const SetupStepMessaging = ({ onNext }) => {
   const { config, setConfig, detectedConfig, userType } = useStore();
+  const onboardingAction = useOnboardingAction();
   const [showGuide, setShowGuide] = useState(false);
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
-  const [connecting, setConnecting] = useState(false);
-  const [localLogs, setLocalLogs] = useState([]);
-  const [execError, setExecError] = useState(null);
-  const logCleanupRef = React.useRef(null);
-
-  React.useEffect(() => {
-    if (window.electronAPI && connecting) {
-        logCleanupRef.current = window.electronAPI.onLog((payload) => {
-            setLocalLogs(prev => [...prev.slice(-49), { text: payload.data, source: payload.source, time: new Date().toLocaleTimeString() }]);
-        });
-    }
-    return () => {
-        if (typeof logCleanupRef.current === 'function') {
-            logCleanupRef.current();
-        }
-    };
-  }, [connecting]);
-
-  const addLocalLog = (text, source = 'system') => {
-    setLocalLogs(prev => [...prev.slice(-49), { text, source, time: new Date().toLocaleTimeString() }]);
-  };
+  const [localError, setLocalError] = useState('');
 
   // 初始化：如果偵測到配置且為現有使用者，回填至 config
   useEffect(() => {
@@ -56,6 +37,7 @@ const SetupStepMessaging = ({ onNext }) => {
   }, []);
 
   const handleChannelSelect = (channelId) => {
+    setLocalError('');
     setConfig({ platform: channelId, botToken: '' }); // 重設 Token
   };
 
@@ -63,78 +45,21 @@ const SetupStepMessaging = ({ onNext }) => {
 
 
 
-  const validateRuntimePaths = () => {
+  const handleNext = async () => {
     const missing = [];
     if (!config.corePath) missing.push('Core Path');
     if (!config.configPath) missing.push('Config Path');
     if (!config.workspacePath) missing.push('Workspace Path');
     if (missing.length > 0) {
-      const msg = `請先完成路徑設定：${missing.join(' / ')}`;
-      setExecError(msg);
-      addLocalLog(`❌ ${msg}`, 'stderr');
-      return false;
-    }
-    return true;
-  };
-
-  const handleNext = async () => {
-    if (selectedChannel.reqKey !== false && !config.botToken) return;
-
-    if (!config.corePath || !config.configPath || !config.workspacePath) {
-      const missing = [
-        !config.corePath ? 'Core Path' : null,
-        !config.configPath ? 'Config Path' : null,
-        !config.workspacePath ? 'Workspace Path' : null
-      ].filter(Boolean);
-      setExecError(`缺少必要路徑：${missing.join(' / ')}。請先返回前一步完成路徑設定。`);
+      setLocalError(`請先完成路徑設定：${missing.join(' / ')}`);
       return;
     }
 
-    if (!validateRuntimePaths()) return;
-
-    setConnecting(true);
-    setExecError(null);
-    setLocalLogs([]);
-    
-    addLocalLog(`📡 正在啟動通訊頻道繫結程序 (${config.platform})...`, "system");
-
-    try {
-        const corePath = config.corePath;
-        const execCmd = corePath && corePath.includes('npm') ? 'npm run' : 'pnpm';
-        
-        let channelFlags = '';
-        if (config.botToken) {
-            if (['telegram', 'slack', 'line'].includes(config.platform)) {
-                channelFlags = `--token "${config.botToken}"`;
-            } else if (config.platform === 'discord') {
-                channelFlags = `--bot-token "${config.botToken}"`;
-            } else if (config.platform === 'googlechat') {
-                channelFlags = `--webhook-url "${config.botToken}"`;
-            }
-        }
-
-        const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR="${config.workspacePath}" ` : '';
-        const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH="${config.configPath}/config.json" ` : '';
-        const envPrefix = `${stateDirEnv}${configPathEnv}`;
-        const channelCmd = `cd "${corePath}" && ${envPrefix}${execCmd} openclaw channels add --channel ${config.platform} ${channelFlags}`;
-        addLocalLog(`> 指令: openclaw channels add --channel ${config.platform} ...`, 'system');
-        
-        const res = await window.electronAPI.exec(channelCmd);
-        
-        if (res.exitCode === 0 || res.code === 0) {
-            addLocalLog("✅ 通訊頻道繫結完成", "system");
-            await new Promise(r => setTimeout(r, 1000));
-            onNext();
-        } else {
-            const errorMsg = res.stderr || "頻道繫結失敗，請檢查 Token 或網路。";
-            setExecError(errorMsg);
-            addLocalLog(`❌ 繫結回報異常: ${errorMsg}`, "stderr");
-            setConnecting(false);
-        }
-    } catch (err) {
-        setExecError(err.message);
-        addLocalLog(`❌ 系統執行錯誤: ${err.message}`, "stderr");
-        setConnecting(false);
+    setLocalError('');
+    if (selectedChannel.reqKey !== false && !config.botToken) return;
+    const success = await onboardingAction.execute('messaging');
+    if (success) {
+      onNext();
     }
   };
 
@@ -156,6 +81,13 @@ const SetupStepMessaging = ({ onNext }) => {
       </div>
 
       <div className="space-y-6">
+        {localError && (
+          <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
+            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+            <p className="font-medium">{localError}</p>
+          </div>
+        )}
+
         {/* 配置摘要 (若已有資料) */}
         {config.botToken && !showFullSetup && (
             <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-4 animate-in fade-in zoom-in-95">
@@ -180,32 +112,32 @@ const SetupStepMessaging = ({ onNext }) => {
                     </p>
                 </div>
 
-                {connecting && (
+                {onboardingAction.executing && (
                     <div className="space-y-2 animate-in fade-in duration-300">
                         <div className="flex items-center gap-2 text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1">
                             <Loader2 size={12} className="animate-spin" />
                             頻道繫結中 (Real-time Logs)
                         </div>
-                        <TerminalLog logs={localLogs} height="h-32" />
+                        <TerminalLog logs={onboardingAction.logs} height="h-32" />
                     </div>
                 )}
 
-                {execError && (
+                {onboardingAction.error && (
                     <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
                         <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                        <p className="font-medium">{execError}</p>
+                        <p className="font-medium">{onboardingAction.error}</p>
                     </div>
                 )}
 
                 <button 
                     onClick={handleNext}
-                    disabled={connecting}
-                    className={`w-full ${connecting ? 'bg-emerald-400' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-emerald-500/20 uppercase tracking-widest text-xs flex items-center justify-center gap-2`}
+                    disabled={onboardingAction.executing}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-emerald-500/20 uppercase tracking-widest text-xs flex items-center justify-center gap-2"
                 >
-                    {connecting ? (
-                         <>
-                            <Loader2 size={16} className="animate-spin" /> 正在同步頻道頻率...
-                        </>
+                    {userType === 'existing' ? (
+                        <>確認通訊設定並繼續 <ArrowRight size={14} /></>
+                    ) : onboardingAction.executing ? (
+                        <><Loader2 size={16} className="animate-spin" /> 正在同步頻道頻率...</>
                     ) : (
                         <>授權並繫結頻道 (Authorize & Bond) <ArrowRight size={14} /></>
                     )}
@@ -264,7 +196,10 @@ const SetupStepMessaging = ({ onNext }) => {
                             type={selectedChannel.reqKey === false ? "text" : "password"}
                             placeholder={selectedChannel.placeholder} 
                             value={config.botToken}
-                            onChange={(e) => setConfig({ botToken: e.target.value })}
+                            onChange={(e) => {
+                              setLocalError('');
+                              setConfig({ botToken: e.target.value });
+                            }}
                             disabled={selectedChannel.reqKey === false}
                             className="w-full p-4 bg-white border border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500/50 outline-none transition-all shadow-sm text-sm font-mono disabled:bg-gray-100 disabled:text-gray-400"
                         />
@@ -281,29 +216,31 @@ const SetupStepMessaging = ({ onNext }) => {
 
                 {/* 下一步按鈕 */}
                 <div className="pt-4 space-y-4">
-                    {connecting && (
+                    {onboardingAction.executing && (
                         <div className="space-y-2 animate-in fade-in duration-300">
                             <div className="flex items-center gap-2 text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1">
                                 <Loader2 size={12} className="animate-spin" />
-                                頻道繫結中 (Real-time Logs)
+                                頻道繫結同步中 (Real-time Logs)
                             </div>
-                            <TerminalLog logs={localLogs} height="h-32" />
+                            <TerminalLog logs={onboardingAction.logs} height="h-32" />
                         </div>
                     )}
 
-                    {execError && (
+                    {onboardingAction.error && (
                         <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
                             <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                            <p className="font-medium">{execError}</p>
+                            <p className="font-medium">{onboardingAction.error}</p>
                         </div>
                     )}
 
                     <button 
                         onClick={handleNext} 
-                        disabled={connecting || (selectedChannel.reqKey !== false && !config.botToken)}
-                        className={`w-full flex items-center justify-center gap-2 ${connecting ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} disabled:bg-slate-100 disabled:text-slate-300 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs`}
+                        disabled={onboardingAction.executing || (selectedChannel.reqKey !== false && !config.botToken)}
+                        className={`w-full flex items-center justify-center gap-2 ${onboardingAction.executing ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} disabled:bg-slate-100 disabled:text-slate-300 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs`}
                     >
-                        {connecting ? (
+                        {userType === 'existing' ? (
+                            <>確認通訊設定並繼續 <ArrowRight size={18} /></>
+                        ) : onboardingAction.executing ? (
                             <>
                                 <Loader2 size={18} className="animate-spin" /> 正在繫結通訊頻率...
                             </>

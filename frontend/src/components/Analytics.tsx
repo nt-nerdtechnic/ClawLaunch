@@ -18,7 +18,8 @@ export function Analytics() {
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
 
   const agentBreakdown = snapshot?.statuses?.reduce((acc: any[], status: any) => {
-    const session = snapshot.sessions.find((s: any) => s.sessionKey === status.sessionKey);
+    const sessions = snapshot?.sessions || [];
+    const session = sessions.find((s: any) => s.sessionKey === status.sessionKey);
     const agentId = session?.agentId || 'Unknown';
     const existing = acc.find(item => item.name === agentId);
     const tokens = (status.tokensIn || 0) + (status.tokensOut || 0);
@@ -51,12 +52,12 @@ export function Analytics() {
         lines.forEach(line => {
           try {
             const entry = JSON.parse(line);
-            const date = entry.session_timestamp.split('T')[0].slice(5); // MM-DD
+            const date = String(entry.session_timestamp || '').split('T')[0].slice(5) || '??-??'; // MM-DD
             const current = dailyMap.get(date) || { in: 0, out: 0, total: 0 };
             
-            current.in += entry.input_tokens;
-            current.out += entry.output_tokens;
-            current.total += entry.input_tokens + entry.output_tokens;
+            current.in += (entry.input_tokens || 0);
+            current.out += (entry.output_tokens || 0);
+            current.total += (entry.input_tokens || 0) + (entry.output_tokens || 0);
 
             dailyMap.set(date, current);
             totalIn += entry.input_tokens;
@@ -317,7 +318,7 @@ export function Analytics() {
               </div>
 
               <p className="text-xs text-slate-500 italic bg-slate-100 dark:bg-slate-800/30 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                "{budget.message}"
+                "{String(budget.message || '')}"
               </p>
             </div>
           ) : (

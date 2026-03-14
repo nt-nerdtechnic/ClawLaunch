@@ -14,16 +14,6 @@ import UpdateBanner from './components/UpdateBanner';
 import { useStore } from './store';
 import { execInTerminal } from './utils/terminal';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      exec: (command: string, args?: string[]) => Promise<{ code: number, stdout: string, stderr: string, exitCode?: number }>;
-      onLog: (callback: (payload: { data: string, source: 'stdout' | 'stderr' }) => void) => void;
-      resize: (mode: 'mini' | 'expanded') => void;
-    }
-  }
-}
-
 function App() {
   const { running, setRunning, logs, addLog, envStatus, setEnvStatus, config, setConfig, setDetectedConfig, setCoreSkills, setWorkspaceSkills } = useStore();
   const [viewMode, setViewMode] = useState<'mini' | 'expanded'>('expanded');
@@ -78,15 +68,20 @@ function App() {
       try {
           const res = await window.electronAPI.exec('detect:paths');
           if (res.code === 0 && res.stdout) {
-            const detected = JSON.parse(res.stdout);
+            let detected: any = { coreSkills: [], existingConfig: null };
+            try {
+                detected = JSON.parse(res.stdout);
+            } catch (e) {
+                console.warn("Detected paths but result was not valid JSON", res.stdout);
+            }
             
-            // [NEW] 僅緩存偵測結果，不直接修改 config，交由 Wizard 根據模式決定是否套用
-            if (detected.existingConfig) {
+            // [NEW] 僅緩存偵測結果，不直接修改 config
+            if (detected && detected.existingConfig) {
                 setDetectedConfig({
                     ...detected.existingConfig,
-                    corePath: detected.corePath,
-                    configPath: detected.configPath,
-                    workspacePath: detected.workspacePath || detected.configPath
+                    corePath: detected.existingConfig.corePath || '',
+                    configPath: detected.existingConfig.configPath || '',
+                    workspacePath: detected.existingConfig.workspacePath || detected.existingConfig.configPath || ''
                 });
             }
 
@@ -105,7 +100,12 @@ function App() {
       try {
         const res = await window.electronAPI.exec('config:read');
         if (res.code === 0 && res.stdout) {
-          const savedConfig = JSON.parse(res.stdout);
+          let savedConfig = {};
+          try {
+            savedConfig = JSON.parse(res.stdout);
+          } catch(e) {
+            console.error("Config JSON parse failed", res.stdout);
+          }
           const { setConfig } = useStore.getState(); // Directly get from store to avoid stale closure
           setConfig(savedConfig);
         }
@@ -142,11 +142,15 @@ function App() {
       try {
         // Try reading from corePath/runtime/last-snapshot.json
         const snapshotPath = `${config.corePath}/runtime/last-snapshot.json`;
-        const res = await window.electronAPI.exec(`cat ${snapshotPath}`);
+        const res = await window.electronAPI.exec(`cat "${snapshotPath}"`);
         if (res.code === 0 && res.stdout) {
-          const snapshot = JSON.parse(res.stdout);
-          const { setSnapshot } = useStore.getState();
-          setSnapshot(snapshot);
+          try {
+            const snapshot = JSON.parse(res.stdout);
+            const { setSnapshot } = useStore.getState();
+            setSnapshot(snapshot);
+          } catch (e) {
+            console.warn("Snapshot corrupted or empty", e);
+          }
         }
       } catch (e) {
         // Silent fail if not exists yet
@@ -387,7 +391,7 @@ function App() {
                  <div className="p-6 font-mono text-[12px] space-y-1.5 overflow-y-auto flex-1 text-slate-600 dark:text-slate-300">
                     {logs.map((log, i) => <div key={i} className="flex">
                         <span className="text-slate-400 dark:text-slate-600 mr-3">[{log.time}]</span>
-                        <span>{log.text}</span>
+                        <span>{String(log.text || '')}</span>
                     </div>)}
                  </div>
               </div>

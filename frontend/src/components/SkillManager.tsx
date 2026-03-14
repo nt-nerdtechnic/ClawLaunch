@@ -116,16 +116,23 @@ export function SkillManager() {
     try {
       const result = await window.electronAPI.exec('detect:paths');
       if (result?.exitCode === 0 && result.stdout) {
-        const data = JSON.parse(result.stdout);
-        if (data.coreSkills) setCoreSkills(data.coreSkills);
-        if (data.existingConfig?.workspaceSkills) setWorkspaceSkills(data.existingConfig.workspaceSkills);
+        try {
+          const data = JSON.parse(result.stdout);
+          if (data.coreSkills) setCoreSkills(data.coreSkills);
+          if (data.existingConfig?.workspaceSkills) setWorkspaceSkills(data.existingConfig.workspaceSkills);
+        } catch (e) {
+          console.warn("Rescan JSON parse failed", e);
+        }
       }
     } catch (e) {}
     setScanning(false);
   };
 
   useEffect(() => {
-    if (coreSkills.length === 0) rescan();
+    // 優先使用 App.tsx 初始化時偵測到的數據，僅在完全缺失且未在偵測中時才觸發
+    if (coreSkills.length === 0 && workspaceSkills.length === 0) {
+      rescan();
+    }
   }, []);
 
   const handleImport = async () => {

@@ -3,6 +3,7 @@ import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
+import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 
 const PathItem = ({ label, path, icon, onBrowse }) => {
     const { t } = useTranslation();
@@ -41,30 +42,10 @@ const SetupStepModel = ({ onNext }) => {
     pathsConfirmed, setPathsConfirmed, setDetectedConfig
   } = useStore();
   const { t } = useTranslation();
+  const onboardingAction = useOnboardingAction();
 
   const [probingKey, setProbingKey] = useState(null);
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
-  const [connecting, setConnecting] = useState(false);
-  const [localLogs, setLocalLogs] = useState([]);
-  const [execError, setExecError] = useState(null);
-  const logCleanupRef = React.useRef(null);
-
-  React.useEffect(() => {
-    if (window.electronAPI && connecting) {
-        logCleanupRef.current = window.electronAPI.onLog((payload) => {
-            setLocalLogs(prev => [...prev.slice(-49), { text: payload.data, source: payload.source, time: new Date().toLocaleTimeString() }]);
-        });
-    }
-    return () => {
-        if (typeof logCleanupRef.current === 'function') {
-            logCleanupRef.current();
-        }
-    };
-  }, [connecting]);
-
-  const addLocalLog = (text, source = 'system') => {
-    setLocalLogs(prev => [...prev.slice(-49), { text, source, time: new Date().toLocaleTimeString() }]);
-  };
   
   // CLI AuthChoices Alignment
   const providerGroups = [
@@ -203,15 +184,15 @@ const SetupStepModel = ({ onNext }) => {
         workspacePath: detectedConfig.workspacePath || config.workspacePath
       };
       setConfig(newConfig);
-      
-      if (userType === 'existing' && ((newConfig.apiKey && newConfig.apiKey.length > 5) || newConfig.model || newConfig.authChoice)) {
-          localStorage.setItem('onboarding_finished', 'true');
-          onNext();
-      } else if ((newConfig.apiKey && newConfig.apiKey.length > 0) || newConfig.model || newConfig.authChoice) {
-          onNext();
-      } else {
-          setPathsConfirmed(true);
-      }
+
+            const pathsReady = !!(newConfig.corePath && newConfig.configPath && newConfig.workspacePath);
+            if (pathsReady) {
+                setPathsConfirmed(true);
+            }
+
+            if ((newConfig.apiKey && newConfig.apiKey.length > 0) || newConfig.model || newConfig.authChoice) {
+                onNext();
+            }
     }
   };
 
@@ -237,92 +218,36 @@ const SetupStepModel = ({ onNext }) => {
       checkEnvironment();
     }
 
-    if (userType === 'new' && config.corePath && config.configPath && !pathsConfirmed) {
+        if (userType === 'new' && config.corePath && config.configPath && config.workspacePath && !pathsConfirmed) {
         setPathsConfirmed(true);
     }
-  }, []);
+    }, [
+        envStatus.node,
+        envStatus.git,
+        envStatus.pnpm,
+        setEnvStatus,
+        userType,
+        config.corePath,
+        config.configPath,
+        config.workspacePath,
+        pathsConfirmed,
+        setPathsConfirmed
+    ]);
 
 
 
-  const validateRuntimePaths = () => {
-    const missing = [];
-    if (!config.corePath) missing.push('Core Path');
-    if (!config.configPath) missing.push('Config Path');
-    if (!config.workspacePath) missing.push('Workspace Path');
-    if (missing.length > 0) {
-      const msg = `請先完成路徑設定：${missing.join(' / ')}`;
-      setExecError(msg);
-      addLocalLog(`❌ ${msg}`, 'stderr');
-      return false;
-    }
-    return true;
-  };
+
 
   const handleNext = async () => {
+        if (!config.corePath || !config.configPath || !config.workspacePath) {
+            setPathsConfirmed(false);
+            return;
+        }
+
     if (currentChoice && (!currentChoice.reqKey || config.apiKey)) {
-      if (!config.corePath || !config.configPath || !config.workspacePath) {
-        const missing = [
-          !config.corePath ? 'Core Path' : null,
-          !config.configPath ? 'Config Path' : null,
-          !config.workspacePath ? 'Workspace Path' : null
-        ].filter(Boolean);
-        setExecError(`缺少必要路徑：${missing.join(' / ')}。請先完成路徑設定後再繼續授權。`);
-        return;
-      }
-
-      if (!validateRuntimePaths()) return;
-
-      setConnecting(true);
-      setExecError(null);
-      setLocalLogs([]);
-
-      addLocalLog("🚀 正在啟動 OpenClaw 核心授權程序 (Adapter Mode)...", "system");
-
-      try {
-          const corePath = config.corePath;
-          const execCmd = corePath && corePath.includes('npm') ? 'npm run' : 'pnpm';
-          
-          // 核心對齊：Provider-specific flags
-          const authFlagMapping = {
-              'apiKey': '--anthropic-api-key',
-              'openai-api-key': '--openai-api-key',
-              'gemini-api-key': '--gemini-api-key',
-              'minimax-api': '--minimax-api-key',
-              'moonshot-api-key': '--moonshot-api-key',
-              'openrouter-api-key': '--openrouter-api-key',
-              'xai-api-key': '--xai-api-key',
-              'mistral-api-key': '--mistral-api-key',
-              'ollama': '' // Ollama usually doesn't need a key here if already running
-          };
-
-          const flag = authFlagMapping[config.authChoice] || '--apiKey';
-          const authFlags = config.apiKey ? `${flag} "${config.apiKey}"` : '';
-          
-          const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR="${config.workspacePath}" ` : '';
-          const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH="${config.configPath}/config.json" ` : '';
-          const envPrefix = `${stateDirEnv}${configPathEnv}`;
-          const workspaceFlag = config.workspacePath ? `--workspace "${config.workspacePath}" ` : '';
-          
-          const onboardCmd = `cd "${corePath}" && ${envPrefix}${execCmd} openclaw onboard --auth-choice ${config.authChoice} ${authFlags} ${workspaceFlag}--install-daemon --non-interactive --accept-risk`;
-          
-          addLocalLog(`> 指令: openclaw onboard --auth-choice ${config.authChoice} ...`, 'system');
-          
-          const res = await window.electronAPI.exec(onboardCmd);
-          
-          if (res.exitCode === 0 || res.code === 0) {
-              addLocalLog("✅ 核心授權成功！正在同步配置至工作區...", "system");
-              await new Promise(r => setTimeout(r, 1000));
-              onNext();
-          } else {
-              const errorMsg = res.stderr || "授權失敗，請檢查 Key 是否正確或網路連接。";
-              setExecError(errorMsg);
-              addLocalLog(`❌ 授權回報異常: ${errorMsg}`, "stderr");
-              setConnecting(false);
-          }
-      } catch (err) {
-          setExecError(err.message);
-          addLocalLog(`❌ 系統執行錯誤: ${err.message}`, "stderr");
-          setConnecting(false);
+      const success = await onboardingAction.execute('model');
+      if (success) {
+        onNext();
       }
     }
   };
@@ -339,8 +264,8 @@ const SetupStepModel = ({ onNext }) => {
         </h2>
         <p className="text-gray-500 mt-2 italic text-sm">
             {(detectedConfig || config.model) 
-              ? (connecting ? "「神經連結建立中，請保持頻率一致...」" : t('modelSetup.subtitle.reconnectDesc'))
-              : (!pathsConfirmed ? t('modelSetup.subtitle.needAlign') : (connecting ? "「正在將靈魂注入機甲核心...」" : t('modelSetup.subtitle.aligned')))}
+              ? (onboardingAction.executing ? "「神經連結建立中，請保持頻率一致...」" : t('modelSetup.subtitle.reconnectDesc'))
+              : (!pathsConfirmed ? t('modelSetup.subtitle.needAlign') : (onboardingAction.executing ? "「正在將靈魂注入機甲核心...」" : t('modelSetup.subtitle.aligned')))}
         </p>
       </div>
 
@@ -432,15 +357,27 @@ const SetupStepModel = ({ onNext }) => {
                 </div>
             )}
 
-            {!detectedConfig && (
-                <button 
-                  onClick={() => setPathsConfirmed(true)} 
-                  disabled={!config.corePath || !config.configPath}
-                  className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-gray-100 disabled:text-gray-300 text-white font-black py-4 rounded-2xl transition-all shadow-2xl flex items-center justify-center gap-2 px-8 uppercase tracking-widest text-xs"
-                >
-                  {t('modelSetup.paths.confirmPathBtn')} <ArrowRight size={16} />
-                </button>
-            )}
+                        <div className="space-y-3">
+                            {detectedConfig && userType !== 'new' && (
+                                <button
+                                    onClick={() => setPathsConfirmed(true)}
+                                    disabled={!config.corePath || !config.configPath || !config.workspacePath}
+                                    className="w-full bg-white hover:bg-slate-50 disabled:bg-gray-100 disabled:text-gray-300 text-slate-700 border border-slate-200 font-black py-4 rounded-2xl transition-all shadow-sm flex items-center justify-center gap-2 px-8 uppercase tracking-widest text-xs"
+                                >
+                                    手動設定核心 <ArrowRight size={16} />
+                                </button>
+                            )}
+
+                            {!detectedConfig && (
+                                <button 
+                                    onClick={() => setPathsConfirmed(true)} 
+                                    disabled={!config.corePath || !config.configPath || !config.workspacePath}
+                                    className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-gray-100 disabled:text-gray-300 text-white font-black py-4 rounded-2xl transition-all shadow-2xl flex items-center justify-center gap-2 px-8 uppercase tracking-widest text-xs"
+                                >
+                                    {t('modelSetup.paths.confirmPathBtn')} <ArrowRight size={16} />
+                                </button>
+                            )}
+                        </div>
           </div>
         )}
 
@@ -481,29 +418,29 @@ const SetupStepModel = ({ onNext }) => {
                         </div>
                     </div>
 
-                    {connecting && (
+                    {onboardingAction.executing && (
                         <div className="space-y-2 animate-in fade-in duration-300">
                             <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
                                 <Loader2 size={12} className="animate-spin" />
                                 授權同步中 (Real-time Logs)
                             </div>
-                            <TerminalLog logs={localLogs} height="h-32" />
+                            <TerminalLog logs={onboardingAction.logs} height="h-32" />
                         </div>
                     )}
 
-                    {!connecting && execError && (
+                    {!onboardingAction.executing && onboardingAction.error && (
                         <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
                             <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                            <p className="font-medium">{execError}</p>
+                            <p className="font-medium">{onboardingAction.error}</p>
                         </div>
                     )}
 
                     <button 
                         onClick={handleNext}
-                        disabled={connecting}
-                        className={`w-full ${connecting ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-500'} text-white font-black py-3.5 rounded-2xl transition-all shadow-xl shadow-blue-500/20 uppercase tracking-widest text-xs flex items-center justify-center gap-2`}
+                        disabled={onboardingAction.executing}
+                        className={`w-full ${onboardingAction.executing ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-500'} text-white font-black py-3.5 rounded-2xl transition-all shadow-xl shadow-blue-500/20 uppercase tracking-widest text-xs flex items-center justify-center gap-2`}
                     >
-                        {connecting ? (
+                        {onboardingAction.executing ? (
                             <>
                                 <Loader2 size={16} className="animate-spin" /> 正在對齊頻率 (Aligning...)
                             </>
@@ -608,29 +545,31 @@ const SetupStepModel = ({ onNext }) => {
                     </div>
 
                     <div className="pt-4 space-y-4">
-                        {connecting && (
+                        {onboardingAction.executing && (
                             <div className="space-y-2 animate-in fade-in duration-300">
                                 <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
                                     <Loader2 size={12} className="animate-spin" />
                                     授權同步中 (Real-time Logs)
                                 </div>
-                                <TerminalLog logs={localLogs} height="h-32" />
+                                <TerminalLog logs={onboardingAction.logs} height="h-32" />
                             </div>
                         )}
 
-                        {execError && (
+                        {onboardingAction.error && (
                             <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
                                 <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                                <p className="font-medium">{execError}</p>
+                                <p className="font-medium">{onboardingAction.error}</p>
                             </div>
                         )}
 
                         <button 
                             onClick={handleNext} 
-                            disabled={connecting || (currentChoice?.reqKey && !config.apiKey)}
-                            className={`w-full flex items-center justify-center gap-3 ${connecting ? 'bg-blue-400' : 'bg-slate-900 hover:bg-slate-800'} disabled:bg-slate-100 disabled:text-slate-300 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs`}
+                            disabled={onboardingAction.executing || (currentChoice?.reqKey && !config.apiKey)}
+                            className={`w-full flex items-center justify-center gap-3 ${onboardingAction.executing ? 'bg-blue-400' : 'bg-slate-900 hover:bg-slate-800'} disabled:bg-slate-100 disabled:text-slate-300 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs`}
                         >
-                            {connecting ? (
+                            {userType === 'existing' ? (
+                                <>確認核心授權並繼續 <ArrowRight size={18} /></>
+                            ) : onboardingAction.executing ? (
                                 <>
                                     <Loader2 size={18} className="animate-spin" /> 對齊靈魂頻率中...
                                 </>

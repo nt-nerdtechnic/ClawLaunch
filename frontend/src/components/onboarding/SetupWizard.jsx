@@ -29,17 +29,15 @@ const SetupWizard = ({ onFinished }) => {
   ];
 
   const totalSteps = steps.length;
+  const setupStageTotal = Math.max(totalSteps - 2, 1);
+  const setupStageCurrent = Math.min(Math.max(currentStep - 1, 0), setupStageTotal - 1);
 
   const nextStep = () => {
-    if (currentStep < totalSteps - 1) {
-      setCurrentStep(currentStep + 1);
-    }
+    setCurrentStep((prev) => (prev < totalSteps - 1 ? prev + 1 : prev));
   };
 
   const prevStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
+    setCurrentStep((prev) => (prev > 0 ? prev - 1 : prev));
   };
 
   const renderStep = () => {
@@ -56,7 +54,11 @@ const SetupWizard = ({ onFinished }) => {
       <div className="w-full max-w-2xl mb-8">
         <div className="flex justify-between items-center mb-4">
           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-            {currentStep === 0 ? t('wizard.steps.welcome') : currentStep < totalSteps - 1 ? t('wizard.steps.progress', { current: currentStep, total: totalSteps - 2 }) : t('wizard.steps.launch')}
+            {currentStep === 0
+              ? t('wizard.steps.welcome')
+              : currentStep < totalSteps - 1
+                ? t('wizard.steps.progress', { current: setupStageCurrent + 1, total: setupStageTotal })
+                : t('wizard.steps.launch')}
           </span>
           <span className="text-xs font-bold text-blue-600">
             {Math.round(((currentStep + 1) / totalSteps) * 100)}%
@@ -80,7 +82,7 @@ const SetupWizard = ({ onFinished }) => {
       </div>
 
       {/* 底部導航補助 */}
-      {currentStep > 0 && currentStep < totalSteps - 1 && steps[currentStep].id !== 'initialize' && (
+      {currentStep > 0 && currentStep < totalSteps - 1 && (
         <button 
           onClick={prevStep}
           className="mt-8 text-sm text-gray-400 hover:text-gray-600 transition-colors"

@@ -33,11 +33,21 @@ const TerminalLog: React.FC<TerminalLogProps> = ({ logs, height = 'h-40', title 
         }
     };
 
-    const renderTextWithLinks = (text: string) => {
+    const renderTextWithLinks = (text: unknown) => {
+        let normalizedText = '';
+        if (typeof text !== 'string') {
+            try {
+                normalizedText = JSON.stringify(text);
+            } catch (e) {
+                normalizedText = String(text || '');
+            }
+        } else {
+            normalizedText = text;
+        }
         const urlRegex = /(https?:\/\/[^\s]+)/g;
-        const parts = text.split(urlRegex);
+        const parts = normalizedText.split(urlRegex);
         
-        return parts.map((part, i) => {
+        return parts.map((part: string, i: number) => {
             if (part.match(urlRegex)) {
                 return (
                     <span 

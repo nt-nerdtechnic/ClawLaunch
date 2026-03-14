@@ -47,7 +47,7 @@ export function StaffGrid() {
 
   if (!snapshot) return null;
 
-  const { sessions = [] } = snapshot;
+  const sessions = snapshot?.sessions || [];
 
   // Extract unique agents from sessions and their latest state
   const agentStates = sessions.reduce((acc: any, session: any) => {
@@ -96,9 +96,9 @@ export function StaffGrid() {
             </div>
 
             <div className="space-y-1">
-              <h4 className="font-black text-lg text-slate-900 dark:text-slate-100 tracking-tight">{agent.title}</h4>
+              <h4 className="font-black text-lg text-slate-900 dark:text-slate-100 tracking-tight">{String(agent.title || 'Agent')}</h4>
               <p className="text-[10px] text-slate-500 dark:text-slate-600 font-bold uppercase tracking-widest border-t border-slate-200 dark:border-slate-800 pt-2 mt-2">
-                {agent.id} · {agent.desc}
+                {String(agent.id || 'N/A')} · {String(agent.desc || 'Operator')}
               </p>
             </div>
 

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 
@@ -9,6 +10,50 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
 let clawProcess: any = null;
 const activeProcesses = new Set<any>();
+
+const DEV_PORT_RANGE_START = 5173;
+const DEV_PORT_RANGE_END = 5185;
+const DEV_SERVER_WAIT_MS = 15000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isDevServerReachable(url: string, timeoutMs = 600): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(url, (res) => {
+      res.resume();
+      resolve(Boolean(res.statusCode && res.statusCode < 500));
+    });
+
+    req.on('error', () => resolve(false));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function resolveDevServerUrl(): Promise<string> {
+  const envUrl = process.env.VITE_DEV_SERVER_URL;
+  if (envUrl && await isDevServerReachable(envUrl)) {
+    return envUrl;
+  }
+
+  const deadline = Date.now() + DEV_SERVER_WAIT_MS;
+  while (Date.now() < deadline) {
+    for (let port = DEV_PORT_RANGE_START; port <= DEV_PORT_RANGE_END; port++) {
+      const candidate = `http://localhost:${port}`;
+      // eslint-disable-next-line no-await-in-loop
+      if (await isDevServerReachable(candidate)) {
+        return candidate;
+      }
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(250);
+  }
+
+  // Fallback for clearer diagnostics in renderer load failure.
+  return 'http://localhost:5173';
+}
 
 function killAllSubprocesses() {
   for (const proc of activeProcesses) {
@@ -27,7 +72,7 @@ function killAllSubprocesses() {
   activeProcesses.clear();
 }
 
-function createWindow() {
+async function createWindow() {
   const iconPath = process.env.NODE_ENV === 'development'
     ? path.join(__dirname, '../public/icon.png')
     : path.join(__dirname, 'icon.png');
@@ -53,7 +98,9 @@ function createWindow() {
   }
 
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
+    const devServerUrl = await resolveDevServerUrl();
+    console.log(`[dev] Loading renderer from ${devServerUrl}`);
+    mainWindow.loadURL(devServerUrl);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -245,7 +292,11 @@ async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
 }
 
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow().catch((err) => {
+    console.error('Failed to create window:', err);
+  });
+});
 
 ipcMain.on('window:resize', (event, mode: 'mini' | 'expanded') => {
   if (!mainWindow) return;

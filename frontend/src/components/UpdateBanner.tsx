@@ -20,7 +20,7 @@ const UpdateBanner = () => {
     }
 
     return () => {
-        if (logCleanupRef.current) {
+      if (typeof logCleanupRef.current === 'function') {
             logCleanupRef.current();
         }
     };
@@ -30,6 +30,9 @@ const UpdateBanner = () => {
     if (window.electronAPI) {
       try {
         const res = await window.electronAPI.exec('version:check');
+        if (res.code !== 0 || !res.stdout) {
+          return;
+        }
         const data = JSON.parse(res.stdout);
         setVersions({ local: data.local, remote: data.remote });
         setHasUpdate(data.hasUpdate);
@@ -69,7 +72,7 @@ const UpdateBanner = () => {
                 </div>
                 <div>
                     <h4 className="text-lg font-black text-emerald-900 dark:text-emerald-100">系統更新成功！</h4>
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">版本已升級至 {versions.remote}。請立即重啟以啟動新核心。</p>
+                    <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">版本已升級至 {String(versions.remote || '')}。請立即重啟以啟動新核心。</p>
                 </div>
             </div>
             <button 
@@ -95,9 +98,9 @@ const UpdateBanner = () => {
                 <ArrowUpCircle size={28} className="group-hover:scale-110 transition-transform" />
             </div>
             <div>
-                <h4 className="font-black text-blue-900 dark:text-blue-50 text-lg tracking-tight">發現龍蝦新演化 {versions.remote}</h4>
+                <h4 className="font-black text-blue-900 dark:text-blue-50 text-lg tracking-tight">發現龍蝦新演化 {String(versions.remote || '')}</h4>
                 <p className="text-xs text-blue-700 dark:text-blue-400 font-medium flex items-center gap-1.5 mt-1">
-                    <RefreshCcw size={12} /> 目前版本: {versions.local} • 建議立即升級以同步最新底層協定
+                    <RefreshCcw size={12} /> 目前版本: {String(versions.local || '')} • 建議立即升級以同步最新底層協定
                 </p>
             </div>
         </div>

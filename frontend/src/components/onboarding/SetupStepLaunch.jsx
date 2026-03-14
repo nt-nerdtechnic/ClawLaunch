@@ -1,143 +1,60 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle } from 'lucide-react';
+import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
+import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 
 /**
  * NT-ClawLaunch Onboarding: Final Launch Step
- * Refactored: Verification & Finalization Mode (2026-03-14)
+ * Optimized with Action Strategy Pattern (2026-03-15)
  */
 const SetupStepLaunch = ({ onComplete }) => {
-  const { config } = useStore();
+  const { config, userType } = useStore();
   const { t } = useTranslation();
-  const [status, setStatus] = useState('preparing'); // preparing, installing, finishing, success, partial_failure
+  const onboardingAction = useOnboardingAction();
+  const [status, setStatus] = useState('preparing'); // preparing, success, partial_failure
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState(null);
-  const [localLogs, setLocalLogs] = useState([]);
-  const [checkWarnings, setCheckWarnings] = useState([]);
-  const logCleanupRef = useRef(null);
 
   const steps = {
     preparing: t('launch.steps.preparing'),
-    installing: t('launch.steps.installing'),
-    finishing: t('launch.steps.finishing'),
     success: t('launch.steps.success')
   };
 
-  const addLocalLog = (text, source = 'system') => {
-    setLocalLogs(prev => [...prev.slice(-49), { text, source, time: new Date().toLocaleTimeString() }]);
-  };
-
   useEffect(() => {
-    if (window.electronAPI) {
-        logCleanupRef.current = window.electronAPI.onLog((payload) => {
-            addLocalLog(payload.data, payload.source);
-        });
-    }
-    
     runSetup();
-
-    return () => {
-        if (typeof logCleanupRef.current === 'function') {
-            logCleanupRef.current();
-        }
-    };
   }, []);
 
   const runSetup = async () => {
     try {
-      const stepWarnings = [];
-      // Guard: corePath must be set before running any CLI commands
-      if (!config.corePath) {
-        setError('缺少核心路徑 (Core Path missing)。請返回上一步設定 Core Path 後再繼續。');
-        addLocalLog('❌ 核心路徑未設定，無法執行啟動檢查。', 'stderr');
-        return;
-      }
-
-      // Step 1: Verification Warmup
       setStatus('preparing');
-      setProgress(10);
-      addLocalLog('🚀 啟動最終發射檢查程序 (Final Launch Verification)...', 'system');
-      await new Promise(r => setTimeout(r, 1000));
       setProgress(20);
-
-      // Step 2: System Pulse Checks
-      setStatus('installing');
-      const corePath = config.corePath;
-      const execCmd = corePath && corePath.includes('npm') ? 'npm run' : 'pnpm';
-
-      const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR="${config.workspacePath}" ` : '';
-      const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH="${config.configPath}/config.json" ` : '';
-      const envPrefix = `${stateDirEnv}${configPathEnv}`;
-
-      const warnings = [];
-
-      // [1] Gateway 狀態驗證
-      addLocalLog('🔍 正在探測網關狀態 (Gateway Pulse Check)...', 'system');
-      const gatewayRes = await window.electronAPI.exec(`cd "${corePath}" && ${envPrefix}${execCmd} openclaw gateway status`);
-      if (gatewayRes.exitCode === 0 || gatewayRes.code === 0) {
-          addLocalLog('✅ 網關服務連通性正常', 'system');
+      
+      const success = await onboardingAction.execute('launch');
+      
+      if (success) {
+        setProgress(100);
+        setStatus('success');
       } else {
-          const msg = '網關探測異常，可能需要手動啟動：' + (gatewayRes.stderr || '未知錯誤');
-          addLocalLog('⚠️ ' + msg, 'stderr');
-          warnings.push(msg);
+        setStatus('partial_failure');
       }
-      setProgress(50);
-
-      // [2] Daemon 健康度檢查
-      setStatus('finishing');
-      addLocalLog('🔍 正在檢查守護進程健康度 (Daemon Health Check)...', 'system');
-      const healthRes = await window.electronAPI.exec(`cd "${corePath}" && ${envPrefix}${execCmd} openclaw health`);
-      if (healthRes.exitCode === 0 || healthRes.code === 0) {
-          addLocalLog('✅ 守護進程狀態綠燈', 'system');
-      } else {
-          const msg = '守護進程尚未就緒。您可以繼續並在 Dashboard 中手動啟動。';
-          addLocalLog('⚠️ ' + msg, 'stderr');
-          warnings.push(msg);
-      }
-      setProgress(80);
-
-      // [3] 配置收尾 (Finalize Config)
-      addLocalLog('🛠️ 正在執行最後的配置同步 (Syncing Workspaces)...', 'system');
-      await new Promise(r => setTimeout(r, 1000));
-
-      setProgress(100);
-
-      if (stepWarnings.length > 0) {
-          addLocalLog('⚠️ 部分檢查未通過，請查看警告訊息後決定是否繼續。', 'stderr');
-          setCheckWarnings(warnings);
-          setStatus('partial_failure');
-      } else {
-          addLocalLog('✨ 全系統配置檢核完成。龍蝦已準備好進入戰鬥位置！', 'system');
-          setStatus('success');
-      }
-
     } catch (err) {
       console.error(err);
-      setError(err.message);
-      addLocalLog(t('launch.logs.installFailed', { msg: err.message }), 'stderr');
+      setStatus('partial_failure');
     }
   };
 
-  if (error) {
+  if (onboardingAction.error) {
       return (
           <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl shadow-xl shadow-gray-100 border border-red-100 p-12 text-center animate-in fade-in zoom-in-95 duration-500">
               <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center text-red-600 mx-auto mb-8 animate-bounce">
                   <Terminal size={48} />
               </div>
               <h2 className="text-2xl font-bold text-gray-800">{t('launch.error.title')}</h2>
-              <p className="text-red-500 mt-4 font-mono text-sm px-4 py-2 bg-red-50 rounded-xl inline-block">{error}</p>
-              {warnings.length > 0 && (
-                <div className="mt-4 text-left bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-700 text-sm">
-                  <p className="font-bold mb-1">未通過檢核項目：</p>
-                  <ul className="list-disc pl-5">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
-                  <p className="mt-2 text-xs">請先修復後按 Retry 重新檢核。</p>
-                </div>
-              )}
+              <p className="text-red-500 mt-4 font-mono text-sm px-4 py-2 bg-red-50 rounded-xl inline-block">{onboardingAction.error}</p>
               
               <div className="mt-8">
-                  <TerminalLog logs={localLogs} height="h-48" title="Error Debug Log" />
+                  <TerminalLog logs={onboardingAction.logs} height="h-48" title="Error Debug Log" />
               </div>
 
               <button 
@@ -157,37 +74,28 @@ const SetupStepLaunch = ({ onComplete }) => {
                   <AlertCircle size={48} />
               </div>
               <h2 className="text-2xl font-bold text-gray-800">部分服務未就緒 (Partial Services Down)</h2>
-              <p className="text-gray-500 mt-2 text-sm">以下服務檢查未通過，請確認後決定是否繼續進入 Dashboard。</p>
-
-              <div className="mt-6 space-y-3 text-left">
-                  {checkWarnings.map((w, i) => (
-                      <div key={i} className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-2xl">
-                          <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                          <p className="text-amber-800 text-[12px] font-medium">{w}</p>
-                      </div>
-                  ))}
-              </div>
+              <p className="text-gray-500 mt-2 text-sm">檢查發現部分服務探測異常，您可以在 Dashboard 中手動啟動。</p>
 
               <div className="mt-6">
-                  <TerminalLog logs={localLogs} height="h-40" title="Launch Check Logs" />
+                  <TerminalLog logs={onboardingAction.logs} height="h-40" title="Launch Check Logs" />
               </div>
 
               <div className="mt-8 flex flex-col gap-3">
                   <p className="text-[11px] text-gray-400 font-medium">
-                      提示：您可以重試檢查，或先進入 Dashboard 並在服務管理頁手動啟動各服務。
+                      提示：您可以重試檢查，或直接進入 Dashboard。
                   </p>
                   <div className="flex gap-3">
                       <button
-                          onClick={() => { setStatus('preparing'); setProgress(0); setCheckWarnings([]); setLocalLogs([]); runSetup(); }}
+                          onClick={() => { setProgress(0); onboardingAction.reset(); runSetup(); }}
                           className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-4 rounded-2xl font-black transition-all active:scale-95 text-sm"
                       >
-                          重試檢查 (Retry Checks)
+                          重試檢查 (Retry)
                       </button>
                       <button
                           onClick={onComplete}
                           className="flex-1 bg-amber-500 hover:bg-amber-400 text-white px-6 py-4 rounded-2xl font-black transition-all shadow-lg active:scale-95 text-sm"
                       >
-                          仍然進入 Dashboard
+                          進入 Dashboard
                       </button>
                   </div>
               </div>
@@ -231,7 +139,7 @@ const SetupStepLaunch = ({ onComplete }) => {
                 <Loader2 size={12} className="animate-spin text-blue-500" />
                 驗證進度 (Verification Pulse)
              </div>
-             <TerminalLog logs={localLogs} height="h-48" title="OpenClaw Launch Logs" />
+             <TerminalLog logs={onboardingAction.logs} height="h-48" title="OpenClaw Launch Logs" />
           </div>
         </div>
       ) : (
@@ -242,8 +150,8 @@ const SetupStepLaunch = ({ onComplete }) => {
             </div>
 
             <div className="space-y-2">
-                <h2 className="text-4xl font-black text-gray-900 tracking-tight">{t('launch.success.title')}</h2>
-                <p className="text-gray-500 font-medium text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: t('launch.success.desc') }}></p>
+                <h2 className="text-4xl font-black text-gray-900 tracking-tight">{String(t('launch.success.title') || 'Ready')}</h2>
+                <p className="text-gray-500 font-medium text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: String(t('launch.success.desc') || '') }}></p>
             </div>
           </div>
 
@@ -252,6 +160,7 @@ const SetupStepLaunch = ({ onComplete }) => {
               <Terminal size={14} className="text-slate-500" />系統配置摘要 (Config Summary)
             </h4>
             <ul className="space-y-4">
+              <SummaryItem label="用戶定位" value={userType === 'existing' ? '已有安裝 (Existing)' : '新建專案 (New)'} />
               <SummaryItem label="靈魂核心" value={config.authChoice || 'Unknown'} />
               <SummaryItem label="通訊終端" value={config.platform || 'Unknown'} />
               <SummaryItem label="注入異能" value={`${config.enabledSkills?.length || 0} 項模組`} />
