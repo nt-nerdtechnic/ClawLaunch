@@ -6,16 +6,16 @@ import TerminalLog from '../common/TerminalLog';
 
 /**
  * NT-ClawLaunch Onboarding: Final Launch Step
- * Ref: Neil's Strategy - "Emotional Design & Loading States" (2026-03-12)
- * Implementation: Real Logic Bridge - connects to backend via window.electronAPI.exec
+ * Refactored: Verification & Finalization Mode (2026-03-14)
  */
 const SetupStepLaunch = ({ onComplete }) => {
   const { config } = useStore();
   const { t } = useTranslation();
-  const [status, setStatus] = useState('preparing'); // preparing, installing, finishing, success
+  const [status, setStatus] = useState('preparing'); // preparing, installing, finishing, success, partial_failure
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
   const [localLogs, setLocalLogs] = useState([]);
+  const [checkWarnings, setCheckWarnings] = useState([]);
   const logCleanupRef = useRef(null);
 
   const steps = {
@@ -47,106 +47,70 @@ const SetupStepLaunch = ({ onComplete }) => {
 
   const runSetup = async () => {
     try {
-      // Step 1: Preparing
+      // Guard: corePath must be set before running any CLI commands
+      if (!config.corePath) {
+        setError('缺少核心路徑 (Core Path missing)。請返回上一步設定 Core Path 後再繼續。');
+        addLocalLog('❌ 核心路徑未設定，無法執行啟動檢查。', 'stderr');
+        return;
+      }
+
+      // Step 1: Verification Warmup
       setStatus('preparing');
       setProgress(10);
-      addLocalLog(t('launch.logs.initDir'), 'system');
+      addLocalLog('🚀 啟動最終發射檢查程序 (Final Launch Verification)...', 'system');
       await new Promise(r => setTimeout(r, 1000));
       setProgress(20);
 
-      // Step 2: Installing / Bridging CLI Auth
+      // Step 2: System Pulse Checks
       setStatus('installing');
-      addLocalLog('🚀 啟動靈魂核心授權橋接程序...', 'system');
-      
-      const isQuickSync = config.userType === 'existing' && !config.manuallyModified; 
       const corePath = config.corePath;
-      const execCmd = corePath && corePath.includes('npm') ? 'npm run' : 'pnpm'; 
+      const execCmd = corePath && corePath.includes('npm') ? 'npm run' : 'pnpm';
 
-      if (isQuickSync) {
-        addLocalLog(t('launch.logs.quickSync'), 'system');
-        await new Promise(r => setTimeout(r, 800));
+      const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR="${config.workspacePath}" ` : '';
+      const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH="${config.configPath}/config.json" ` : '';
+      const envPrefix = `${stateDirEnv}${configPathEnv}`;
+
+      const warnings = [];
+
+      // [1] Gateway 狀態驗證
+      addLocalLog('🔍 正在探測網關狀態 (Gateway Pulse Check)...', 'system');
+      const gatewayRes = await window.electronAPI.exec(`cd "${corePath}" && ${envPrefix}${execCmd} openclaw gateway status`);
+      if (gatewayRes.exitCode === 0 || gatewayRes.code === 0) {
+          addLocalLog('✅ 網關服務連通性正常', 'system');
       } else {
-        // [A] Execute CLI Onboard
-        if (config.authChoice) {
-            addLocalLog(`🔗 執行底層授權指令 (AuthChoice: ${config.authChoice})...`, 'system');
-            
-            // 建立與 OpenClaw 核心指令對齊的參數映射表
-            const authFlagMapping = {
-                'apiKey': '--anthropic-api-key',
-                'openai-api-key': '--openai-api-key',
-                'gemini-api-key': '--gemini-api-key',
-                'minimax-api': '--minimax-api-key',
-                'moonshot-api-key': '--moonshot-api-key',
-                'moonshot-api-key-cn': '--moonshot-api-key',
-                'openrouter-api-key': '--openrouter-api-key',
-                'xai-api-key': '--xai-api-key',
-                'mistral-api-key': '--mistral-api-key'
-            };
-
-            const flag = authFlagMapping[config.authChoice] || '--apiKey'; // 降級方案
-            const authFlags = config.apiKey ? `${flag} "${config.apiKey}"` : '';
-            
-            // 使用 window.electronAPI.exec 直接執行，日誌會透過 ipc 傳回 localLogs
-            const authCmd = `cd "${corePath}" && ${execCmd} openclaw onboard --auth-choice ${config.authChoice} ${authFlags} --non-interactive --accept-risk`;
-            
-            addLocalLog(`> 指令已發送至後端系統...`, 'system');
-            const authRes = await window.electronAPI.exec(authCmd);
-
-            if (authRes.exitCode === 0 || authRes.code === 0) {
-                 addLocalLog('✅ 核心授權程序完成', 'system');
-            } else {
-                 addLocalLog(`⚠️ 授權程序回報異常：${authRes.stderr || '請檢查日誌輸出'}`, 'stderr');
-            }
-        }
+          const msg = '網關探測異常，可能需要手動啟動：' + (gatewayRes.stderr || '未知錯誤');
+          addLocalLog('⚠️ ' + msg, 'stderr');
+          warnings.push(msg);
       }
-      
-      setProgress(60);
+      setProgress(50);
 
-      // Step 3: Finishing (Channel Setup & Skill Implementation)
+      // [2] Daemon 健康度檢查
       setStatus('finishing');
-      
-      // [B] Messaging Channel Bonding
-      if (!isQuickSync && config.platform) {
-           addLocalLog(`📡 啟動通訊頻道繫結程序 (${config.platform})...`, 'system');
-           
-           let channelFlags = '';
-           if (config.botToken) {
-               if (['telegram', 'slack', 'line'].includes(config.platform)) {
-                   channelFlags = `--token "${config.botToken}"`;
-               } else if (config.platform === 'discord') {
-                   channelFlags = `--bot-token "${config.botToken}"`;
-               } else if (config.platform === 'googlechat') {
-                   channelFlags = `--webhook-url "${config.botToken}"`;
-               }
-           }
-
-           const channelCmd = `cd "${corePath}" && ${execCmd} openclaw channels add --channel ${config.platform} ${channelFlags}`;
-           addLocalLog(`> 正在繫結通訊終端...`, 'system');
-           
-           const channelRes = await window.electronAPI.exec(channelCmd);
-
-           if (channelRes.exitCode === 0) {
-               addLocalLog('✅ 通訊頻道繫結完成', 'system');
-           } else {
-               addLocalLog(`⚠️ 頻道繫結有誤：${channelRes.stderr || '請檢查日誌'}`, 'stderr');
-           }
+      addLocalLog('🔍 正在檢查守護進程健康度 (Daemon Health Check)...', 'system');
+      const healthRes = await window.electronAPI.exec(`cd "${corePath}" && ${envPrefix}${execCmd} openclaw health`);
+      if (healthRes.exitCode === 0 || healthRes.code === 0) {
+          addLocalLog('✅ 守護進程狀態綠燈', 'system');
+      } else {
+          const msg = '守護進程尚未就緒。您可以繼續並在 Dashboard 中手動啟動。';
+          addLocalLog('⚠️ ' + msg, 'stderr');
+          warnings.push(msg);
       }
+      setProgress(80);
 
-      // [C] Skills Superpowers
-      if (!isQuickSync && config.enabledSkills && config.enabledSkills.length > 0) {
-          addLocalLog(`🧩 賦予龍蝦超能力 (${config.enabledSkills.length} 項能力注入)...`, 'system');
-          for (const skillId of config.enabledSkills) {
-              addLocalLog(`> 注入模組: ${skillId}...`, 'system');
-              await window.electronAPI.exec(`cd "${corePath}" && ${execCmd} openclaw config set skills.entries.${skillId}.enabled true`);
-          }
-          addLocalLog('✅ 技能注入程序完成', 'system');
-      }
-
+      // [3] 配置收尾 (Finalize Config)
+      addLocalLog('🛠️ 正在執行最後的配置同步 (Syncing Workspaces)...', 'system');
       await new Promise(r => setTimeout(r, 1000));
-      
+
       setProgress(100);
-      setStatus('success');
-      addLocalLog(t('launch.logs.initComplete'), 'system');
+
+      if (warnings.length > 0) {
+          addLocalLog('⚠️ 部分檢查未通過，請查看警告訊息後決定是否繼續。', 'stderr');
+          setCheckWarnings(warnings);
+          setStatus('partial_failure');
+      } else {
+          addLocalLog('✨ 全系統配置檢核完成。龍蝦已準備好進入戰鬥位置！', 'system');
+          setStatus('success');
+      }
 
     } catch (err) {
       console.error(err);
@@ -178,12 +142,56 @@ const SetupStepLaunch = ({ onComplete }) => {
       );
   }
 
+  if (status === 'partial_failure') {
+      return (
+          <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl shadow-xl shadow-gray-100 border border-amber-200 p-12 text-center animate-in fade-in zoom-in-95 duration-500">
+              <div className="w-24 h-24 bg-amber-100 rounded-[32px] flex items-center justify-center text-amber-600 mx-auto mb-8 border border-amber-200/50">
+                  <AlertCircle size={48} />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800">部分服務未就緒 (Partial Services Down)</h2>
+              <p className="text-gray-500 mt-2 text-sm">以下服務檢查未通過，請確認後決定是否繼續進入 Dashboard。</p>
+
+              <div className="mt-6 space-y-3 text-left">
+                  {checkWarnings.map((w, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-2xl">
+                          <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                          <p className="text-amber-800 text-[12px] font-medium">{w}</p>
+                      </div>
+                  ))}
+              </div>
+
+              <div className="mt-6">
+                  <TerminalLog logs={localLogs} height="h-40" title="Launch Check Logs" />
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3">
+                  <p className="text-[11px] text-gray-400 font-medium">
+                      提示：您可以重試檢查，或先進入 Dashboard 並在服務管理頁手動啟動各服務。
+                  </p>
+                  <div className="flex gap-3">
+                      <button
+                          onClick={() => { setStatus('preparing'); setProgress(0); setCheckWarnings([]); setLocalLogs([]); runSetup(); }}
+                          className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-4 rounded-2xl font-black transition-all active:scale-95 text-sm"
+                      >
+                          重試檢查 (Retry Checks)
+                      </button>
+                      <button
+                          onClick={onComplete}
+                          className="flex-1 bg-amber-500 hover:bg-amber-400 text-white px-6 py-4 rounded-2xl font-black transition-all shadow-lg active:scale-95 text-sm"
+                      >
+                          仍然進入 Dashboard
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 p-12 animate-in fade-in zoom-in-95 duration-500">
       {status !== 'success' ? (
         <div className="space-y-10">
           <div className="text-center space-y-6">
-            {/* 蝦爪跳動動畫 */}
             <div className="relative inline-flex items-center justify-center">
                 <div className="w-24 h-24 bg-blue-50 rounded-full animate-ping absolute opacity-20"></div>
                 <div className="w-24 h-24 bg-blue-100 rounded-[32px] flex items-center justify-center text-blue-600 relative animate-pulse shadow-inner border border-blue-200/50">
@@ -197,7 +205,6 @@ const SetupStepLaunch = ({ onComplete }) => {
             </div>
           </div>
 
-          {/* 進度條 */}
           <div className="space-y-3">
             <div className="flex justify-between text-xs font-black text-gray-400 uppercase tracking-widest px-1">
               <span>{t('launch.wip.initializing')}</span>
@@ -211,13 +218,12 @@ const SetupStepLaunch = ({ onComplete }) => {
             </div>
           </div>
 
-          {/* 實體日誌區域 (小視窗) */}
           <div className="space-y-3">
              <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
                 <Loader2 size={12} className="animate-spin text-blue-500" />
-                {t('launch.wip.process')}
+                驗證進度 (Verification Pulse)
              </div>
-             <TerminalLog logs={localLogs} height="h-48" title="OpenClaw Setup Logs" />
+             <TerminalLog logs={localLogs} height="h-48" title="OpenClaw Launch Logs" />
           </div>
         </div>
       ) : (
@@ -235,12 +241,12 @@ const SetupStepLaunch = ({ onComplete }) => {
 
           <div className="bg-slate-50 rounded-3xl p-8 text-left border border-slate-100 space-y-6">
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <Terminal size={14} className="text-slate-500" /> {t('launch.success.configSummaryTitle')}
+              <Terminal size={14} className="text-slate-500" />系統配置摘要 (Config Summary)
             </h4>
             <ul className="space-y-4">
-              <SummaryItem label="靈魂核心" value={config.model || 'Unknown'} />
-              <SummaryItem label="加密頻道" value={config.platform ? config.platform.charAt(0).toUpperCase() + config.platform.slice(1) : 'Unknown'} />
-              <SummaryItem label="注入異能" value={`${config.enabledSkills?.length || 0} 項能力模組`} />
+              <SummaryItem label="靈魂核心" value={config.authChoice || 'Unknown'} />
+              <SummaryItem label="通訊終端" value={config.platform || 'Unknown'} />
+              <SummaryItem label="注入異能" value={`${config.enabledSkills?.length || 0} 項模組`} />
             </ul>
           </div>
 

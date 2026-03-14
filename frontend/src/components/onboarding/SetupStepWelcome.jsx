@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
  * Implements the "Split Selection" UI.
  */
 const SetupStepWelcome = ({ onNext }) => {
-  const { setUserType, setConfig, setDetectedConfig } = useStore();
+  const { setUserType, setConfig, setDetectedConfig, detectedConfig } = useStore();
   const { t } = useTranslation();
 
   const handleChoice = (type) => {

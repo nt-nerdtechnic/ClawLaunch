@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, Cpu, Brain, Globe, Zap, Network } from 'lucide-react';
+import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, Cpu, Brain, Globe, Zap, Network, AlertCircle } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
+import TerminalLog from '../common/TerminalLog';
 
 const PathItem = ({ label, path, icon, onBrowse }) => {
     const { t } = useTranslation();
@@ -44,6 +45,26 @@ const SetupStepModel = ({ onNext }) => {
   const [probingKey, setProbingKey] = useState(null);
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
   const [connecting, setConnecting] = useState(false);
+  const [localLogs, setLocalLogs] = useState([]);
+  const [execError, setExecError] = useState(null);
+  const logCleanupRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (window.electronAPI && connecting) {
+        logCleanupRef.current = window.electronAPI.onLog((payload) => {
+            setLocalLogs(prev => [...prev.slice(-49), { text: payload.data, source: payload.source, time: new Date().toLocaleTimeString() }]);
+        });
+    }
+    return () => {
+        if (typeof logCleanupRef.current === 'function') {
+            logCleanupRef.current();
+        }
+    };
+  }, [connecting]);
+
+  const addLocalLog = (text, source = 'system') => {
+    setLocalLogs(prev => [...prev.slice(-49), { text, source, time: new Date().toLocaleTimeString() }]);
+  };
   
   // CLI AuthChoices Alignment
   const providerGroups = [
@@ -223,10 +244,63 @@ const SetupStepModel = ({ onNext }) => {
 
   const handleNext = async () => {
     if (currentChoice && (!currentChoice.reqKey || config.apiKey)) {
+      if (!config.corePath) {
+        setExecError('缺少核心路徑 (Core Path missing)。請先在上方設定 Core Path 後再繼續授權。');
+        return;
+      }
+
       setConnecting(true);
-      // 延遲兩秒模擬「靈魂頻率匹配」過程，增強沉浸感
-      await new Promise(r => setTimeout(r, 2000));
-      onNext();
+      setExecError(null);
+      setLocalLogs([]);
+
+      addLocalLog("🚀 正在啟動 OpenClaw 核心授權程序 (Adapter Mode)...", "system");
+
+      try {
+          const corePath = config.corePath;
+          const execCmd = corePath && corePath.includes('npm') ? 'npm run' : 'pnpm';
+          
+          // 核心對齊：Provider-specific flags
+          const authFlagMapping = {
+              'apiKey': '--anthropic-api-key',
+              'openai-api-key': '--openai-api-key',
+              'gemini-api-key': '--gemini-api-key',
+              'minimax-api': '--minimax-api-key',
+              'moonshot-api-key': '--moonshot-api-key',
+              'openrouter-api-key': '--openrouter-api-key',
+              'xai-api-key': '--xai-api-key',
+              'mistral-api-key': '--mistral-api-key',
+              'ollama': '' // Ollama usually doesn't need a key here if already running
+          };
+
+          const flag = authFlagMapping[config.authChoice] || '--apiKey';
+          const authFlags = config.apiKey ? `${flag} "${config.apiKey}"` : '';
+          
+          const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR="${config.workspacePath}" ` : '';
+          const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH="${config.configPath}/config.json" ` : '';
+          const envPrefix = `${stateDirEnv}${configPathEnv}`;
+          const workspaceFlag = config.workspacePath ? `--workspace "${config.workspacePath}" ` : '';
+          
+          const onboardCmd = `cd "${corePath}" && ${envPrefix}${execCmd} openclaw onboard --auth-choice ${config.authChoice} ${authFlags} ${workspaceFlag}--install-daemon --non-interactive --accept-risk`;
+          
+          addLocalLog(`> 指令: openclaw onboard --auth-choice ${config.authChoice} ...`, 'system');
+          
+          const res = await window.electronAPI.exec(onboardCmd);
+          
+          if (res.exitCode === 0 || res.code === 0) {
+              addLocalLog("✅ 核心授權成功！正在同步配置至工作區...", "system");
+              await new Promise(r => setTimeout(r, 1000));
+              onNext();
+          } else {
+              const errorMsg = res.stderr || "授權失敗，請檢查 Key 是否正確或網路連接。";
+              setExecError(errorMsg);
+              addLocalLog(`❌ 授權回報異常: ${errorMsg}`, "stderr");
+              setConnecting(false);
+          }
+      } catch (err) {
+          setExecError(err.message);
+          addLocalLog(`❌ 系統執行錯誤: ${err.message}`, "stderr");
+          setConnecting(false);
+      }
     }
   };
 
@@ -383,6 +457,24 @@ const SetupStepModel = ({ onNext }) => {
                             </p>
                         </div>
                     </div>
+
+                    {connecting && (
+                        <div className="space-y-2 animate-in fade-in duration-300">
+                            <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
+                                <Loader2 size={12} className="animate-spin" />
+                                授權同步中 (Real-time Logs)
+                            </div>
+                            <TerminalLog logs={localLogs} height="h-32" />
+                        </div>
+                    )}
+
+                    {!connecting && execError && (
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
+                            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                            <p className="font-medium">{execError}</p>
+                        </div>
+                    )}
+
                     <button 
                         onClick={handleNext}
                         disabled={connecting}
@@ -492,7 +584,24 @@ const SetupStepModel = ({ onNext }) => {
                         )}
                     </div>
 
-                    <div className="pt-4">
+                    <div className="pt-4 space-y-4">
+                        {connecting && (
+                            <div className="space-y-2 animate-in fade-in duration-300">
+                                <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
+                                    <Loader2 size={12} className="animate-spin" />
+                                    授權同步中 (Real-time Logs)
+                                </div>
+                                <TerminalLog logs={localLogs} height="h-32" />
+                            </div>
+                        )}
+
+                        {execError && (
+                            <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
+                                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                <p className="font-medium">{execError}</p>
+                            </div>
+                        )}
+
                         <button 
                             onClick={handleNext} 
                             disabled={connecting || (currentChoice?.reqKey && !config.apiKey)}
