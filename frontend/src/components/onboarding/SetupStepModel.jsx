@@ -242,12 +242,35 @@ const SetupStepModel = ({ onNext }) => {
     }
   }, []);
 
+
+
+  const validateRuntimePaths = () => {
+    const missing = [];
+    if (!config.corePath) missing.push('Core Path');
+    if (!config.configPath) missing.push('Config Path');
+    if (!config.workspacePath) missing.push('Workspace Path');
+    if (missing.length > 0) {
+      const msg = `請先完成路徑設定：${missing.join(' / ')}`;
+      setExecError(msg);
+      addLocalLog(`❌ ${msg}`, 'stderr');
+      return false;
+    }
+    return true;
+  };
+
   const handleNext = async () => {
     if (currentChoice && (!currentChoice.reqKey || config.apiKey)) {
-      if (!config.corePath) {
-        setExecError('缺少核心路徑 (Core Path missing)。請先在上方設定 Core Path 後再繼續授權。');
+      if (!config.corePath || !config.configPath || !config.workspacePath) {
+        const missing = [
+          !config.corePath ? 'Core Path' : null,
+          !config.configPath ? 'Config Path' : null,
+          !config.workspacePath ? 'Workspace Path' : null
+        ].filter(Boolean);
+        setExecError(`缺少必要路徑：${missing.join(' / ')}。請先完成路徑設定後再繼續授權。`);
         return;
       }
+
+      if (!validateRuntimePaths()) return;
 
       setConnecting(true);
       setExecError(null);

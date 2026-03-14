@@ -47,6 +47,7 @@ const SetupStepLaunch = ({ onComplete }) => {
 
   const runSetup = async () => {
     try {
+      const stepWarnings = [];
       // Guard: corePath must be set before running any CLI commands
       if (!config.corePath) {
         setError('缺少核心路徑 (Core Path missing)。請返回上一步設定 Core Path 後再繼續。');
@@ -103,7 +104,7 @@ const SetupStepLaunch = ({ onComplete }) => {
 
       setProgress(100);
 
-      if (warnings.length > 0) {
+      if (stepWarnings.length > 0) {
           addLocalLog('⚠️ 部分檢查未通過，請查看警告訊息後決定是否繼續。', 'stderr');
           setCheckWarnings(warnings);
           setStatus('partial_failure');
@@ -127,6 +128,13 @@ const SetupStepLaunch = ({ onComplete }) => {
               </div>
               <h2 className="text-2xl font-bold text-gray-800">{t('launch.error.title')}</h2>
               <p className="text-red-500 mt-4 font-mono text-sm px-4 py-2 bg-red-50 rounded-xl inline-block">{error}</p>
+              {warnings.length > 0 && (
+                <div className="mt-4 text-left bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-700 text-sm">
+                  <p className="font-bold mb-1">未通過檢核項目：</p>
+                  <ul className="list-disc pl-5">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                  <p className="mt-2 text-xs">請先修復後按 Retry 重新檢核。</p>
+                </div>
+              )}
               
               <div className="mt-8">
                   <TerminalLog logs={localLogs} height="h-48" title="Error Debug Log" />
