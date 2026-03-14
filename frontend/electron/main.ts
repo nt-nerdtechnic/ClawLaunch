@@ -122,6 +122,7 @@ function parseOpenClawConfig(content: string) {
         let workspace = '';
         let botToken = '';
         let corePath = '';
+        let authChoice = parsed.authChoice || '';
 
         // 0. 提取 Core Path (如果有的話)
         if (parsed.corePath) corePath = parsed.corePath;
@@ -141,21 +142,44 @@ function parseOpenClawConfig(content: string) {
             botToken = parsed.channels.telegram.botToken;
         }
 
-        // 4. 提取 API Key (遍歷 profiles)
+        // 4. 提取 API Key (遍歷 profiles) 並推斷 authChoice
         if (!apiKey && parsed.auth?.profiles) {
             for (const key in parsed.auth.profiles) {
                 const profile = parsed.auth.profiles[key];
                 const possibleKey = profile.apiKey || profile.api_key || profile.token || profile.bearer;
                 if (possibleKey && typeof possibleKey === 'string' && possibleKey.length > 5) {
                     apiKey = possibleKey;
+                    // 如果沒有明確定義 authChoice，嘗試根據 profile 名稱推斷
+                    if (!authChoice) {
+                        const lowKey = key.toLowerCase();
+                        if (lowKey.includes('anthropic')) authChoice = 'apiKey';
+                        else if (lowKey.includes('openai')) authChoice = 'openai-api-key';
+                        else if (lowKey.includes('gemini')) authChoice = 'gemini-api-key';
+                        else if (lowKey.includes('minimax')) authChoice = 'minimax-api';
+                        else if (lowKey.includes('deepseek') || lowKey.includes('ollama')) authChoice = 'ollama';
+                    }
                     break;
                 }
             }
         }
 
-        return { apiKey, model, workspace, botToken, corePath };
+        // 5. 二次推斷：如果還是沒有 authChoice，根據模型名稱推斷
+        if (!authChoice && model) {
+            const lowModel = model.toLowerCase();
+            if (lowModel.includes('claude')) authChoice = 'apiKey';
+            else if (lowModel.includes('gpt')) authChoice = 'openai-api-key';
+            else if (lowModel.includes('gemini')) authChoice = 'gemini-api-key';
+            else if (lowModel.includes('minimax')) authChoice = 'minimax-api';
+            else if (lowModel.includes('ollama')) authChoice = 'ollama';
+            else if (lowModel.includes('deepseek')) authChoice = 'ollama';
+        }
+        
+        // 最終保底
+        if (!authChoice && apiKey) authChoice = 'apiKey';
+
+        return { apiKey, model, workspace, botToken, corePath, authChoice };
     } catch (e) {
-        return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '' };
+        return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '' };
     }
 }
 

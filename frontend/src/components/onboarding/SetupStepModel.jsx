@@ -145,7 +145,7 @@ const SetupStepModel = ({ onNext }) => {
             const res = await window.electronAPI.exec(`config:probe ${selectedPath}`);
             if (res.code === 0 && res.stdout) {
                 const probed = JSON.parse(res.stdout);
-                if (probed.apiKey || probed.model) {
+                if (probed.apiKey || probed.model || probed.authChoice || probed.corePath) {
                     setConfig({
                         apiKey: probed.apiKey || config.apiKey,
                         model: probed.model || config.model,

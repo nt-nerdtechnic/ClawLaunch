@@ -161,7 +161,23 @@ const SetupStepLaunch = ({ onComplete }) => {
             </h4>
             <ul className="space-y-4">
               <SummaryItem label="用戶定位" value={userType === 'existing' ? '已有安裝 (Existing)' : '新建專案 (New)'} />
-              <SummaryItem label="靈魂核心" value={config.authChoice || 'Unknown'} />
+              <SummaryItem 
+                label="靈魂核心" 
+                value={(() => {
+                    const mapping = {
+                        'apiKey': 'Anthropic API Key',
+                        'openai-api-key': 'OpenAI API Key',
+                        'gemini-api-key': 'Gemini API Key',
+                        'ollama': 'Ollama (Local)',
+                        'vllm': 'vLLM (Local)',
+                        'minimax-api': 'MiniMax API',
+                        'moonshot-api-key': 'Moonshot (Kimi)',
+                        'openrouter-api-key': 'OpenRouter',
+                        'xai-api-key': 'xAI (Grok)'
+                    };
+                    return mapping[config.authChoice] || config.authChoice || 'Unknown';
+                })()} 
+              />
               <SummaryItem label="通訊終端" value={config.platform || 'Unknown'} />
               <SummaryItem label="注入異能" value={`${config.enabledSkills?.length || 0} 項模組`} />
             </ul>
