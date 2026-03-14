@@ -11,16 +11,16 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
   const { usage } = useStore();
   
   return (
-    <div className="flex flex-col h-full bg-[#020617] p-6 space-y-8 animate-in fade-in zoom-in-95 duration-300 select-none">
+    <div className="flex flex-col h-full bg-white dark:bg-[#020617] p-6 space-y-8 animate-in fade-in zoom-in-95 duration-300 select-none transition-colors">
       {/* Header & Status Indicator */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="relative">
-            <div className={`w-3 h-3 rounded-full ${running ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)] animate-pulse' : 'bg-slate-700'}`}></div>
+            <div className={`w-3 h-3 rounded-full ${running ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)] animate-pulse' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
           </div>
-          <span className="text-[11px] font-black tracking-[0.2em] text-slate-400 uppercase">Lattice Status</span>
+          <span className="text-[11px] font-black tracking-[0.2em] text-slate-500 dark:text-slate-400 uppercase">Lattice Status</span>
         </div>
-        <button onClick={onExpand} className="text-slate-600 hover:text-blue-400 transition-colors">
+        <button onClick={onExpand} className="text-slate-400 dark:text-slate-600 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
             <Settings2 size={16} />
         </button>
       </div>
@@ -31,9 +31,9 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center">
                 <Zap size={10} className="mr-1 fill-amber-500 text-amber-500" /> Token 預算
             </span>
-            <span className="text-[10px] font-mono text-blue-400">{usage.input > 0 ? (usage.input/1000).toFixed(1) : '0'}K / 5.0k</span>
+            <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">{usage.input > 0 ? (usage.input/1000).toFixed(1) : '0'}K / 5.0k</span>
         </div>
-        <div className="h-2.5 bg-slate-900 rounded-full border border-slate-800 p-0.5">
+        <div className="h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full border border-slate-200 dark:border-slate-800 p-0.5">
             <div 
                 className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.3)] transition-all duration-1000"
                 style={{ width: `${Math.min(100, (usage.input / 5000) * 100)}%` }}
@@ -42,14 +42,14 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
       </div>
 
       {/* Mini Trend Sparkline */}
-      <div className="bg-slate-900/30 border border-slate-800/50 p-3 rounded-2xl">
-        <div className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-2">Trend (7d)</div>
+      <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/50 p-3 rounded-2xl">
+        <div className="text-[8px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest mb-2">Trend (7d)</div>
         <div className="h-12 flex items-end space-x-1">
           {usage.history.map((h, i) => (
             <div 
               key={i} 
               style={{ height: `${(h.tokens / 40000) * 100}%` }} 
-              className={`flex-1 rounded-sm ${i === usage.history.length - 1 ? 'bg-blue-500' : 'bg-slate-800'}`}
+              className={`flex-1 rounded-sm ${i === usage.history.length - 1 ? 'bg-blue-500' : 'bg-slate-200 dark:bg-slate-800'}`}
             ></div>
           ))}
         </div>
@@ -80,8 +80,8 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
 
 function QuickBtn({ icon, label, active = false, onClick }: { icon: any, label: string, active?: boolean, onClick?: () => void }) {
     return (
-        <div onClick={onClick} className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all cursor-pointer
-        ${active ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-slate-900/50 border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'}`}>
+        <div onClick={onClick} className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all cursor-pointer shadow-sm
+        ${active ? 'bg-blue-600/10 border-blue-500/30 text-blue-600 dark:text-blue-400' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-700 hover:text-slate-600 dark:hover:text-slate-300'}`}>
             <div className="mb-1">{icon}</div>
             <span className="text-[9px] font-bold uppercase tracking-tight">{label}</span>
         </div>

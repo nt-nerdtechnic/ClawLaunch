@@ -1,0 +1,272 @@
+{
+  "app": {
+    "title": "NT-Claw",
+    "subtitle": "Launch Pad",
+    "switchMiniMode": "Toggle Mini Mode",
+    "online": "ONLINE",
+    "gatewayActive": "GATEWAY ACTIVE",
+    "standby": "STANDBY",
+    "version": "VER 2026.1.0",
+    "tabs": {
+        "monitor": "Process Monitor",
+        "analytics": "Data Analytics",
+        "skills": "Skill Manager",
+        "settings": "Configuration"
+    },
+    "headers": {
+        "monitor": "Core Process Sentinel",
+        "analytics": "Token Consumption",
+        "skills": "Skill Plugin Matrix",
+        "settings": "Global Config Matrix"
+    },
+    "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
+    "logoutTooltip": "Logout & Reconfigure"
+  },
+  "monitor": {
+    "gatewayTitle": "Gateway Hub",
+    "gatewayDesc": "Maintains communication stability for all AI agents.",
+    "disconnect": "Disconnect",
+    "startService": "Start Service",
+    "status": {
+        "verified": "VERIFIED",
+        "analyzing": "ANALYZING...",
+        "node": "Node.js Engine",
+        "git": "Git Version Control",
+        "pnpm": "pnpm Manager"
+    },
+    "liveStream": "Live Stream"
+  },
+  "settings": {
+    "botToken": "Telegram Bot Token",
+    "botTokenPlaceholder": "Enter your Bot Token...",
+    "inferenceEngine": "Primary Inference Engine",
+    "corePath": "OpenClaw Core Path",
+    "corePathPlaceholder": "Leave empty for system default path",
+    "configPath": "OpenClaw Config Path",
+    "configPathPlaceholder": "Leave empty for default path",
+    "workspacePath": "Workspace Path",
+    "workspacePathPlaceholder": "e.g., ~/.openclaw",
+    "saveConfig": "Save Configuration"
+  },
+  "logs": {
+    "autoDetectSuccess": ">>> Auto detection complete: Connected to Mecha Core",
+    "stoppingGateway": ">>> Stopping Gateway...",
+    "gatewayStopped": ">>> Gateway stopped",
+    "stopGatewayFailed": "Error: Failed to stop Gateway - {{msg}}",
+    "startingGateway": ">>> Starting OpenClaw Gateway...",
+    "gatewayStartCmdSent": ">>> Gateway start command sent",
+    "errorMsg": "Error: {{msg}}",
+    "startGatewayFailed": "Error: Failed to start Gateway - {{msg}}",
+    "savingConfig": ">>> Saving configuration...",
+    "configSaved": ">>> Configuration saved to local disk successfully",
+    "saveConfigFailed": "Error: Failed to save configuration - {{msg}}",
+    "commFailed": "Error: Communication failure - {{msg}}"
+  },
+  "wizard": {
+    "steps": {
+      "welcome": "Welcome",
+      "progress": "Setup Progress: {{current}} / {{total}}",
+      "launch": "Final Launch Phase"
+    },
+    "backBtn": "← Back to previous step"
+  },
+  "welcome": {
+    "title": "Welcome to NT-Claw",
+    "subtitle": "Before infusing a soul into the lobster, please tell us your situation:",
+    "existingTitle": "Already Installed (Soul Link)",
+    "existingDesc": "I already have a working OpenClaw environment, now passing it to a more advanced mecha wrapper.",
+    "linkBtn": "Link My Soul",
+    "core": "CORE",
+    "workspace": "WORKSPACE",
+    "newTitle": "Not Installed (Soul Infusion)",
+    "newDesc": "This is my first time. Please guide me through a brand new setup and create my first lobster soul.",
+    "startBtn": "Start New Setup",
+    "architectureDesc": "The system will precisely manage your core, config, and workspace through 'Tri-Zone' architecture."
+  },
+  "launch": {
+    "steps": {
+      "preparing": "Preparing your cozy lobster nest...",
+      "installing": "Installing superpower dependencies for the lobster...",
+      "finishing": "Establishing your encrypted communication channel...",
+      "success": "Congratulations! Your OpenClaw soul is infused."
+    },
+    "logs": {
+      "initDir": ">>> [WIZARD] Initializing workspace directory...",
+      "syncDeps": ">>> [WIZARD] Detecting environment and syncing dependencies...",
+      "nodeError": "Environment check failed. Please ensure Node.js is installed.",
+      "quickSync": ">>> [WIZARD] Existing configuration detected. Skipping write to align connection directly...",
+      "savingConfigForModel": ">>> [WIZARD] Saving model config ({{model}}) to local secure storage...",
+      "configSaveFailed": "Failed to save configuration file.",
+      "configSavedSuccess": ">>> [WIZARD] Configuration saved successfully.",
+      "bindingBot": ">>> [WIZARD] Binding Telegram Bot channel...",
+      "initComplete": ">>> [WIZARD] Initialization complete! OpenClaw is ready.",
+      "installFailed": "!!! [WIZARD] Installation failed: {{msg}}"
+    },
+    "error": {
+      "title": "Oops! Something went wrong during installation.",
+      "retryBtn": "Retry"
+    },
+    "wip": {
+      "desc": "This might take a few seconds, please do not close the application...",
+      "initializing": "INITIALIZING...",
+      "process": "process: bootstrap --config-inject"
+    },
+    "success": {
+      "title": "Ready to Go!",
+      "desc": "Your OpenClaw Commander is online.<br />You can now enter the dashboard to collaborate with your AI.",
+      "configSummaryTitle": "Real-time Configuration Summary",
+      "model": "Core Model: {{model}}",
+      "channel": "Communication Channel: {{platform}}",
+      "apiKey": "API Key: Encrypted and saved (****{{key}})",
+      "enterBtn": "Enter Main Dashboard"
+    }
+  },
+  "modelSetup": {
+    "title": {
+      "reconnect": "Link and Return to Mecha Core",
+      "new": "Infuse Soul into Your Lobster"
+    },
+    "subtitle": {
+      "reconnectDesc": "\"Familiar soul frequency detected, preparing to reconnect...\"",
+      "needAlign": "\"To activate the mecha, three-zone paths must be aligned first\"",
+      "aligned": "\"Three zones aligned successfully, preparing to load core soul\""
+    },
+    "env": {
+      "title": "Environment Status",
+      "loading": "Detecting...",
+      "notInstalled": "Not Installed",
+      "ready": "Ready"
+    },
+    "paths": {
+      "title": "Mecha Tri-Zone Path System",
+      "core": "Core Path",
+      "config": "Config Folder",
+      "workspace": "Workspace Folder",
+      "notSet": "Not Set",
+      "clickToSelect": "Click to select path...",
+      "browse": "Browse",
+      "validatingCore": "Validating core...",
+      "readingConfig": "Reading configuration...",
+      "configAligned": "Config Auto-Aligned",
+      "confirmingWorkspace": "Confirming workspace...",
+      "confirmPathBtn": "Confirm Paths and Setup Core Manually"
+    },
+    "autoDetect": {
+      "title": "Existing Soul Detected!",
+      "desc": "Model and API aligned. Ready to launch mecha.",
+      "quickBtn": "Quick Link & Launch"
+    },
+    "modelSelect": {
+      "backToPaths": "← Back to Edit Paths",
+      "summaryTitleCurrent": "Current Soul to Infuse",
+      "summaryTitleDetected": "Detected Core Config",
+      "changeModel": "Change Model",
+      "coreModel": "Core Model",
+      "notSet": "Not Set",
+      "apiKey": "API Key",
+      "envAligned": "(Aligned via env)",
+      "readyStartBtn": "Ready: Quick Link & Launch",
+      "readyInjectBtn": "Ready: Infuse Soul Core",
+      "step1Title": "Select Primary Model",
+      "c35Desc": "Top-tier coding and logic, highly recommended.",
+      "gpt4oDesc": "Strong overall performance, fast, comprehensive ecosystem.",
+      "step2Title": "Enter API Key",
+      "getKey": "Get Key",
+      "keyPlaceholder": "sk-...",
+      "keyHelper": "Key is encrypted and stored locally. Leave empty if using local/custom models.",
+      "confirmBtn": "Confirm and Bind Communication"
+    }
+  },
+  "skillManager": {
+    "title": "Skill Plugin Matrix",
+    "activeCount": "Active: {{count}} items",
+    "rescanTooltip": "Rescan workspace skills",
+    "deepConfig": "Deep Config Details",
+    "securityTitle": "Sovereign Plugin Security Protocol",
+    "securityDesc": "Core skills are system-protected and cannot be disabled. Workspace skills are dynamically loaded from your configuration directory and governed by OpenClaw ACL command permissions.",
+    "tabs": {
+      "core": "Core Sentinels",
+      "workspace": "Workspace Extensions"
+    },
+    "guide": {
+      "core": "The following skills are system-level, persistent, and cannot be disabled, ensuring AI core stability.",
+      "workspace": "The following skills are dynamically mounted from the <0>skills/</0> directory in your workspace and can be enabled/disabled."
+    },
+    "status": {
+      "loadingCore": "Reading skill list...",
+      "loadCoreError": "Failed to get core skills, please try rescanning.",
+      "scanningWorkspace": "Scanning workspace skills...",
+      "emptyWorkspace": "No extension skills installed in current workspace. Place skill folders into your workspace's <0>skills/</0> directory, then click the refresh icon on the top right to mount."
+    },
+    "skills": {
+      "browser": {
+        "desc": "Control browser to execute web operations",
+        "details": "Supports dual Playwright & Puppeteer engines."
+      },
+      "coding": {
+        "desc": "Invoke Claude Code for software development",
+        "details": "Deeply integrated with script generation and Git auto-commit."
+      },
+      "search": {
+        "desc": "Full-web search using the Brave API",
+        "details": "Requires BRAVE_API_KEY configuration to enable real-time search."
+      },
+      "market": {
+        "desc": "Monitor brand & product PR risk signals",
+        "details": "Periodically crawls social media and news for sentiment analysis."
+      },
+      "cron": {
+        "desc": "Oversee background scheduling & heartbeat",
+        "details": "Manages Moltbot's periodic custom task execution."
+      }
+    }
+  },
+  "analytics": {
+    "loading": "Syncing sovereign data...",
+    "totalInput": "Total Input Tokens",
+    "totalOutput": "Total Output Tokens",
+    "estimatedCost": "Estimated Cost (USD)",
+    "trendTitle": "Token Consumption Trend",
+    "efficiencyTitle": "Inference Efficiency Analysis",
+    "noData": "No consumption data available",
+    "waitingData": "Awaiting data injection..."
+  },
+  "setupSkills": {
+    "title": "Expand Your Lobster Superpowers",
+    "subtitle": "Select the extra skills you want to install from ClawHub{{detected}}.",
+    "detectedSuffix": " ({{count}} installed skills detected for you)",
+    "coreLabel": "Mecha Core (Pre-enabled)",
+    "recommended": "Recommended",
+    "installed": "Installed",
+    "readyToInstall": "Ready to Install",
+    "coreBrowserSkill": "Web Navigator (Browser)",
+    "coreCodingSkill": "Dev Automation (Coding)",
+    "coreMonitorSkill": "System Health Monitor (Monitor)",
+    "skills": {
+      "telegram": {
+        "title": "Telegram Channel Plugin",
+        "desc": "OpenClaw's most recommended channel — full privacy chat & command interaction support."
+      },
+      "discord": {
+        "title": "Discord Channel Plugin",
+        "desc": "Join a Discord server with multi-channel collaboration and complex permission management."
+      },
+      "whatsapp": {
+        "title": "WhatsApp Channel Plugin",
+        "desc": "Integrate a WhatsApp Business account so your AI replies directly in your chat app."
+      },
+      "obsidian": {
+        "title": "Obsidian Knowledge Base",
+        "desc": "Sync your Obsidian notes so the AI has a persistent second-brain memory."
+      },
+      "notion": {
+        "title": "Notion Coordinator",
+        "desc": "Auto-organize tasks and update pages with deep Notion project integration."
+      },
+      "maps": {
+        "title": "Google Maps Navigator",
+        "desc": "Search locations, check opening hours and traffic — your all-in-one life assistant."
+      }
+    }
+  }
+}

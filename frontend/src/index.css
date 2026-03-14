@@ -4,6 +4,7 @@
 @source "./index.html";
 @source "./src/**/*.{js,ts,jsx,tsx}";
 
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #ffffff;

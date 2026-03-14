@@ -1,0 +1,310 @@
+{
+  "app": {
+    "title": "NT-Claw",
+    "subtitle": "Launch Pad",
+    "switchMiniMode": "切換小窗模式",
+    "online": "ONLINE",
+    "gatewayActive": "GATEWAY ACTIVE",
+    "standby": "STANDBY",
+    "version": "VER 2026.1.0",
+    "tabs": {
+        "monitor": "進程監控",
+        "analytics": "數據看板",
+        "skills": "技能管理",
+        "settings": "配置編輯"
+    },
+    "headers": {
+        "monitor": "核心進程哨兵",
+        "analytics": "Token 消耗透視",
+        "skills": "技能插件矩陣",
+        "settings": "全局配置矩陣"
+    },
+    "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
+    "logoutTooltip": "登出並重新設定"
+  },
+  "monitor": {
+    "gatewayTitle": "Gateway 通訊中樞",
+    "gatewayDesc": "負責維持所有 AI 代理的通訊鏈路穩定性。",
+    "disconnect": "中斷連線",
+    "startService": "啟動服務",
+    "status": {
+        "verified": "VERIFIED",
+        "analyzing": "ANALYZING...",
+        "node": "Node.js Engine",
+        "git": "Git Version Control",
+        "pnpm": "pnpm Manager"
+    },
+    "liveStream": "Live Stream"
+  },
+  "settings": {
+    "botToken": "Telegram Bot Token",
+    "botTokenPlaceholder": "輸入您的 Bot Token...",
+    "inferenceEngine": "Primary Inference Engine",
+    "corePath": "OpenClaw 主核心區 (Core)",
+    "corePathPlaceholder": "留空則使用系統預設路徑",
+    "configPath": "OpenClaw 設定區 (Config)",
+    "configPathPlaceholder": "留空則使用預設路徑",
+    "workspacePath": "工作區 (Workspace)",
+    "workspacePathPlaceholder": "例如: ~/.openclaw",
+    "saveConfig": "保存配置變更"
+  },
+  "logs": {
+    "autoDetectSuccess": ">>> 自動偵測完成: 已連結至機甲核心",
+    "stoppingGateway": ">>> 正在停止 Gateway...",
+    "gatewayStopped": ">>> Gateway 已停止",
+    "stopGatewayFailed": "誤差: 停止 Gateway 失敗 - {{msg}}",
+    "startingGateway": ">>> 正在啟動 OpenClaw Gateway...",
+    "gatewayStartCmdSent": ">>> Gateway 啟動指令已發送",
+    "errorMsg": "錯誤: {{msg}}",
+    "startGatewayFailed": "誤差: 啟動 Gateway 失敗 - {{msg}}",
+    "savingConfig": ">>> 正在保存配置...",
+    "configSaved": ">>> 配置已成功保存到本地磁碟",
+    "saveConfigFailed": "誤差: 保存配置失敗 - {{msg}}",
+    "commFailed": "誤差: 通訊失敗 - {{msg}}"
+  },
+  "wizard": {
+    "steps": {
+      "welcome": "歡迎啟動",
+      "progress": "蝦窩佈置進度: {{current}} / {{total}}",
+      "launch": "最後啟動階段"
+    },
+    "backBtn": "← 返回上一步"
+  },
+  "welcome": {
+    "title": "歡迎啟動 NT-Claw",
+    "subtitle": "在為龍蝦注入靈魂之前，請告訴我們您的現狀：",
+    "existingTitle": "已有安裝（靈魂對話）",
+    "existingDesc": "我已經有正在運作的 OpenClaw 環境，現在需要一個更先進的機甲來承載它。",
+    "linkBtn": "連結我的靈魂",
+    "core": "CORE",
+    "workspace": "WORKSPACE",
+    "newTitle": "尚未安裝（注入靈魂）",
+    "newDesc": "這是我的第一次。請引導我完成全新的佈置，並為我創造第一個龍蝦靈魂。",
+    "startBtn": "開始全新佈置",
+    "architectureDesc": "系統將透過「三區分治」架構精準管理您的主程式、設定檔與工作空間。"
+  },
+  "launch": {
+    "steps": {
+      "preparing": "正在為您佈置溫馨的蝦窩...",
+      "installing": "正在為龍蝦安裝超能力依賴包...",
+      "finishing": "正在建立您的專屬加密對話頻道...",
+      "success": "恭喜！您的 OpenClaw 已成功注入靈魂"
+    },
+    "logs": {
+      "initDir": ">>> [WIZARD] 正在初始化工作目錄...",
+      "syncDeps": ">>> [WIZARD] 正在偵測環境並同步依賴...",
+      "nodeError": "環境檢查失敗，請確保已安裝 Node.js",
+      "quickSync": ">>> [WIZARD] 偵測到配置已存在，跳過重複寫入，直接進行連線對位...",
+      "savingConfigForModel": ">>> [WIZARD] 正在將模型配置 ({{model}}) 寫入本地安全存儲...",
+      "configSaveFailed": "配置文件保存失敗",
+      "configSavedSuccess": ">>> [WIZARD] 配置保存成功。",
+      "bindingBot": ">>> [WIZARD] 正在綁定 Telegram Bot 頻道...",
+      "initComplete": ">>> [WIZARD] 初始化完成！OpenClaw 已就緒。",
+      "installFailed": "!!! [WIZARD] 安裝失敗: {{msg}}"
+    },
+    "error": {
+      "title": "哎呀！安裝過程出錯了",
+      "retryBtn": "重新嘗試"
+    },
+    "wip": {
+      "desc": "這可能需要幾秒鐘，請不要關閉程式...",
+      "initializing": "INITIALIZING...",
+      "process": "process: bootstrap --config-inject"
+    },
+    "success": {
+      "title": "準備就緒！",
+      "desc": "您的 OpenClaw 指揮官已經上線。<br />現在您可以進入儀表板開始與您的 AI 協作。",
+      "configSummaryTitle": "實時配置概要",
+      "model": "核心模型：{{model}}",
+      "channel": "通訊頻道：{{platform}}",
+      "apiKey": "API 密鑰：已加密保存 (****{{key}})",
+      "enterBtn": "進入主儀表板"
+    }
+  },
+  "modelSetup": {
+    "title": {
+      "reconnect": "連結並回歸機甲核心",
+      "new": "為您的龍蝦注入靈魂"
+    },
+    "subtitle": {
+      "reconnectDesc": "「偵測到熟悉的靈魂頻率，正在準備重新連線...」",
+      "needAlign": "「若要啟動機甲，必先對齊三區路徑」",
+      "aligned": "「三區對位成功，準備加載核心靈魂」"
+    },
+    "env": {
+      "title": "組建環境狀態",
+      "loading": "檢測中...",
+      "notInstalled": "未安裝",
+      "ready": "已就緒"
+    },
+    "paths": {
+      "title": "機甲三區路徑分治系統",
+      "core": "主核心區 (Core Path)",
+      "config": "設定區資料夾 (Config Folder)",
+      "workspace": "工作區資料夾 (Workspace Folder)",
+      "notSet": "未定位",
+      "clickToSelect": "點擊選擇路徑...",
+      "browse": "瀏覽",
+      "validatingCore": "正在校驗核心內容...",
+      "readingConfig": "讀取設定檔案中...",
+      "configAligned": "配置已自動對齊",
+      "confirmingWorkspace": "確認工作空間...",
+      "confirmPathBtn": "確認路徑並手動設定核心"
+    },
+    "autoDetect": {
+      "title": "偵測到既存靈魂！",
+      "desc": "模型與 API 已對齊，準備好啟動機甲",
+      "quickBtn": "快速對接並啟動"
+    },
+    "modelSelect": {
+      "backToPaths": "← 返回修改路徑",
+      "summaryTitleCurrent": "當前準備注入的靈魂",
+      "summaryTitleDetected": "偵測到的核心配置",
+      "changeModel": "更換其他模型",
+      "coreModel": "核心模型",
+      "notSet": "未設定",
+      "apiKey": "API 密鑰",
+      "envAligned": "(已透過環境對位)",
+      "readyStartBtn": "準備就緒：快速對接並啟動",
+      "readyInjectBtn": "準備就緒：注入靈魂核心",
+      "step1Title": "選擇主理模型 (靈魂核心)",
+      "c37Desc": "最強混合推論，程式與邏輯推薦首選。",
+      "gpt4oDesc": "綜合平衡型，API 反應迅速，生態系成熟。",
+      "deepseekDesc": "超高性價比，適合大規模自動化任務。",
+      "geminiDesc": "極速多模態，支援長文本脈絡處理。",
+      "ollamaDesc": "本地運行，數據不出門。需搭配 Ollama 環境。",
+      "vllmDesc": "對接自定義推論後端或兼容轉發服務。",
+      "step2Title": "填寫 API Key (靈魂金鑰)",
+      "getKey": "獲取密鑰",
+      "keyPlaceholder": "sk-...",
+      "keyHelper": "密鑰僅會加密儲存於您的本地電腦。若使用專屬模型或本地部署，此項可留空。",
+      "confirmBtn": "確認並綁定通訊軟體"
+    }
+  },
+  "skillManager": {
+    "title": "技能插件矩陣",
+    "activeCount": "已啟用 {{count}} 項",
+    "rescanTooltip": "重新掃描工作區技能",
+    "deepConfig": "深度配置細節",
+    "securityTitle": "主權插件安全協議",
+    "securityDesc": "核心技能受系統保護，無法停用。工作區技能由您的配置目錄動態載入，受 OpenClaw ACL 指令權限管控。",
+    "tabs": {
+      "core": "核心守護者",
+      "workspace": "工作區擴充"
+    },
+    "guide": {
+      "core": "以下技能為系統層級，常駐啟動且無法停用，確保 AI 基本運作能力穩定。",
+      "workspace": "以下技能從工作區 <0>skills/</0> 目錄動態掛載，可自由啟用或停用。"
+    },
+    "status": {
+      "loadingCore": "正在讀取技能清單…",
+      "loadCoreError": "無法取得核心技能清單，請嘗試重新掃描。",
+      "scanningWorkspace": "正在掃描工作區技能…",
+      "emptyWorkspace": "目前工作區尚未安裝任何擴充技能。將 skill 資料夾放入工作區的 <0>skills/</0> 目錄後，按右上角重新整理即可掛載。",
+      "importing": "正在匯入技能...",
+      "deleting": "正在移除技能...",
+      "importSuccess": "技能匯入成功！",
+      "importError": "匯入失敗：{{msg}}",
+      "deleteConfirm": "確定要移除技能「{{name}}」嗎？這將會刪除工作區內的資料夾且無法還原。"
+    },
+    "actions": {
+      "import": "匯入手邊技能",
+      "remove": "移除技能",
+      "viewDetails": "檢視詳情"
+    },
+    "skills": {
+      "browser": {
+        "desc": "控制瀏覽器執行網頁操作",
+        "details": "支持 Playwright 與 Puppeteer 雙引擎。"
+      },
+      "coding": {
+        "desc": "呼叫 Claude Code 執行代碼開發",
+        "details": "深度整合指令碼生成與 Git 自動提交功能。"
+      },
+      "search": {
+        "desc": "使用 Brave API 進行全網搜索",
+        "details": "需要配置 BRAVE_API_KEY 以啟用實時搜索。"
+      },
+      "market": {
+        "desc": "監測特定品牌與產品公關風險",
+        "details": "定期爬取社群媒體與新聞網站進行情感分析。"
+      },
+      "cron": {
+        "desc": "監管背景排程與心跳機制",
+        "details": "管理 Moltbot 的週期性自定義任務。"
+      }
+    }
+  },
+  "analytics": {
+    "loading": "正在同步主權數據...",
+    "totalInput": "總輸入 Tokens",
+    "totalOutput": "總輸出 Tokens",
+    "estimatedCost": "預估支出 (USD)",
+    "trendTitle": "Token 消耗趨勢",
+    "efficiencyTitle": "推論效率分析",
+    "noData": "暫無消耗數據記錄",
+    "waitingData": "等待數據注入..."
+  },
+  "setupSkills": {
+    "title": "擴展您的龍蝦超能力",
+    "subtitle": "從 ClawHub 勾選您想安裝的額外技能{{detected}}。",
+    "detectedSuffix": "（已為您偵測到 {{count}} 個已安裝技能）",
+    "coreLabel": "機甲核心 (已預設啟動)",
+    "recommended": "推薦",
+    "installed": "目前已安裝",
+    "readyToInstall": "準備安裝",
+    "coreBrowserSkill": "網路導航核心 (Browser)",
+    "coreCodingSkill": "開發自動化 (Coding)",
+    "coreMonitorSkill": "系統健康監控 (Monitor)",
+    "skills": {
+      "telegram": {
+        "title": "Telegram 連結插件",
+        "desc": "OpenClaw 最推薦的通訊管道，支援完整的隱私對話與指令互動。"
+      },
+      "discord": {
+        "title": "Discord 連結插件",
+        "desc": "入駐 Discord 伺服器，支援多頻道協作與複雜權限管理。"
+      },
+      "whatsapp": {
+        "title": "WhatsApp 連結插件",
+        "desc": "整合 WhatsApp 商業帳號，讓 AI 直接在您的通訊軟體回覆。"
+      },
+      "obsidian": {
+        "title": "Obsidian 知識庫",
+        "desc": "同步您的 Obsidian 筆記，讓 AI 具備持久的第二大腦記憶。"
+      },
+      "notion": {
+        "title": "Notion 協同官",
+        "desc": "自動整理任務並更新頁面，與 Notion 專案深度整合。"
+      },
+      "maps": {
+        "title": "Google Maps 探路者",
+        "desc": "搜尋地點、查詢營業時間與路況，生活機能一把罩。"
+      }
+    }
+  },
+  "setupInitialize": {
+    "title": "建立您的專案基地",
+    "subtitle": "請指定三個關鍵目錄來存放您的核心、配置與工作空間。",
+    "selectVersion": "核心版本 (OpenClaw Branch / Tag)",
+    "downloadMethod": "下載與部署方式 (推薦網路環境較弱時使用 ZIP)",
+    "corePath": "主核心資料夾 (Core)",
+    "configPath": "設定資料夾 (Config)",
+    "workspacePath": "工作空間 (Workspace)",
+    "coreDesc": "OpenClaw 原始碼存放處",
+    "configDesc": "存放 openclaw.json 等設定檔",
+    "workspaceDesc": "存放技能(Skills)與暫存數據",
+    "selectBtn": "選擇目錄...",
+    "startBtn": "開始初始化並下載核心原始碼",
+    "startBtnDownload": "開始初始化並下載核心原始碼",
+    "initializing": "正在下載與初始化...",
+    "checkPaths": "正在校驗路徑...",
+    "pathNotEmpty": "此目錄非空，請選擇一個空的資料夾以避免檔案衝突。",
+    "pathWarning": "此目錄非空，將自動建立名為 '{{name}}' 的子資料夾進行初始化。",
+    "pathNotExist": "此目錄尚不存在，初始化時將自動建立。",
+    "success": "初始化完成！正在進入下一步...",
+    "error": "初始化失敗：{{msg}}",
+    "cancelBtn": "取消下載與初始化",
+    "cancelSuccess": ">>> 已取消下載進程並清理環境。"
+  }
+}

@@ -6,8 +6,18 @@ interface LogEntry {
   source: 'stdout' | 'stderr' | 'system';
 }
 
+// 技能定義 (核心層或工作區層共用)
+export interface SkillItem {
+  id: string;
+  name: string;
+  desc: string;
+  category: string;
+  details: string;
+}
+
 interface Config {
   model: string;
+  authChoice: string; // 對齊 CLI AuthChoice
   apiKey: string;
   platform: string;
   botToken: string;
@@ -34,8 +44,12 @@ interface AppState {
     corePath?: string;
     configPath?: string;
     workspacePath?: string;
-    installedSkills?: string[];
+    workspaceSkills?: SkillItem[];
   } | null;
+  coreSkills: SkillItem[];
+  workspaceSkills: SkillItem[];
+  setCoreSkills: (skills: SkillItem[]) => void;
+  setWorkspaceSkills: (skills: SkillItem[]) => void;
   detectingPaths: boolean;
   pathsConfirmed: boolean;
   setConfig: (patch: Partial<Config>) => void;
@@ -49,8 +63,20 @@ interface AppState {
     history: { name: string; tokens: number }[];
   };
   setUsage: (data: any) => void;
+  // Snapshot Data
+  snapshot: {
+    generatedAt: string;
+    sessions: any[];
+    tasks: any[];
+    approvals: any[];
+    statuses: any[];
+    budgetSummary: any;
+  } | null;
+  setSnapshot: (snapshot: any) => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
+  language: string;
+  setLanguage: (lang: string) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -67,7 +93,8 @@ export const useStore = create<AppState>((set) => ({
   envStatus: { node: 'loading', git: 'loading', pnpm: 'loading' },
   setEnvStatus: (status) => set({ envStatus: status }),
   config: { 
-    model: 'claude-3-5', 
+    model: '', 
+    authChoice: '',
     apiKey: '', 
     platform: 'telegram', 
     botToken: '',
@@ -80,6 +107,10 @@ export const useStore = create<AppState>((set) => ({
   detectingPaths: false,
   pathsConfirmed: false,
   userType: null,
+  coreSkills: [],
+  workspaceSkills: [],
+  setCoreSkills: (skills) => set({ coreSkills: skills }),
+  setWorkspaceSkills: (skills) => set({ workspaceSkills: skills }),
   setUserType: (type) => set({ userType: type }),
   setConfig: (patch) => set((state) => ({ config: { ...state.config, ...patch } })),
   setDetectedConfig: (config) => set({ detectedConfig: config }),
@@ -99,9 +130,16 @@ export const useStore = create<AppState>((set) => ({
     history: []
   },
   setUsage: (data) => set((state) => ({ usage: { ...state.usage, ...data } })),
+  snapshot: null,
+  setSnapshot: (snapshot) => set({ snapshot }),
   theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'dark',
   setTheme: (theme) => {
     localStorage.setItem('theme', theme);
     set({ theme });
+  },
+  language: localStorage.getItem('i18nextLng') || 'zh-TW',
+  setLanguage: (lang) => {
+    localStorage.setItem('i18nextLng', lang);
+    set({ language: lang });
   },
 }));

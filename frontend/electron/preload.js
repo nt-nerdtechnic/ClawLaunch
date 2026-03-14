@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLog: (callback) => ipcRenderer.on('shell:stdout', (event, value) => callback(value)),
   resize: (mode) => ipcRenderer.send('window:resize', mode),
   selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
+  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 });

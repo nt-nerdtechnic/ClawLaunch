@@ -1,0 +1,272 @@
+{
+  "app": {
+    "title": "NT-Claw",
+    "subtitle": "Launch Pad",
+    "switchMiniMode": "切换小窗模式",
+    "online": "ONLINE",
+    "gatewayActive": "GATEWAY ACTIVE",
+    "standby": "STANDBY",
+    "version": "VER 2026.1.0",
+    "tabs": {
+        "monitor": "进程监控",
+        "analytics": "数据看板",
+        "skills": "技能管理",
+        "settings": "配置编辑"
+    },
+    "headers": {
+        "monitor": "核心进程哨兵",
+        "analytics": "Token 消耗透视",
+        "skills": "技能插件矩阵",
+        "settings": "全局配置矩阵"
+    },
+    "logoutConfirm": "确定要重置并返回引导流程吗？目前的配置将被保留，但您需要重新完成设定步骤。",
+    "logoutTooltip": "登出并重新设定"
+  },
+  "monitor": {
+    "gatewayTitle": "Gateway 通讯中枢",
+    "gatewayDesc": "负责维持所有 AI 代理的通讯链路稳定性。",
+    "disconnect": "断开连接",
+    "startService": "启动服务",
+    "status": {
+        "verified": "VERIFIED",
+        "analyzing": "ANALYZING...",
+        "node": "Node.js Engine",
+        "git": "Git Version Control",
+        "pnpm": "pnpm Manager"
+    },
+    "liveStream": "Live Stream"
+  },
+  "settings": {
+    "botToken": "Telegram Bot Token",
+    "botTokenPlaceholder": "输入您的 Bot Token...",
+    "inferenceEngine": "Primary Inference Engine",
+    "corePath": "OpenClaw 主核心区 (Core)",
+    "corePathPlaceholder": "留空则使用系统默认路径",
+    "configPath": "OpenClaw 设定区 (Config)",
+    "configPathPlaceholder": "留空则使用默认路径",
+    "workspacePath": "工作区 (Workspace)",
+    "workspacePathPlaceholder": "例如: ~/.openclaw",
+    "saveConfig": "保存配置变更"
+  },
+  "logs": {
+    "autoDetectSuccess": ">>> 自动侦测完成: 已连结至机甲核心",
+    "stoppingGateway": ">>> 正在停止 Gateway...",
+    "gatewayStopped": ">>> Gateway 已停止",
+    "stopGatewayFailed": "误差: 停止 Gateway 失败 - {{msg}}",
+    "startingGateway": ">>> 正在启动 OpenClaw Gateway...",
+    "gatewayStartCmdSent": ">>> Gateway 启动指令已发送",
+    "errorMsg": "错误: {{msg}}",
+    "startGatewayFailed": "误差: 启动 Gateway 失败 - {{msg}}",
+    "savingConfig": ">>> 正在保存配置...",
+    "configSaved": ">>> 配置已成功保存到本地磁盘",
+    "saveConfigFailed": "误差: 保存配置失败 - {{msg}}",
+    "commFailed": "误差: 通讯失败 - {{msg}}"
+  },
+  "wizard": {
+    "steps": {
+      "welcome": "欢迎启动",
+      "progress": "虾窝布置进度: {{current}} / {{total}}",
+      "launch": "最后启动阶段"
+    },
+    "backBtn": "← 返回上一步"
+  },
+  "welcome": {
+    "title": "欢迎启动 NT-Claw",
+    "subtitle": "在为龙虾注入灵魂之前，请告诉我们您的现状：",
+    "existingTitle": "已有安装（灵魂对话）",
+    "existingDesc": "我已经有正在运作的 OpenClaw 环境，现在需要一个更先进的机甲来承载它。",
+    "linkBtn": "连结我的灵魂",
+    "core": "CORE",
+    "workspace": "WORKSPACE",
+    "newTitle": "尚未安装（注入灵魂）",
+    "newDesc": "这是我的第一次。请引导我完成全新的布置，并为我创造第一个龙虾灵魂。",
+    "startBtn": "开始全新布置",
+    "architectureDesc": "系统将透过「三区分治」架构精准管理您的主程式、设定档与工作空间。"
+  },
+  "launch": {
+    "steps": {
+      "preparing": "正在为您布置温馨的虾窝...",
+      "installing": "正在为龙虾安装超能力依赖包...",
+      "finishing": "正在建立您的专属加密对话频道...",
+      "success": "恭喜！您的 OpenClaw 已成功注入灵魂"
+    },
+    "logs": {
+      "initDir": ">>> [WIZARD] 正在初始化工作目录...",
+      "syncDeps": ">>> [WIZARD] 正在侦测环境并同步依赖...",
+      "nodeError": "环境检查失败，请确保已安装 Node.js",
+      "quickSync": ">>> [WIZARD] 侦测到配置已存在，跳过重复写入，直接进行连线对位...",
+      "savingConfigForModel": ">>> [WIZARD] 正在将模型配置 ({{model}}) 写入本地安全存储...",
+      "configSaveFailed": "配置文件保存失败",
+      "configSavedSuccess": ">>> [WIZARD] 配置保存成功。",
+      "bindingBot": ">>> [WIZARD] 正在绑定 Telegram Bot 频道...",
+      "initComplete": ">>> [WIZARD] 初始化完成！OpenClaw 已就绪。",
+      "installFailed": "!!! [WIZARD] 安装失败: {{msg}}"
+    },
+    "error": {
+      "title": "哎呀！安装过程出错了",
+      "retryBtn": "重新尝试"
+    },
+    "wip": {
+      "desc": "这可能需要几秒钟，请不要关闭程式...",
+      "initializing": "INITIALIZING...",
+      "process": "process: bootstrap --config-inject"
+    },
+    "success": {
+      "title": "准备就绪！",
+      "desc": "您的 OpenClaw 指挥官已经上线。<br />现在您可以进入仪表板开始与您的 AI 协作。",
+      "configSummaryTitle": "实时配置概要",
+      "model": "核心模型：{{model}}",
+      "channel": "通讯频道：{{platform}}",
+      "apiKey": "API 密钥：已加密保存 (****{{key}})",
+      "enterBtn": "进入主仪表板"
+    }
+  },
+  "modelSetup": {
+    "title": {
+      "reconnect": "连结并回归机甲核心",
+      "new": "为您的龙虾注入灵魂"
+    },
+    "subtitle": {
+      "reconnectDesc": "「侦测到熟悉的灵魂频率，正在准备重新连线...」",
+      "needAlign": "「若要启动机甲，必先对齐三区路径」",
+      "aligned": "「三区对位成功，准备加载核心灵魂」"
+    },
+    "env": {
+      "title": "组建环境状态",
+      "loading": "检测中...",
+      "notInstalled": "未安装",
+      "ready": "已就绪"
+    },
+    "paths": {
+      "title": "机甲三区路径分治系统",
+      "core": "主核心区 (Core Path)",
+      "config": "设定区文件夹 (Config Folder)",
+      "workspace": "工作区文件夹 (Workspace Folder)",
+      "notSet": "未定位",
+      "clickToSelect": "点击选择路径...",
+      "browse": "浏览",
+      "validatingCore": "正在校验核心内容...",
+      "readingConfig": "读取设定档案中...",
+      "configAligned": "配置已自动对齐",
+      "confirmingWorkspace": "确认工作空间...",
+      "confirmPathBtn": "确认路径并手动设定核心"
+    },
+    "autoDetect": {
+      "title": "侦测到既存灵魂！",
+      "desc": "模型与 API 已对齐，准备好启动机甲",
+      "quickBtn": "快速对接并启动"
+    },
+    "modelSelect": {
+      "backToPaths": "← 返回修改路径",
+      "summaryTitleCurrent": "当前准备注入的灵魂",
+      "summaryTitleDetected": "侦测到的核心配置",
+      "changeModel": "更换其他模型",
+      "coreModel": "核心模型",
+      "notSet": "未设定",
+      "apiKey": "API 密钥",
+      "envAligned": "(已透过环境对位)",
+      "readyStartBtn": "准备就绪：快速对接并启动",
+      "readyInjectBtn": "准备就绪：注入灵魂核心",
+      "step1Title": "选择主理模型",
+      "c35Desc": "程式码与逻辑能力顶级，推荐首选。",
+      "gpt4oDesc": "综合能力强，反应速度快，生态系完善。",
+      "step2Title": "填写 API Key",
+      "getKey": "获取密钥",
+      "keyPlaceholder": "sk-...",
+      "keyHelper": "密钥仅会加密储存于您的本地电脑。若使用专属模型或本地部署，此项可留空。",
+      "confirmBtn": "确认并绑定通讯软体"
+    }
+  },
+  "skillManager": {
+    "title": "技能插件矩阵",
+    "activeCount": "已启用 {{count}} 项",
+    "rescanTooltip": "重新扫描工作区技能",
+    "deepConfig": "深度配置细节",
+    "securityTitle": "主权插件安全协议",
+    "securityDesc": "核心技能受系统保护，无法停用。工作区技能由您的配置目录动态载入，受 OpenClaw ACL 指令权限管控。",
+    "tabs": {
+      "core": "核心守护者",
+      "workspace": "工作区扩充"
+    },
+    "guide": {
+      "core": "以下技能为系统层级，常驻启动且无法停用，确保 AI 基本运作能力稳定。",
+      "workspace": "以下技能从工作区 <0>skills/</0> 目录动态挂载，可自由启用或停用。"
+    },
+    "status": {
+      "loadingCore": "正在读取技能清单…",
+      "loadCoreError": "无法取得核心技能清单，请尝试重新扫描。",
+      "scanningWorkspace": "正在扫描工作区技能…",
+      "emptyWorkspace": "目前工作区尚未安装任何扩充技能。将 skill 文件夹放入工作区的 <0>skills/</0> 目录后，按右上角重新整理即可挂载。"
+    },
+    "skills": {
+      "browser": {
+        "desc": "控制浏览器执行网页操作",
+        "details": "支持 Playwright 与 Puppeteer 双引擎。"
+      },
+      "coding": {
+        "desc": "调用 Claude Code 执行代码开发",
+        "details": "深度整合指令码生成与 Git 自动提交功能。"
+      },
+      "search": {
+        "desc": "使用 Brave API 进行全网搜索",
+        "details": "需要配置 BRAVE_API_KEY 以启用实时搜索。"
+      },
+      "market": {
+        "desc": "监测特定品牌与产品公关风险",
+        "details": "定期爬取社群媒体与新闻网站进行情感分析。"
+      },
+      "cron": {
+        "desc": "监管后台排程与心跳机制",
+        "details": "管理 Moltbot 的周期性自定义任务。"
+      }
+    }
+  },
+  "analytics": {
+    "loading": "正在同步主权数据...",
+    "totalInput": "总输入 Tokens",
+    "totalOutput": "总输出 Tokens",
+    "estimatedCost": "预估支出 (USD)",
+    "trendTitle": "Token 消耗趋势",
+    "efficiencyTitle": "推论效率分析",
+    "noData": "暂无消耗数据记录",
+    "waitingData": "等待数据注入..."
+  },
+  "setupSkills": {
+    "title": "扩展您的龙虾超能力",
+    "subtitle": "从 ClawHub 勾选您想安装的额外技能{{detected}}。",
+    "detectedSuffix": "（已为您侦测到 {{count}} 个已安装技能）",
+    "coreLabel": "机甲核心 (已预设启动)",
+    "recommended": "推荐",
+    "installed": "目前已安装",
+    "readyToInstall": "准备安装",
+    "coreBrowserSkill": "网路导航核心 (Browser)",
+    "coreCodingSkill": "开发自动化 (Coding)",
+    "coreMonitorSkill": "系统健康监控 (Monitor)",
+    "skills": {
+      "telegram": {
+        "title": "Telegram 连结插件",
+        "desc": "OpenClaw 最推荐的通讯管道，支援完整的隐私对话与指令互动。"
+      },
+      "discord": {
+        "title": "Discord 连结插件",
+        "desc": "入驻 Discord 服务器，支援多频道协作与复杂权限管理。"
+      },
+      "whatsapp": {
+        "title": "WhatsApp 连结插件",
+        "desc": "整合 WhatsApp 商业帐号，让 AI 直接在您的通讯软体回覆。"
+      },
+      "obsidian": {
+        "title": "Obsidian 知识库",
+        "desc": "同步您的 Obsidian 笔记，让 AI 具备持久的第二大脑记忆。"
+      },
+      "notion": {
+        "title": "Notion 协同官",
+        "desc": "自动整理任务并更新页面，与 Notion 专案深度整合。"
+      },
+      "maps": {
+        "title": "Google Maps 探路者",
+        "desc": "搜寻地点、查询营业时间与路况，生活机能一把罩。"
+      }
+    }
+  }
+}

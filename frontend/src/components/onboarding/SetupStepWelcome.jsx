@@ -1,16 +1,42 @@
 import React from 'react';
 import { Package, Sparkles, ArrowRight, Layers, Settings, Database } from 'lucide-react';
 import { useStore } from '../../store';
+import { useTranslation } from 'react-i18next';
 
 /**
  * SetupStepWelcome: Step 0 - Environment Choice
  * Implements the "Split Selection" UI.
  */
 const SetupStepWelcome = ({ onNext }) => {
-  const { setUserType } = useStore();
+  const { setUserType, setConfig, setDetectedConfig } = useStore();
+  const { t } = useTranslation();
 
   const handleChoice = (type) => {
     setUserType(type);
+    if (type === 'new') {
+      // 若為新建專案，清除所有內容，確保完全從零開始
+      setConfig({ 
+        corePath: '', 
+        configPath: '', 
+        workspacePath: '',
+        authChoice: '',
+        model: '',     
+        apiKey: '',
+        botToken: '',
+        platform: 'telegram',
+        enabledSkills: []
+      });
+      setDetectedConfig(null);
+      localStorage.removeItem('onboarding_finished');
+    } else if (type === 'existing' && detectedConfig) {
+      // 若為現有專案且有偵測到配置，則預填入核心路徑與設定
+      // 但保留 API Key 等敏感資訊在 detectedConfig 中，待後續步驟確認
+      setConfig({
+        corePath: detectedConfig.corePath || '',
+        configPath: detectedConfig.configPath || '',
+        workspacePath: detectedConfig.workspacePath || ''
+      });
+    }
     onNext();
   };
 
@@ -20,8 +46,8 @@ const SetupStepWelcome = ({ onNext }) => {
         <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-2xl text-blue-600 mb-6 rotate-3 hover:rotate-0 transition-transform duration-300">
           <Sparkles size={32} />
         </div>
-        <h2 className="text-3xl font-black text-gray-900 tracking-tight">歡迎啟動 NT-Claw</h2>
-        <p className="text-gray-500 mt-3 text-lg">在為龍蝦注入靈魂之前，請告訴我們您的現狀：</p>
+        <h2 className="text-3xl font-black text-gray-900 tracking-tight">{t('welcome.title')}</h2>
+        <p className="text-gray-500 mt-3 text-lg">{t('welcome.subtitle')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-8">
@@ -38,23 +64,23 @@ const SetupStepWelcome = ({ onNext }) => {
             <Package size={28} />
           </div>
           
-          <h3 className="text-xl font-bold text-gray-900 mb-2">已有安裝（靈魂對話）</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">{t('welcome.existingTitle')}</h3>
           <p className="text-sm text-gray-500 leading-relaxed mb-6">
-            我已經有正在運作的 OpenClaw 環境，現在需要一個更先進的機甲來承載它。
+            {t('welcome.existingDesc')}
           </p>
           
           <div className="flex items-center gap-2 text-blue-600 font-bold text-sm uppercase tracking-widest">
-            連結我的靈魂 <ArrowRight size={16} />
+            {t('welcome.linkBtn')} <ArrowRight size={16} />
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-100 flex gap-3">
              <div className="flex flex-col items-center opacity-40 group-hover:opacity-100 transition-opacity">
                 <Settings size={14} className="text-gray-400" />
-                <span className="text-[8px] mt-1 uppercase font-bold">CORE</span>
+                <span className="text-[8px] mt-1 uppercase font-bold">{t('welcome.core')}</span>
              </div>
              <div className="flex flex-col items-center opacity-40 group-hover:opacity-100 transition-opacity">
                 <Database size={14} className="text-gray-400" />
-                <span className="text-[8px] mt-1 uppercase font-bold">WORKSPACE</span>
+                <span className="text-[8px] mt-1 uppercase font-bold">{t('welcome.workspace')}</span>
              </div>
           </div>
         </div>
@@ -72,19 +98,19 @@ const SetupStepWelcome = ({ onNext }) => {
             <Sparkles size={28} />
           </div>
           
-          <h3 className="text-xl font-bold text-gray-900 mb-2">尚未安裝（注入靈魂）</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">{t('welcome.newTitle')}</h3>
           <p className="text-sm text-gray-500 leading-relaxed mb-6">
-            這是我的第一次。請引導我完成全新的佈置，並為我創造第一個龍蝦靈魂。
+            {t('welcome.newDesc')}
           </p>
           
           <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm uppercase tracking-widest">
-            開始全新佈置 <ArrowRight size={16} />
+            {t('welcome.startBtn')} <ArrowRight size={16} />
           </div>
         </div>
       </div>
 
       <div className="mt-12 text-center text-xs text-gray-400 font-medium">
-         系統將透過「三區分治」架構精準管理您的主程式、設定檔與工作空間。
+         {t('welcome.architectureDesc')}
       </div>
     </div>
   );
