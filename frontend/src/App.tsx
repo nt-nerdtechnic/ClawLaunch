@@ -18,7 +18,9 @@ function App() {
   const { running, setRunning, logs, addLog, envStatus, setEnvStatus, config, setConfig, setDetectedConfig, setCoreSkills, setWorkspaceSkills } = useStore();
   const [viewMode, setViewMode] = useState<'mini' | 'expanded'>('expanded');
   const [activeTab, setActiveTab] = useState('monitor'); // Default to monitor if onboarding finished
-  const [onboardingFinished, setOnboardingFinished] = useState(false);
+  const [onboardingFinished, setOnboardingFinished] = useState(
+    () => localStorage.getItem('onboarding_finished') === 'true'
+  );
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const { t } = useTranslation();
@@ -121,16 +123,24 @@ function App() {
   }, [theme]);
 
   const initializeApp = async () => {
-    await checkEnvironment();
     const loadedConfig = await loadConfig();
-    await detectPaths(); // 只偵測但不修補，待用戶選擇模式後再決定
-    await syncGatewayStatus(loadedConfig);
-    checkOnboardingStatus();
+    // Fast path: decide onboarding immediately to avoid blocking on slow checks.
+    checkOnboardingStatus(loadedConfig);
+
+    const [detected] = await Promise.all([
+      detectPaths(), // 只偵測但不修補，待用戶選擇模式後再決定
+      checkEnvironment(),
+      syncGatewayStatus(loadedConfig)
+    ]);
+
+    // Reconcile once detection finishes (e.g., if local config is empty but paths exist).
+    checkOnboardingStatus(loadedConfig, detected);
   };
 
   const detectPaths = async () => {
     const { setDetectingPaths } = useStore.getState();
     setDetectingPaths(true);
+    let detectedResult: any = null;
     
     if (window.electronAPI) {
       try {
@@ -142,6 +152,7 @@ function App() {
             } catch (e) {
                 console.warn("Detected paths but result was not valid JSON", res.stdout);
             }
+            detectedResult = detected;
             
             // [NEW] 僅緩存偵測結果，不直接修改 config
             if (detected && detected.existingConfig) {
@@ -161,6 +172,7 @@ function App() {
       }
     }
     setDetectingPaths(false);
+    return detectedResult;
   };
 
   const loadConfig = async () => {
@@ -185,13 +197,27 @@ function App() {
     return null;
   };
 
-  const checkOnboardingStatus = () => {
-    // Logic to check if OpenClaw is already configured
-    // For now, let's keep it in onboarding if not explicitly finished
-    const finished = localStorage.getItem('onboarding_finished') === 'true';
+  const checkOnboardingStatus = (loadedConfig?: any, detected?: any) => {
+    const persisted = loadedConfig || {};
+    const detectedExisting = detected?.existingConfig || {};
+    const hasAnyConfiguredPath = Boolean(
+      (persisted.corePath && String(persisted.corePath).trim()) ||
+      (persisted.configPath && String(persisted.configPath).trim()) ||
+      (persisted.workspacePath && String(persisted.workspacePath).trim()) ||
+      (detectedExisting.corePath && String(detectedExisting.corePath).trim()) ||
+      (detectedExisting.configPath && String(detectedExisting.configPath).trim()) ||
+      (detectedExisting.workspacePath && String(detectedExisting.workspacePath).trim())
+    );
+
+    // If runtime paths already exist, treat onboarding as finished even when
+    // localStorage flag is missing (e.g., fresh renderer profile or cleared storage).
+    const finished = localStorage.getItem('onboarding_finished') === 'true' || hasAnyConfiguredPath;
+    if (finished) localStorage.setItem('onboarding_finished', 'true');
     setOnboardingFinished(finished);
     if (!finished) {
       setActiveTab('onboarding');
+    } else {
+      setActiveTab('monitor');
     }
   };
 
