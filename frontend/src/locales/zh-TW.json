@@ -25,6 +25,14 @@
   "monitor": {
     "gatewayTitle": "Gateway 通訊中樞",
     "gatewayDesc": "負責維持所有 AI 代理的通訊鏈路穩定性。",
+    "currentRuntimePathsTitle": "目前 Gateway 路徑配置",
+    "zoneCore": "核心區",
+    "zoneConfig": "設定區",
+    "zoneWorkspace": "工作區",
+    "pathUnset": "尚未設定",
+    "openFolder": "開啟",
+    "openFolderUnavailable": "目前環境不支援開啟資料夾",
+    "openFolderFailed": "無法開啟 {{zone}}：{{msg}}",
     "disconnect": "中斷連線",
     "startService": "啟動服務",
     "status": {

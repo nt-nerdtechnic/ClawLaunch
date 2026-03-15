@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   resize: (mode) => ipcRenderer.send('window:resize', mode),
   selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
+  openPath: (targetPath) => ipcRenderer.invoke('shell:open-path', targetPath),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 });

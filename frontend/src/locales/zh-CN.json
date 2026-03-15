@@ -25,6 +25,14 @@
   "monitor": {
     "gatewayTitle": "Gateway 通讯中枢",
     "gatewayDesc": "负责维持所有 AI 代理的通讯链路稳定性。",
+    "currentRuntimePathsTitle": "当前 Gateway 路径配置",
+    "zoneCore": "核心区",
+    "zoneConfig": "设置区",
+    "zoneWorkspace": "工作区",
+    "pathUnset": "尚未设置",
+    "openFolder": "打开",
+    "openFolderUnavailable": "当前环境不支持打开文件夹",
+    "openFolderFailed": "无法打开 {{zone}}：{{msg}}",
     "disconnect": "断开连接",
     "startService": "启动服务",
     "status": {

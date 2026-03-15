@@ -381,9 +381,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       mainWindow?.webContents.send('shell:stdout', { data: data.toString(), source: 'stderr' });
     });
     clawProcess.on('exit', (code: number) => {
-      mainWindow?.webContents.send('shell:stdout', { data: `Process exited with code ${code}`, source: 'stderr' });
+      const exitedProcess = clawProcess;
       clawProcess = null;
-      activeProcesses.delete(clawProcess);
+      if (exitedProcess) activeProcesses.delete(exitedProcess);
+      // Only surface non-zero exits as errors; a clean exit (code 0) means the
+      // LaunchAgent was started successfully and the start command exited normally.
+      if (code !== 0) {
+        mainWindow?.webContents.send('shell:stdout', { data: `Gateway process exited with code ${code}`, source: 'stderr' });
+      }
     });
     activeProcesses.add(clawProcess);
     return { code: 0, stdout: 'Gateway starting...' };
@@ -891,12 +896,12 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                       telegram: { enabled: true },
                       discord: { enabled: true },
                       slack: { enabled: true },
-                      whatsapp: { enabled: true },
+                      whatsapp: { enabled: true, groupPolicy: 'open' },
                       line: { enabled: true },
-                      irc: { enabled: true },
+                      irc: { enabled: true, groupPolicy: 'open' },
                       googlechat: { enabled: true },
-                      signal: { enabled: true },
-                      imessage: { enabled: true }
+                      signal: { enabled: true, groupPolicy: 'open' },
+                      imessage: { enabled: true, groupPolicy: 'open' }
                     }
                   };
 
@@ -932,6 +937,20 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                         if (!parsed.agents.defaults.workspace) {
                           parsed.agents.defaults.workspace = finalWorkspacePath;
                           changed = true;
+                        }
+
+                        if (!parsed.channels || typeof parsed.channels !== 'object') {
+                          parsed.channels = {};
+                          changed = true;
+                        }
+
+                        const channelsNeedingOpenPolicy = ['whatsapp', 'irc', 'signal', 'imessage'];
+                        for (const channelName of channelsNeedingOpenPolicy) {
+                          const channelConfig = parsed.channels[channelName];
+                          if (channelConfig && typeof channelConfig === 'object' && !channelConfig.groupPolicy) {
+                            channelConfig.groupPolicy = 'open';
+                            changed = true;
+                          }
                         }
                       }
 
@@ -1045,6 +1064,21 @@ ipcMain.handle('shell:open-external', async (_event, url: string) => {
     } catch (e: any) {
         return { success: false, error: e.message };
     }
+});
+
+ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
+  try {
+    if (!targetPath || typeof targetPath !== 'string') {
+      return { success: false, error: 'Missing target path' };
+    }
+    const openError = await shell.openPath(targetPath);
+    if (openError) {
+      return { success: false, error: openError };
+    }
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 });
 
 app.on('before-quit', () => {

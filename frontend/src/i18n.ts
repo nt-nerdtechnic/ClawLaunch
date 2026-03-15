@@ -23,7 +23,8 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-    fallbackLng: 'en',
+    lng: localStorage.getItem('i18nextLng') || 'zh-TW',
+    fallbackLng: 'zh-TW',
     interpolation: {
       escapeValue: false,
     },

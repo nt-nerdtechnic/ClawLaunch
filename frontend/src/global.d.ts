@@ -7,6 +7,7 @@ declare global {
       onLog: (callback: (payload: { data: string; source: 'stdout' | 'stderr' | 'system' }) => void) => () => void;
       resize: (mode: 'mini' | 'expanded') => void;
       selectDirectory: () => Promise<string | null>;
+      openPath: (targetPath: string) => Promise<{ success: boolean; error?: string }>;
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
     };
   }

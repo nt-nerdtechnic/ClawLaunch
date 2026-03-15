@@ -25,6 +25,14 @@
   "monitor": {
     "gatewayTitle": "Gateway Hub",
     "gatewayDesc": "Maintains communication stability for all AI agents.",
+    "currentRuntimePathsTitle": "Current Gateway Runtime Paths",
+    "zoneCore": "Core Zone",
+    "zoneConfig": "Config Zone",
+    "zoneWorkspace": "Workspace Zone",
+    "pathUnset": "Not set",
+    "openFolder": "Open",
+    "openFolderUnavailable": "This environment does not support opening folders",
+    "openFolderFailed": "Failed to open {{zone}}: {{msg}}",
     "disconnect": "Disconnect",
     "startService": "Start Service",
     "status": {

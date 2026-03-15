@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Layout, Settings, Activity, CheckCircle2, Play, Square, Loader2, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Layout, Settings, Activity, CheckCircle2, Play, Square, Loader2, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, FolderOpen } from 'lucide-react';
 import { MiniView } from './components/MiniView';
 import { SkillManager } from './components/SkillManager';
 import { ActionCenter } from './components/ActionCenter';
@@ -20,28 +20,96 @@ function App() {
   const [activeTab, setActiveTab] = useState('monitor'); // Default to monitor if onboarding finished
   const [onboardingFinished, setOnboardingFinished] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const initPromiseRef = useRef<Promise<void> | null>(null);
   const { t } = useTranslation();
+  const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+  const normalizeConfigDir = (rawPath: string) => {
+    const trimmed = (rawPath || '').trim();
+    if (!trimmed) return '';
+    return trimmed.replace(/[\\/]openclaw\.json$/i, '');
+  };
+  const resolvedConfigDir = normalizeConfigDir(config.configPath);
+  const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
+
+  const buildOpenClawEnvPrefix = (cfg?: any) => {
+    const configDir = normalizeConfigDir(cfg?.configPath ?? config.configPath);
+    const configFilePath = configDir ? `${configDir}/openclaw.json` : '';
+    const stateDirEnv = configDir ? `OPENCLAW_STATE_DIR=${shellQuote(configDir)} ` : '';
+    const configPathEnv = configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} ` : '';
+    return `${stateDirEnv}${configPathEnv}`;
+  };
+
+  const gatewayRuntimeZones = [
+    {
+      key: 'core',
+      label: t('monitor.zoneCore'),
+      value: config.corePath,
+      folderPath: config.corePath,
+      accent: 'from-sky-500/15 to-cyan-500/10 dark:from-sky-500/10 dark:to-cyan-500/5',
+      border: 'border-sky-200/80 dark:border-sky-700/50'
+    },
+    {
+      key: 'config',
+      label: t('monitor.zoneConfig'),
+      value: resolvedConfigFilePath,
+      folderPath: resolvedConfigDir,
+      accent: 'from-indigo-500/15 to-blue-500/10 dark:from-indigo-500/10 dark:to-blue-500/5',
+      border: 'border-indigo-200/80 dark:border-indigo-700/50'
+    },
+    {
+      key: 'workspace',
+      label: t('monitor.zoneWorkspace'),
+      value: config.workspacePath,
+      folderPath: config.workspacePath,
+      accent: 'from-emerald-500/15 to-teal-500/10 dark:from-emerald-500/10 dark:to-teal-500/5',
+      border: 'border-emerald-200/80 dark:border-emerald-700/50'
+    }
+  ];
+
+  const openZoneFolder = async (zoneLabel: string, folderPath?: string) => {
+    const target = (folderPath || '').trim();
+    if (!target) {
+      addLog(`${zoneLabel}: ${t('monitor.pathUnset')}`, 'system');
+      return;
+    }
+    if (!window.electronAPI?.openPath) {
+      addLog(t('monitor.openFolderUnavailable'), 'stderr');
+      return;
+    }
+    const result = await window.electronAPI.openPath(target);
+    if (!result?.success) {
+      addLog(t('monitor.openFolderFailed', { zone: zoneLabel, msg: result?.error || 'unknown error' }), 'stderr');
+    }
+  };
 
   useEffect(() => {
-    initializeApp();
-    
+    if (!initPromiseRef.current) {
+      initPromiseRef.current = initializeApp();
+    }
+
+    let unsubscribe: (() => void) | undefined;
     if (window.electronAPI) {
-      window.electronAPI.onLog((payload) => {
+      unsubscribe = window.electronAPI.onLog((payload) => {
         addLog(payload.data, payload.source as any);
       });
     }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []); // Run ONLY once on mount
 
   // Separate effect for snapshot sync
   useEffect(() => {
-    if (!config.corePath) return;
+    if (!running) return;
+    if (!config.configPath && !config.workspacePath && !config.corePath) return;
 
     const interval = setInterval(() => {
         syncSnapshot();
-    }, 10000); // Sync every 10 seconds
+    }, 15000); // Sync every 15 seconds while gateway is running
 
     return () => clearInterval(interval);
-  }, [config.corePath]);
+  }, [running, config.configPath, config.workspacePath, config.corePath]);
 
   const { theme } = useStore();
   useEffect(() => {
@@ -54,9 +122,9 @@ function App() {
 
   const initializeApp = async () => {
     await checkEnvironment();
-    await loadConfig();
+    const loadedConfig = await loadConfig();
     await detectPaths(); // 只偵測但不修補，待用戶選擇模式後再決定
-    await syncGatewayStatus();
+    await syncGatewayStatus(loadedConfig);
     checkOnboardingStatus();
   };
 
@@ -100,7 +168,7 @@ function App() {
       try {
         const res = await window.electronAPI.exec('config:read');
         if (res.code === 0 && res.stdout) {
-          let savedConfig = {};
+          let savedConfig: any = {};
           try {
             savedConfig = JSON.parse(res.stdout);
           } catch(e) {
@@ -108,11 +176,13 @@ function App() {
           }
           const { setConfig } = useStore.getState(); // Directly get from store to avoid stale closure
           setConfig(savedConfig);
+          return savedConfig;
         }
       } catch (e) {
         console.error("Failed to load config", e);
       }
     }
+    return null;
   };
 
   const checkOnboardingStatus = () => {
@@ -138,18 +208,26 @@ function App() {
   };
 
   const syncSnapshot = async () => {
-    if (window.electronAPI && config.corePath) {
+    if (window.electronAPI) {
       try {
-        // Try reading from corePath/runtime/last-snapshot.json
-        const snapshotPath = `${config.corePath}/runtime/last-snapshot.json`;
-        const res = await window.electronAPI.exec(`cat "${snapshotPath}"`);
-        if (res.code === 0 && res.stdout) {
-          try {
-            const snapshot = JSON.parse(res.stdout);
-            const { setSnapshot } = useStore.getState();
-            setSnapshot(snapshot);
-          } catch (e) {
-            console.warn("Snapshot corrupted or empty", e);
+        // Prefer user-selected config/workspace runtime, then fall back to corePath for compatibility.
+        const snapshotCandidates = [
+          resolvedConfigDir ? `${resolvedConfigDir}/runtime/last-snapshot.json` : '',
+          config.workspacePath ? `${config.workspacePath}/runtime/last-snapshot.json` : '',
+          config.corePath ? `${config.corePath}/runtime/last-snapshot.json` : ''
+        ].filter(Boolean);
+
+        for (const snapshotPath of snapshotCandidates) {
+          const res = await window.electronAPI.exec(`test -f "${snapshotPath}" && cat "${snapshotPath}"`);
+          if (res.code === 0 && res.stdout) {
+            try {
+              const snapshot = JSON.parse(res.stdout);
+              const { setSnapshot } = useStore.getState();
+              setSnapshot(snapshot);
+              break;
+            } catch (e) {
+              console.warn("Snapshot corrupted or empty", e);
+            }
           }
         }
       } catch (e) {
@@ -158,11 +236,13 @@ function App() {
     }
   };
 
-  const syncGatewayStatus = async () => {
+  const syncGatewayStatus = async (runtimeConfig?: any) => {
       try {
-          const cmd = config.corePath 
-            ? `cd ${config.corePath} && pnpm openclaw gateway status` 
-            : 'pnpm openclaw gateway status';
+          const effectiveConfig = runtimeConfig || config;
+          const envPrefix = buildOpenClawEnvPrefix(effectiveConfig);
+          const cmd = effectiveConfig.corePath 
+            ? `cd ${shellQuote(effectiveConfig.corePath)} && ${envPrefix}pnpm openclaw gateway status` 
+            : `${envPrefix}pnpm openclaw gateway status`;
           const res = await window.electronAPI.exec(cmd);
           if (res.stdout.includes('online') || res.stdout.includes('running')) {
               setRunning(true);
@@ -191,9 +271,10 @@ function App() {
     if (running) {
       addLog(t('logs.stoppingGateway'), 'system');
       try {
+        const envPrefix = buildOpenClawEnvPrefix();
         const cmd = config.corePath 
-             ? `cd ${config.corePath} && pnpm openclaw gateway stop` 
-             : 'pnpm openclaw gateway stop';
+             ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop` 
+             : `${envPrefix}pnpm openclaw gateway stop`;
         const resRaw: any = await execInTerminal(cmd, { title: 'Stopping OpenClaw Gateway', holdOpen: false });
         
         const code = resRaw.code ?? resRaw.exitCode;
@@ -207,9 +288,10 @@ function App() {
     } else {
       addLog(t('logs.startingGateway'), 'system');
       try {
+        const envPrefix = buildOpenClawEnvPrefix();
         const cmd = config.corePath 
-            ? `cd ${config.corePath} && pnpm openclaw gateway start` 
-            : 'pnpm openclaw gateway start';
+            ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start --verbose --force` 
+            : `${envPrefix}pnpm openclaw gateway start --verbose --force`;
         
         const resRaw: any = await execInTerminal(cmd, { 
             title: 'Starting OpenClaw Gateway', 
@@ -366,12 +448,42 @@ function App() {
 
           {activeTab === 'monitor' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="bg-slate-50 dark:bg-slate-900/30 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-8 rounded-3xl flex items-center justify-between shadow-lg">
-                <div>
+               <div className="bg-slate-50 dark:bg-slate-900/30 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-8 rounded-3xl flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between shadow-lg">
+                <div className="w-full lg:max-w-[72%]">
                     <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{t('monitor.gatewayTitle')}</h3>
                     <p className="text-sm text-slate-500 mt-1">{t('monitor.gatewayDesc')}</p>
+                    <div className="mt-4 rounded-2xl border border-slate-200/80 bg-white/70 p-4 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/50">
+                      <div className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        {t('monitor.currentRuntimePathsTitle')}
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        {gatewayRuntimeZones.map((zone) => (
+                          <div
+                            key={zone.key}
+                            className={`rounded-xl border px-3 py-3 bg-gradient-to-br ${zone.accent} ${zone.border}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300">
+                                {zone.label}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => openZoneFolder(zone.label, zone.folderPath)}
+                                className="inline-flex items-center rounded-md border border-slate-300/90 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                <FolderOpen size={12} className="mr-1" />
+                                {t('monitor.openFolder')}
+                              </button>
+                            </div>
+                            <div className="mt-2 break-all font-mono text-[11px] leading-relaxed text-slate-700 dark:text-slate-200">
+                              {zone.value || t('monitor.pathUnset')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                 </div>
-                <button onClick={toggleGateway} className={`px-8 py-4 rounded-2xl font-black flex items-center transition-all ${running ? 'bg-red-500/10 dark:bg-red-500/20 text-red-500 dark:text-red-400 border border-red-500/30 dark:border-red-500/40 hover:bg-red-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 dark:border-emerald-500/40 hover:bg-emerald-500/20'}`}>
+                <button onClick={toggleGateway} className={`self-start lg:self-center px-8 py-4 rounded-2xl font-black flex items-center transition-all ${running ? 'bg-red-500/10 dark:bg-red-500/20 text-red-500 dark:text-red-400 border border-red-500/30 dark:border-red-500/40 hover:bg-red-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 dark:border-emerald-500/40 hover:bg-emerald-500/20'}`}>
                   {running ? <Square size={18} className="mr-2 fill-current" /> : <Play size={18} className="mr-2 fill-current" />}
                   {running ? t('monitor.disconnect') : t('monitor.startService')}
                 </button>
