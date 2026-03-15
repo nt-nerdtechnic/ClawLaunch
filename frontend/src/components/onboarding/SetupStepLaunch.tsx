@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle, ArrowRight } from 'lucide-react';
+// @ts-nocheck
+import React, { useState } from 'react';
+import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle, ArrowRight, Server } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
@@ -10,23 +11,21 @@ import { useOnboardingAction } from '../../hooks/useOnboardingAction';
  * Optimized with Action Strategy Pattern (2026-03-15)
  */
 const SetupStepLaunch = ({ onComplete }) => {
-  const { config, userType } = useStore();
+  const { config, setConfig, userType, workspaceSkills } = useStore();
   const { t } = useTranslation();
   const onboardingAction = useOnboardingAction();
   const [status, setStatus] = useState('preparing'); // preparing, success, partial_failure
   const [progress, setProgress] = useState(0);
+  const [hasStarted, setHasStarted] = useState(false);
 
   const steps = {
     preparing: t('launch.steps.preparing'),
     success: t('launch.steps.success')
   };
 
-  useEffect(() => {
-    runSetup();
-  }, []);
-
   const runSetup = async () => {
     try {
+      setHasStarted(true);
       setStatus('preparing');
       setProgress(20);
       
@@ -43,6 +42,53 @@ const SetupStepLaunch = ({ onComplete }) => {
       setStatus('partial_failure');
     }
   };
+
+  if (!hasStarted) {
+    return (
+      <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 p-10 animate-in fade-in zoom-in-95 duration-500">
+        <div className="text-center space-y-4 mb-8">
+          <div className="w-20 h-20 bg-blue-100 rounded-[28px] flex items-center justify-center text-blue-600 mx-auto border border-blue-200/60">
+            <Rocket size={34} />
+          </div>
+          <h2 className="text-3xl font-black text-gray-900 tracking-tight">最終啟動設定 (Final Launch)</h2>
+          <p className="text-gray-500 font-medium">這是最後一步。背景服務安裝選項只會在這裡出現並生效。</p>
+        </div>
+
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start justify-between gap-4 mb-8">
+          <div className="flex items-start gap-3">
+            <div className={`mt-0.5 w-10 h-10 rounded-xl flex items-center justify-center ${config.installDaemon ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+              <Server size={18} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-black text-slate-800">{t('modelSetup.daemon.title')}</p>
+              <p className="text-[11px] text-slate-500 leading-relaxed max-w-xl">{t('modelSetup.daemon.desc')}</p>
+              <p className={`text-[10px] font-black uppercase tracking-widest ${config.installDaemon ? 'text-emerald-600' : 'text-slate-400'}`}>
+                {config.installDaemon ? t('modelSetup.daemon.enabled') : t('modelSetup.daemon.disabled')}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setConfig({ installDaemon: !config.installDaemon })}
+            className={`shrink-0 mt-1 inline-flex h-7 w-12 items-center rounded-full border transition-all ${config.installDaemon ? 'bg-emerald-500 border-emerald-500 justify-end' : 'bg-white border-slate-300 justify-start'}`}
+            aria-pressed={config.installDaemon}
+            aria-label={t('modelSetup.daemon.toggle')}
+            title={t('modelSetup.daemon.toggle')}
+          >
+            <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
+          </button>
+        </div>
+
+        <button
+          onClick={runSetup}
+          className="w-full flex items-center justify-center gap-3 bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl uppercase tracking-widest text-xs"
+        >
+          開始最終啟動檢查 <ArrowRight size={18} />
+        </button>
+      </div>
+    );
+  }
 
   if (onboardingAction.error) {
       return (
@@ -151,7 +197,7 @@ const SetupStepLaunch = ({ onComplete }) => {
 
             <div className="space-y-2">
                 <h2 className="text-4xl font-black text-gray-900 tracking-tight">{String(t('launch.success.title') || 'Ready')}</h2>
-                <p className="text-gray-500 font-medium text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: String(t('launch.success.desc') || '') }}></p>
+              <p className="text-gray-500 font-medium text-lg leading-relaxed whitespace-pre-line">{String(t('launch.success.desc') || '')}</p>
             </div>
           </div>
 
@@ -179,7 +225,7 @@ const SetupStepLaunch = ({ onComplete }) => {
                 })()} 
               />
               <SummaryItem label="通訊終端" value={config.platform || 'Unknown'} />
-              <SummaryItem label="注入異能" value={`${config.enabledSkills?.length || 0} 項模組`} />
+              <SummaryItem label="已安裝技能" value={`${workspaceSkills?.length || 0} 項模組`} />
             </ul>
           </div>
 

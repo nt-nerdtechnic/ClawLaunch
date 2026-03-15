@@ -16,6 +16,21 @@ const DEV_PORT_RANGE_END = 5185;
 const DEV_SERVER_WAIT_MS = 15000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+
+function validateVersionRef(raw: string): string {
+  const value = String(raw || '').trim();
+  if (!value) {
+    throw new Error('Invalid version: empty');
+  }
+  if (value.length > 128) {
+    throw new Error('Invalid version: too long');
+  }
+  if (!/^[A-Za-z0-9._/-]+$/.test(value)) {
+    throw new Error(`Invalid version format: ${value}`);
+  }
+  return value;
+}
 
 function isDevServerReachable(url: string, timeoutMs = 600): Promise<boolean> {
   return new Promise((resolve) => {
@@ -224,6 +239,18 @@ async function copyDir(src: string, dest: string, progressCallback?: (msg: strin
     }
 }
 
+async function writeFileIfMissing(filePath: string, content: string): Promise<boolean> {
+  try {
+    await fs.writeFile(filePath, content, { flag: 'wx', encoding: 'utf-8' });
+    return true;
+  } catch (error: any) {
+    if (error?.code === 'EEXIST') {
+      return false;
+    }
+    throw error;
+  }
+}
+
 /**
  * 從 SKILL.md 解析 YAML Frontmatter (簡單正則匹配)
  */
@@ -393,48 +420,141 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     }
   }
 
+  if (fullCommand.startsWith('config:migrate-openclaw')) {
+    try {
+      const payloadStr = fullCommand.replace('config:migrate-openclaw ', '').trim();
+      const payload = JSON.parse(payloadStr || '{}');
+      const configFilePath = payload?.configPath ? path.join(payload.configPath, 'openclaw.json') : '';
+      const workspacePath = payload?.workspacePath || '';
+      if (!configFilePath) {
+        return { code: 1, stderr: 'Missing config path', exitCode: 1 };
+      }
+
+      const raw = await fs.readFile(configFilePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      let changed = false;
+
+      if (parsed && typeof parsed === 'object') {
+        if ('version' in parsed) {
+          delete parsed.version;
+          changed = true;
+        }
+        if ('corePath' in parsed) {
+          delete parsed.corePath;
+          changed = true;
+        }
+
+        if (!parsed.agents || typeof parsed.agents !== 'object') {
+          parsed.agents = {};
+          changed = true;
+        }
+        if (!parsed.agents.defaults || typeof parsed.agents.defaults !== 'object') {
+          parsed.agents.defaults = {};
+          changed = true;
+        }
+        if (workspacePath && !parsed.agents.defaults.workspace) {
+          parsed.agents.defaults.workspace = workspacePath;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await fs.writeFile(configFilePath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf-8');
+      }
+
+      return { code: 0, stdout: JSON.stringify({ changed }), exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stderr: e.message, exitCode: 1 };
+    }
+  }
+
   if (fullCommand === 'detect:paths') {
     const home = app.getPath('home');
     const possibleWorkspace = path.join(home, '.openclaw');
     const searchScopes = [home, path.join(home, 'Desktop'), path.join(home, 'Documents'), path.dirname(app.getAppPath())];
+    const launcherConfigPath = path.join(app.getPath('userData'), 'config.json');
 
     let corePath = '';
     let configPath = '';
     let workspacePath = '';
     let existingConfig: any = {};
 
+    // Respect user-selected paths saved by onboarding before falling back to auto-discovery.
     try {
+      const launcherRaw = await fs.readFile(launcherConfigPath, 'utf-8');
+      const launcherCfg = JSON.parse(launcherRaw);
+
+      if (typeof launcherCfg.workspacePath === 'string' && launcherCfg.workspacePath.trim()) {
+        workspacePath = launcherCfg.workspacePath.trim();
+      }
+
+      if (typeof launcherCfg.configPath === 'string' && launcherCfg.configPath.trim()) {
+        const savedConfigPath = launcherCfg.configPath.trim();
+        const savedConfigFile = path.join(savedConfigPath, 'openclaw.json');
+        configPath = savedConfigPath;
+        try {
+          await fs.access(savedConfigFile);
+          const content = await fs.readFile(savedConfigFile, 'utf-8');
+          existingConfig = parseOpenClawConfig(content);
+          if (existingConfig.workspace) {
+            workspacePath = existingConfig.workspace;
+          }
+        } catch {
+          // Keep saved config path even if openclaw.json is not ready yet.
+        }
+      }
+
+      if (typeof launcherCfg.corePath === 'string' && launcherCfg.corePath.trim()) {
+        const savedCorePath = launcherCfg.corePath.trim();
+        try {
+          await fs.access(path.join(savedCorePath, 'package.json'));
+          corePath = savedCorePath;
+        } catch {
+          // Fall back to search scopes if saved core path is stale.
+        }
+      }
+    } catch {
+      // Ignore parse/read failures and continue with discovery.
+    }
+
+    if (!workspacePath) {
+      try {
         await fs.access(possibleWorkspace);
         workspacePath = possibleWorkspace;
-    } catch(e) {}
+      } catch(e) {}
+    }
 
     const possibleConfigPath = path.join(possibleWorkspace, 'openclaw.json');
-    try {
+    if (!configPath) {
+      try {
         await fs.access(possibleConfigPath);
         configPath = possibleWorkspace;
         const content = await fs.readFile(possibleConfigPath, 'utf-8');
         existingConfig = parseOpenClawConfig(content);
         if (existingConfig.workspace) workspacePath = existingConfig.workspace;
-    } catch(e) {}
+      } catch(e) {}
+    }
 
-    for (const scope of searchScopes) {
+    if (!corePath) {
+      for (const scope of searchScopes) {
         try {
-            const files = await fs.readdir(scope);
-            for (const file of files) {
-                if (file.toLowerCase().includes('clawdbot') || file.toLowerCase().includes('openclaw')) {
-                    const fullPath = path.join(scope, file);
-                    const stats = await fs.stat(fullPath);
-                    if (stats.isDirectory()) {
-                        try {
-                            await fs.access(path.join(fullPath, 'package.json'));
-                            corePath = fullPath;
-                            break;
-                        } catch(e) {}
-                    }
-                }
+          const files = await fs.readdir(scope);
+          for (const file of files) {
+            if (file.toLowerCase().includes('clawdbot') || file.toLowerCase().includes('openclaw')) {
+              const fullPath = path.join(scope, file);
+              const stats = await fs.stat(fullPath);
+              if (stats.isDirectory()) {
+                try {
+                  await fs.access(path.join(fullPath, 'package.json'));
+                  corePath = fullPath;
+                  break;
+                } catch(e) {}
+              }
             }
-            if (corePath) break;
+          }
+          if (corePath) break;
         } catch(e) {}
+      }
     }
 
     let workspaceSkills: any[] = [];
@@ -497,13 +617,32 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const skillPath = fullCommand.replace('skill:delete ', '').trim();
       if (!skillPath) throw new Error('未提供路徑');
-      
-      // 防呆：確保路徑內包含 "skills" 以免誤刪重要資料夾
-      if (!skillPath.includes('skills')) {
-          throw new Error('安全性拒絕：該路徑不符合技能目錄結構規範');
+
+      const launcherConfigPath = path.join(app.getPath('userData'), 'config.json');
+      let configuredWorkspacePath = '';
+      let configuredConfigPath = '';
+      try {
+        const launcherRaw = await fs.readFile(launcherConfigPath, 'utf-8');
+        const launcherCfg = JSON.parse(launcherRaw || '{}');
+        configuredWorkspacePath = typeof launcherCfg.workspacePath === 'string' ? launcherCfg.workspacePath.trim() : '';
+        configuredConfigPath = typeof launcherCfg.configPath === 'string' ? launcherCfg.configPath.trim() : '';
+      } catch {
+        // Fallback handled by default paths below.
       }
 
-      await fs.rm(skillPath, { recursive: true, force: true });
+      const allowedBases = [
+        configuredWorkspacePath ? path.resolve(configuredWorkspacePath, 'skills') : '',
+        configuredConfigPath ? path.resolve(configuredConfigPath, 'skills') : '',
+        path.resolve(app.getPath('home'), '.openclaw', 'skills')
+      ].filter(Boolean);
+
+      const resolvedTarget = path.resolve(skillPath);
+      const isInsideAllowedBase = allowedBases.some((base) => resolvedTarget === base || resolvedTarget.startsWith(`${base}${path.sep}`));
+      if (!isInsideAllowedBase) {
+        throw new Error('安全性拒絕：該技能路徑不在允許的 skills 目錄內');
+      }
+
+      await fs.rm(resolvedTarget, { recursive: true, force: true });
       return { code: 0, stdout: '技能已成功移除', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stderr: e.message, exitCode: 1 };
@@ -604,7 +743,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         const payloadStr = fullCommand.replace('project:initialize ', '').trim();
         let { corePath, configPath, workspacePath, version, method } = JSON.parse(payloadStr);
 
-        const targetVersion = version || 'main';
+        const targetVersion = validateVersionRef(version || 'main');
         const downloadMethod = method || 'git'; // 'git' or 'zip'
 
         const checkAndWrap = async (dirPath: string, subName: string) => {
@@ -625,7 +764,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
         // 1. 下載核心原始碼
         const repoUrl = 'https://github.com/openclaw/openclaw.git';
-        const tarballUrl = `https://github.com/openclaw/openclaw/tarball/${targetVersion}`;
+        const tarballUrl = `https://github.com/openclaw/openclaw/tarball/${encodeURIComponent(targetVersion)}`;
         
         mainWindow?.webContents.send('shell:stdout', { data: `>>> Initializing paths for version ${targetVersion} via ${downloadMethod}...\n`, source: 'stdout' });
         
@@ -633,35 +772,51 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
         return new Promise((resolve) => {
             let childProcess: any;
+          const runCommandWithStreaming = (cmd: string, title: string) => {
+            return new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
+              mainWindow?.webContents.send('shell:stdout', { data: `>>> ${title}\n`, source: 'stdout' });
+              const proc = spawn(cmd, { shell: true, cwd: finalCorePath });
+              activeProcesses.add(proc);
+              let stdout = '';
+              let stderr = '';
 
-            const wrapInTerminal = (cmd: string, title: string) => {
-                // 1. 轉義雙引號以符合 AppleScript 語法 (do script "...")
-                const escapedCmd = cmd.replace(/"/g, '\\"');
-                
-                // 2. 構建互動式指令，加入 read 停留防止閃退
-                const interactiveCmd = `clear; echo "🚀 正在執行：${title}"; ${escapedCmd}; echo "\n程序執行完畢。"; read -p "按 Enter 鍵關閉視窗..."`;
-                
-                // 3. 封裝為 AppleScript
-                const appleScript = `tell application "Terminal" to do script "${interactiveCmd.replace(/"/g, '\\"')}"\ntell application "Terminal" to activate`;
-                
-                // 4. 對外層 Shell 使用單引號包裹，並處理單引號轉義
-                const escapedAppleScript = appleScript.replace(/'/g, "'\\''");
-                return `osascript -e '${escapedAppleScript}'`;
-            };
+              proc.stdout.on('data', (data: any) => {
+                const chunk = data.toString();
+                stdout += chunk;
+                mainWindow?.webContents.send('shell:stdout', { data: chunk, source: 'stdout' });
+              });
+
+              proc.stderr.on('data', (data: any) => {
+                const chunk = data.toString();
+                stderr += chunk;
+                mainWindow?.webContents.send('shell:stdout', { data: chunk, source: 'stderr' });
+              });
+
+              proc.on('error', (err: any) => {
+                activeProcesses.delete(proc);
+                resolveStep({ code: 1, stdout, stderr: stderr || err.message || 'Unknown error' });
+              });
+
+              proc.on('close', (code: number) => {
+                activeProcesses.delete(proc);
+                resolveStep({ code: code ?? 0, stdout, stderr });
+              });
+            });
+          };
 
             if (downloadMethod === 'zip') {
-                const actualCmd = `curl -L "${tarballUrl}" | tar -xz --strip-components=1 -C "${finalCorePath}"`;
+              const actualCmd = `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(finalCorePath)}`;
                 // 改回直接執行，不使用 osascript，以便串流日誌到 UI 的「小視窗」
                 childProcess = spawn(actualCmd, { shell: true });
             } else {
-                const versionArgs = `--branch ${targetVersion} --depth 1 --single-branch`;
+              const versionArgs = `--branch ${shellQuote(targetVersion)} --depth 1 --single-branch`;
                 const isSubDir = finalCorePath !== corePath;
                 const gitCmd = isSubDir 
-                    ? `git clone ${repoUrl} ${versionArgs} "${path.basename(finalCorePath)}"` 
+                ? `git clone ${shellQuote(repoUrl)} ${versionArgs} ${shellQuote(path.basename(finalCorePath))}` 
                     : `git clone ${repoUrl} ${versionArgs} .`;
                 const workingDir = isSubDir ? corePath : finalCorePath;
 
-                const actualCmd = `cd "${workingDir.replace(/"/g, '\\"')}" && ${gitCmd}`;
+              const actualCmd = `cd ${shellQuote(workingDir)} && ${gitCmd}`;
                 childProcess = spawn(actualCmd, { shell: true });
             }
 
@@ -676,11 +831,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             });
 
             childProcess.on('error', (err: any) => {
+              activeProcesses.delete(childProcess);
                 resolve({ code: 1, stderr: `Spawn error: ${err.message}`, exitCode: 1 });
             });
 
             childProcess.on('close', async (code: number) => {
                 if (code !== 0) {
+                activeProcesses.delete(childProcess);
                     const errorMsg = downloadMethod === 'zip' 
                         ? `Download failed (code ${code}). Check your network connection.`
                         : `Git clone failed (code ${code}). Try switching to "ZIP" method or check your git/network.`;
@@ -700,25 +857,138 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 }
 
                 try {
-                    // 2. 初始化 Config 目錄與 openclaw.json
-                    mainWindow?.webContents.send('shell:stdout', { data: `>>> Initializing config at ${finalConfigPath}...\n`, source: 'stdout' });
-                    await fs.mkdir(finalConfigPath, { recursive: true });
-                    
-                    const initialConfig = {
-                        version: "2026.3.9",
-                        corePath: finalCorePath,
-                        agents: {
-                            defaults: {
-                                workspace: finalWorkspacePath
-                            }
-                        }
-                    };
-                    await fs.writeFile(path.join(finalConfigPath, 'openclaw.json'), JSON.stringify(initialConfig, null, 2));
+                  const createdItems: string[] = [];
+                  const existingItems: string[] = [];
 
-                    // 3. 初始化 Workspace 目錄
-                    mainWindow?.webContents.send('shell:stdout', { data: `>>> Setting up workspace at ${finalWorkspacePath}...\n`, source: 'stdout' });
-                    await fs.mkdir(path.join(finalWorkspacePath, 'skills'), { recursive: true });
-                    await fs.mkdir(path.join(finalWorkspacePath, 'extensions'), { recursive: true });
+                  const ensureDirWithTracking = async (dirPath: string) => {
+                    try {
+                      const stat = await fs.stat(dirPath);
+                      if (stat.isDirectory()) {
+                        existingItems.push(dirPath);
+                        return;
+                      }
+                    } catch {}
+                    await fs.mkdir(dirPath, { recursive: true });
+                    createdItems.push(dirPath);
+                  };
+
+                  // 2. 初始化 Config 目錄與 openclaw.json
+                  mainWindow?.webContents.send('shell:stdout', { data: `>>> Initializing config at ${finalConfigPath}...\n`, source: 'stdout' });
+                  await ensureDirWithTracking(finalConfigPath);
+
+                  const configFilePath = path.join(finalConfigPath, 'openclaw.json');
+                  // channels.*.enabled: true 是讓 OpenClaw bundled channel plugin 自動啟用的關鍵
+                  // （見 src/plugins/config-state.ts: isBundledChannelEnabledByChannelConfig）
+                  // 沒有這個設定的極簡 openclaw.json 會導致 telegram 等 channel 在 registry 裡
+                  // 被視為 "bundled (disabled by default)"，造成 channels add 回 "Unknown channel"。
+                  const initialConfig = {
+                    agents: {
+                      defaults: {
+                        workspace: finalWorkspacePath
+                      }
+                    },
+                    channels: {
+                      telegram: { enabled: true },
+                      discord: { enabled: true },
+                      slack: { enabled: true },
+                      whatsapp: { enabled: true },
+                      line: { enabled: true },
+                      irc: { enabled: true },
+                      googlechat: { enabled: true },
+                      signal: { enabled: true },
+                      imessage: { enabled: true }
+                    }
+                  };
+
+                  const wroteConfig = await writeFileIfMissing(configFilePath, `${JSON.stringify(initialConfig, null, 2)}\n`);
+                  if (wroteConfig) {
+                    createdItems.push(configFilePath);
+                  } else {
+                    existingItems.push(configFilePath);
+                    // Migrate launcher-legacy keys that OpenClaw schema does not recognize.
+                    try {
+                      const raw = await fs.readFile(configFilePath, 'utf-8');
+                      const parsed = JSON.parse(raw);
+                      let changed = false;
+
+                      if (parsed && typeof parsed === 'object') {
+                        if ('version' in parsed) {
+                          delete parsed.version;
+                          changed = true;
+                        }
+                        if ('corePath' in parsed) {
+                          delete parsed.corePath;
+                          changed = true;
+                        }
+
+                        if (!parsed.agents || typeof parsed.agents !== 'object') {
+                          parsed.agents = {};
+                          changed = true;
+                        }
+                        if (!parsed.agents.defaults || typeof parsed.agents.defaults !== 'object') {
+                          parsed.agents.defaults = {};
+                          changed = true;
+                        }
+                        if (!parsed.agents.defaults.workspace) {
+                          parsed.agents.defaults.workspace = finalWorkspacePath;
+                          changed = true;
+                        }
+                      }
+
+                      if (changed) {
+                        await fs.writeFile(configFilePath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf-8');
+                        mainWindow?.webContents.send('shell:stdout', {
+                          data: '>>> Migrated openclaw.json to OpenClaw-compatible schema.\n',
+                          source: 'stdout'
+                        });
+                      }
+                    } catch {
+                      // Keep initialization resilient; failures here should not block the whole flow.
+                    }
+                  }
+
+                  // 3. 初始化 Workspace 目錄與完整 bootstrap 基礎檔
+                  mainWindow?.webContents.send('shell:stdout', { data: `>>> Setting up workspace at ${finalWorkspacePath}...\n`, source: 'stdout' });
+                  const skillsDir = path.join(finalWorkspacePath, 'skills');
+                  const extensionsDir = path.join(finalWorkspacePath, 'extensions');
+                  await ensureDirWithTracking(finalWorkspacePath);
+                  await ensureDirWithTracking(skillsDir);
+                  await ensureDirWithTracking(extensionsDir);
+
+                  const bootstrapTemplates: Record<string, string> = {
+                    'AGENTS.md': '# AGENTS\n\nList project-specific agents and responsibilities.\n',
+                    'SOUL.md': '# SOUL\n\nDefine mission, product values, and non-negotiable principles.\n',
+                    'TOOLS.md': '# TOOLS\n\nDocument approved tools, runtime constraints, and workflows.\n',
+                    'IDENTITY.md': '# IDENTITY\n\nDescribe team identity, tone, and guardrails.\n',
+                    'USER.md': '# USER\n\nCapture user context, personas, and preference assumptions.\n',
+                    'HEARTBEAT.md': '# HEARTBEAT\n\nTrack operating rhythm, rituals, and handoff cadence.\n',
+                    'BOOTSTRAP.md': '# BOOTSTRAP\n\nOutline startup checklist and first-run expectations.\n',
+                    'MEMORY.md': '# MEMORY\n\nPersistent project memory and verified decisions.\n',
+                  };
+
+                  for (const [name, content] of Object.entries(bootstrapTemplates)) {
+                    const targetPath = path.join(finalWorkspacePath, name);
+                    const wrote = await writeFileIfMissing(targetPath, content);
+                    if (wrote) {
+                      createdItems.push(targetPath);
+                    } else {
+                      existingItems.push(targetPath);
+                    }
+                  }
+
+                  // 4. 安裝依賴，確保後續 onboarding/OAuth 不會因缺少 node_modules 失敗
+                  const installRes = await runCommandWithStreaming('pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
+                  if (installRes.code !== 0) {
+                    resolve({ code: 1, stderr: installRes.stderr || 'Dependency installation failed.', exitCode: 1 });
+                    return;
+                  }
+
+                  // 5. 預熱 CLI 執行環境 (會在 dist 過舊時自動建置 TypeScript)
+                  const warmupRes = await runCommandWithStreaming('pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
+                  if (warmupRes.code !== 0) {
+                    resolve({ code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 });
+                    return;
+                  }
 
                     mainWindow?.webContents.send('shell:stdout', { data: `>>> Initialization complete!\n`, source: 'stdout' });
                     resolve({ 
@@ -726,7 +996,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                         stdout: JSON.stringify({ 
                             corePath: finalCorePath, 
                             configPath: finalConfigPath, 
-                            workspacePath: finalWorkspacePath 
+                            workspacePath: finalWorkspacePath,
+                            createdItems,
+                            existingItems
                         }), 
                         exitCode: 0 
                     });

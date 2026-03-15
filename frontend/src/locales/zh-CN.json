@@ -175,6 +175,13 @@
       "keyPlaceholder": "sk-...",
       "keyHelper": "密钥仅会加密储存于您的本地电脑。若使用专属模型或本地部署，此项可留空。",
       "confirmBtn": "确认并绑定通讯软体"
+    },
+    "daemon": {
+      "title": "后台 Gateway 服务",
+      "desc": "默认不安装后台服务。关闭时会在 OAuth 与非 OAuth onboarding 都明确跳过 daemon 安装，避免写入 macOS launchd。",
+      "enabled": "将安装后台服务",
+      "disabled": "不安装后台服务",
+      "toggle": "切换是否安装后台 Gateway 服务"
     }
   },
   "skillManager": {

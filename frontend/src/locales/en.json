@@ -175,6 +175,13 @@
       "keyPlaceholder": "sk-...",
       "keyHelper": "Key is encrypted and stored locally. Leave empty if using local/custom models.",
       "confirmBtn": "Confirm and Bind Communication"
+    },
+    "daemon": {
+      "title": "Background Gateway Service",
+      "desc": "Disabled by default. When off, both OAuth and non-OAuth onboarding explicitly skip daemon installation so no macOS launchd service is written.",
+      "enabled": "Background service will be installed",
+      "disabled": "Background service will not be installed",
+      "toggle": "Toggle background Gateway service installation"
     }
   },
   "skillManager": {

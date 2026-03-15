@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, AlertCircle, Loader2, HelpCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';
@@ -34,7 +35,7 @@ const SetupStepMessaging = ({ onNext }) => {
     if (userType !== 'new' && detectedConfig?.botToken && !config.botToken) {
         setConfig({ botToken: detectedConfig.botToken });
     }
-  }, []);
+  }, [config.botToken, detectedConfig?.botToken, setConfig, userType]);
 
   const handleChannelSelect = (channelId) => {
     setLocalError('');

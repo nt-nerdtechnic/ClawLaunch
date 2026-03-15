@@ -39,9 +39,11 @@ export function Analytics() {
 
   const fetchRealData = async () => {
     try {
-      const logPath = config.workspacePath 
-        ? `${config.workspacePath}/gateway.log` // Optimized for the detected clawdbot structure
-        : '~/.openclaw/workspace/memory/usage/log.jsonl';
+      if (!config.workspacePath) {
+        setLoading(false);
+        return;
+      }
+      const logPath = `${config.workspacePath}/gateway.log`; // Optimized for the detected clawdbot structure
       const result = await window.electronAPI.exec(`cat ${logPath}`);
       if (result.code === 0 && result.stdout) {
         const lines = result.stdout.trim().split('\n');

@@ -9,6 +9,14 @@ export interface ExecOptions {
   title?: string;
 }
 
+function escapeAppleScriptString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /**
  * Executes a command in a new MacOS Terminal window.
  * @param command The shell command to execute
@@ -21,31 +29,19 @@ export async function execInTerminal(command: string, options: ExecOptions = {})
   let finalCmd = `clear; echo '🚀 ${title}...'; `;
   
   if (cwd) {
-    // Escape backslashes for AppleScript string
-    const escapedCwd = cwd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    finalCmd += `cd \"${escapedCwd}\"; `;
+    finalCmd += `cd "${cwd}"; `;
   }
   
-  // Escape the main command for AppleScript
-  const escapedMainCmd = command.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  finalCmd += escapedMainCmd;
+  finalCmd += command;
   
   if (holdOpen) {
-    finalCmd += `; echo '\n程序結束。'; read -p '按 Enter 鍵關閉視窗...'`;
+    finalCmd += `; printf "\\n程序結束。\\n按 Enter 鍵關閉視窗..."; read -r _`;
   }
   
-  // 2. Wrap in osascript
-  // Use double quotes for the AppleScript command string inside do script "..."
-  // And escape double quotes for AppleScript syntax
-  const appleScriptCmd = finalCmd.replace(/"/g, '\\"');
-  
-  // Construct the AppleScript statements
-  const appleScript = `tell application "Terminal" to do script "${appleScriptCmd}"\ntell application "Terminal" to activate`;
-  
-  // Wrap the whole thing for the shell
-  // We use single quotes for shell -e '...', so we must escape any single quotes in the script as '\''
-  const escapedAppleScript = appleScript.replace(/'/g, "'\\''");
-  const osascript = `osascript -e '${escapedAppleScript}'`;
+  // 2. Build osascript with separate -e arguments to avoid parser breakage.
+  const line1 = `tell application "Terminal" to do script "${escapeAppleScriptString(finalCmd)}"`;
+  const line2 = `tell application "Terminal" to activate`;
+  const osascript = `osascript -e ${shellSingleQuote(line1)} -e ${shellSingleQuote(line2)}`;
   
   // 3. Execute via Electron Bridge
   if (window.electronAPI) {

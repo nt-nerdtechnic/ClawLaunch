@@ -159,7 +159,12 @@ export function SkillManager() {
 
     setActing(true);
     try {
-      const baseDir = config.workspacePath || config.configPath || '~/.openclaw';
+      const baseDir = config.workspacePath || config.configPath;
+      if (!baseDir) {
+        alert(t('skillManager.status.importError', { msg: 'Missing workspace/config path' }));
+        setActing(false);
+        return;
+      }
       await window.electronAPI.exec(`skill:delete ${baseDir}/skills/${skill.id}`);
       await rescan();
     } catch (e) {}

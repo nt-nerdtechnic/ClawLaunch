@@ -179,6 +179,13 @@
       "keyPlaceholder": "sk-...",
       "keyHelper": "密鑰僅會加密儲存於您的本地電腦。若使用專屬模型或本地部署，此項可留空。",
       "confirmBtn": "確認並綁定通訊軟體"
+    },
+    "daemon": {
+      "title": "背景 Gateway 服務",
+      "desc": "預設不安裝背景服務。關閉時會在 OAuth 與非 OAuth onboarding 都明確跳過 daemon 安裝，避免寫入 macOS launchd。",
+      "enabled": "將安裝背景服務",
+      "disabled": "不安裝背景服務",
+      "toggle": "切換是否安裝背景 Gateway 服務"
     }
   },
   "skillManager": {

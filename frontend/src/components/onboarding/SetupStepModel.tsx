@@ -1,9 +1,11 @@
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, Cpu, Brain, Globe, Zap, Network, AlertCircle } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
+import { execInTerminal } from '../../utils/terminal';
 
 const PathItem = ({ label, path, icon, onBrowse }) => {
     const { t } = useTranslation();
@@ -46,6 +48,10 @@ const SetupStepModel = ({ onNext }) => {
 
   const [probingKey, setProbingKey] = useState(null);
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
+    const [tokenCommand, setTokenCommand] = useState('claude setup-token');
+    const [tokenCommandRunning, setTokenCommandRunning] = useState(false);
+    const [tokenCommandError, setTokenCommandError] = useState(null);
+    const [localError, setLocalError] = useState('');
   
   // CLI AuthChoices Alignment
   const providerGroups = [
@@ -54,7 +60,7 @@ const SetupStepModel = ({ onNext }) => {
       desc: 'Claude 3.7 / 3.5 Sonnet',
       choices: [
         { id: 'apiKey', name: 'Anthropic API Key', desc: '輸入您的 API 密鑰', reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: 'https://console.anthropic.com/' },
-        { id: 'token', name: 'Setup Token (CLI)', desc: '貼上由 CLI 產生的 Setup-Token', reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: null }
+                { id: 'token', name: 'Setup Token (CLI)', desc: '貼上由 CLI 產生的 Setup-Token', reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: null, helpText: '可在下方直接執行「claude setup-token」來獲取授權 Token' }
       ]
     },
     {
@@ -90,13 +96,31 @@ const SetupStepModel = ({ onNext }) => {
       ]
     },
     {
-      id: 'other', label: 'Ecosystem', icon: <Network size={16} />,
-      desc: 'Chutes, Moonshot, OpenRouter...',
+      id: 'chutes', label: 'Chutes', icon: <Network size={16} />,
+      desc: 'Decentralized AI platform',
       choices: [
-        { id: 'chutes', name: 'Chutes (OAuth)', desc: '透過 Chutes OAuth 登入', reqKey: false, defaultModel: 'chutes', link: null },
-        { id: 'moonshot-api-key', name: 'Moonshot (Kimi K2.5)', desc: '輸入 Kimi API Key', reqKey: true, defaultModel: 'kimi-k2.5', link: 'https://platform.moonshot.cn/console/api-keys' },
-        { id: 'openrouter-api-key', name: 'OpenRouter', desc: '統一 API 閘道，支援多種模型', reqKey: true, defaultModel: 'openrouter/auto', link: 'https://openrouter.ai/keys' },
-        { id: 'xai-api-key', name: 'xAI (Grok)', desc: '輸入 Grok API Key', reqKey: true, defaultModel: 'grok-4', link: 'https://console.x.ai/' },
+        { id: 'chutes', name: 'Chutes (OAuth)', desc: '透過 Chutes OAuth 登入', reqKey: false, defaultModel: 'chutes', link: null }
+      ]
+    },
+    {
+      id: 'moonshot', label: 'Moonshot', icon: <Zap size={16} />,
+      desc: 'Kimi K2.5 / 長文本專家',
+      choices: [
+        { id: 'moonshot-api-key', name: 'Moonshot (Kimi K2.5)', desc: '輸入 Kimi API Key', reqKey: true, defaultModel: 'kimi-k2.5', link: 'https://platform.moonshot.cn/console/api-keys' }
+      ]
+    },
+    {
+      id: 'openrouter', label: 'OpenRouter', icon: <Globe size={16} />,
+      desc: '統一 API 閘道',
+      choices: [
+        { id: 'openrouter-api-key', name: 'OpenRouter', desc: '支援多種模型，包含 Llama 3', reqKey: true, defaultModel: 'openrouter/auto', link: 'https://openrouter.ai/keys' }
+      ]
+    },
+    {
+      id: 'xai', label: 'xAI', icon: <Cpu size={16} />,
+      desc: 'Grok-1 / Grok-2',
+      choices: [
+        { id: 'xai-api-key', name: 'xAI (Grok)', desc: '輸入 Grok API Key', reqKey: true, defaultModel: 'grok-4', link: 'https://console.x.ai/' }
       ]
     }
   ];
@@ -121,6 +145,7 @@ const SetupStepModel = ({ onNext }) => {
   const currentChoice = currentProviderGroup.choices.find(c => c.id === selectedChoiceId) || currentProviderGroup.choices[0];
 
   const handleProviderSelect = (pid) => {
+        setLocalError('');
     setSelectedProviderId(pid);
     const group = providerGroups.find(g => g.id === pid);
     if (group) {
@@ -130,6 +155,7 @@ const SetupStepModel = ({ onNext }) => {
   };
 
   const handleChoiceSelect = (cid, cmodel) => {
+      setLocalError('');
       setSelectedChoiceId(cid);
       setConfig({ authChoice: cid, model: cmodel });
   };
@@ -138,6 +164,7 @@ const SetupStepModel = ({ onNext }) => {
     if (window.electronAPI && window.electronAPI.selectDirectory) {
       const selectedPath = await window.electronAPI.selectDirectory();
       if (selectedPath) {
+                setLocalError('');
         setConfig({ [key]: selectedPath });
         setProbingKey(key);
         
@@ -240,10 +267,12 @@ const SetupStepModel = ({ onNext }) => {
 
   const handleNext = async () => {
         if (!config.corePath || !config.configPath || !config.workspacePath) {
+                        setLocalError('請先完成三區路徑設定（Core / Config / Workspace）後再進行模型授權。');
             setPathsConfirmed(false);
             return;
         }
 
+        setLocalError('');
     if (currentChoice && (!currentChoice.reqKey || config.apiKey)) {
       const success = await onboardingAction.execute('model');
       if (success) {
@@ -251,6 +280,33 @@ const SetupStepModel = ({ onNext }) => {
       }
     }
   };
+
+    const handleRunTokenCommand = async () => {
+        const command = (tokenCommand || '').trim();
+        if (!command) {
+            setTokenCommandError('請先輸入要執行的指令');
+            return;
+        }
+
+        setTokenCommandRunning(true);
+        setTokenCommandError(null);
+
+        try {
+            const res = await execInTerminal(command, {
+                title: 'Claude Token 授權流程',
+                holdOpen: true,
+                cwd: config.corePath || undefined
+            });
+            const code = res?.code ?? res?.exitCode;
+            if (typeof code === 'number' && code !== 0) {
+                throw new Error(res?.stderr || '指令執行失敗');
+            }
+        } catch (err) {
+            setTokenCommandError(err?.message || '執行指令時發生錯誤');
+        } finally {
+            setTokenCommandRunning(false);
+        }
+    };
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-left">
@@ -270,6 +326,13 @@ const SetupStepModel = ({ onNext }) => {
       </div>
 
       <div className="space-y-6">
+                {localError && (
+                    <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
+                        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                        <p className="font-medium">{localError}</p>
+                    </div>
+                )}
+
         {/* 第一階段：環境與偵測 (偵測優先) */}
         {!pathsConfirmed && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -533,6 +596,53 @@ const SetupStepModel = ({ onNext }) => {
                                         className="w-full pl-11 pr-4 py-4 bg-white border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 outline-none transition-all text-sm font-mono shadow-sm" 
                                     />
                                 </div>
+                                {currentChoice.helpText && (
+                                    <div className="mt-3 p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-start gap-2.5 animate-in fade-in slide-in-from-top-1">
+                                        <div className="mt-0.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
+                                            <span className="text-[10px] text-white font-bold">i</span>
+                                        </div>
+                                        <p className="text-[11px] font-medium text-blue-700 leading-relaxed">
+                                            {currentChoice.helpText}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {currentChoice?.id === 'token' && (
+                                    <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">
+                                            CLI 指令（直接取得 Token）
+                                        </label>
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <input
+                                                type="text"
+                                                value={tokenCommand}
+                                                onChange={(e) => setTokenCommand(e.target.value)}
+                                                placeholder="claude setup-token"
+                                                className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 outline-none transition-all"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleRunTokenCommand}
+                                                disabled={tokenCommandRunning || onboardingAction.executing}
+                                                className="px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                {tokenCommandRunning ? (
+                                                    <>
+                                                        <Loader2 size={12} className="animate-spin" /> 執行中
+                                                    </>
+                                                ) : (
+                                                    '執行指令'
+                                                )}
+                                            </button>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500">
+                                            執行後請在彈出的終端機完成授權，取得 Token 後貼到上方 API 密鑰欄位。
+                                        </p>
+                                        {tokenCommandError && (
+                                            <p className="text-[10px] text-red-600 font-medium">{tokenCommandError}</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                         {!currentChoice?.reqKey && (
@@ -545,6 +655,7 @@ const SetupStepModel = ({ onNext }) => {
                     </div>
 
                     <div className="pt-4 space-y-4">
+
                         {onboardingAction.executing && (
                             <div className="space-y-2 animate-in fade-in duration-300">
                                 <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">

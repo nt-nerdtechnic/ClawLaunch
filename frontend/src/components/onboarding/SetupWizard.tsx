@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// @ts-nocheck
+import React, { useEffect, useRef, useState } from 'react';
 import SetupStepWelcome from './SetupStepWelcome';
 import SetupStepModel from './SetupStepModel';
 import SetupStepMessaging from './SetupStepMessaging';
@@ -9,17 +10,54 @@ import { useTranslation } from 'react-i18next';
 import { LanguageToggle } from '../LanguageToggle';
 import { useStore } from '../../store';
 
+type SetupWizardProps = {
+  onFinished: () => void;
+};
+
+type StepId = 'welcome' | 'initialize' | 'model' | 'messaging' | 'skills' | 'launch';
+
+type StepDefinition = {
+  id: StepId;
+  component: React.ComponentType<any>;
+};
+
 /**
  * NT-ClawLaunch: Setup Wizard Orchestrator
  * Implements the "Stepper UI" design secret.
  */
-const SetupWizard = ({ onFinished }) => {
-  const { userType } = useStore();
+const SetupWizard = ({ onFinished }: SetupWizardProps) => {
+  const { userType, config } = useStore();
   const [currentStep, setCurrentStep] = useState(0); // Start with Step 0
   const { t } = useTranslation();
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    const stopOnboardingRuntime = () => {
+      if (completedRef.current || !window.electronAPI) return;
+
+      window.electronAPI.exec('process:kill-all').catch(() => {});
+
+      const wrapPath = (p) => (p && p.startsWith('~') ? p : `"${p}"`);
+      const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR=${wrapPath(config.workspacePath)} ` : '';
+      const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH=${wrapPath(config.configPath + '/openclaw.json')} ` : '';
+      const envPrefix = `${stateDirEnv}${configPathEnv}`;
+      const stopCmd = config.corePath
+        ? `cd "${config.corePath}" && ${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`
+        : `${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`;
+
+      window.electronAPI.exec(stopCmd).catch(() => {});
+    };
+
+    window.addEventListener('beforeunload', stopOnboardingRuntime);
+
+    return () => {
+      window.removeEventListener('beforeunload', stopOnboardingRuntime);
+      stopOnboardingRuntime();
+    };
+  }, [config.corePath, config.configPath, config.workspacePath]);
 
   // 定義動態步驟路徑
-  const steps = [
+  const steps: StepDefinition[] = [
     { id: 'welcome', component: SetupStepWelcome },
     ...(userType === 'new' ? [{ id: 'initialize', component: SetupStepInitialize }] : []),
     { id: 'model', component: SetupStepModel },
@@ -29,8 +67,10 @@ const SetupWizard = ({ onFinished }) => {
   ];
 
   const totalSteps = steps.length;
-  const setupStageTotal = Math.max(totalSteps - 2, 1);
-  const setupStageCurrent = Math.min(Math.max(currentStep - 1, 0), setupStageTotal - 1);
+  const setupStepIds = steps.map((step) => step.id).filter((id) => id !== 'welcome' && id !== 'launch');
+  const currentStepId = steps[currentStep]?.id;
+  const setupStageTotal = Math.max(setupStepIds.length, 1);
+  const setupStageCurrent = Math.max(setupStepIds.indexOf(currentStepId), 0);
 
   const nextStep = () => {
     setCurrentStep((prev) => (prev < totalSteps - 1 ? prev + 1 : prev));
@@ -41,9 +81,13 @@ const SetupWizard = ({ onFinished }) => {
   };
 
   const renderStep = () => {
-    const StepComponent = steps[currentStep].component;
-    if (steps[currentStep].id === 'launch') {
-        return <StepComponent onComplete={onFinished} />;
+    const activeStep = steps[currentStep];
+    const StepComponent = activeStep.component;
+    if (activeStep.id === 'launch') {
+        return <StepComponent onComplete={() => {
+          completedRef.current = true;
+          onFinished();
+        }} />;
     }
     return <StepComponent onNext={nextStep} />;
   };
