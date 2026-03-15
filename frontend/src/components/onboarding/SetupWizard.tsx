@@ -25,6 +25,8 @@ type StepDefinition = {
  * NT-ClawLaunch: Setup Wizard Orchestrator
  * Implements the "Stepper UI" design secret.
  */
+const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+
 const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   const { userType, config } = useStore();
   const [currentStep, setCurrentStep] = useState(0); // Start with Step 0
@@ -37,12 +39,11 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
 
       window.electronAPI.exec('process:kill-all').catch(() => {});
 
-      const wrapPath = (p) => (p && p.startsWith('~') ? p : `"${p}"`);
-      const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR=${wrapPath(config.workspacePath)} ` : '';
-      const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH=${wrapPath(config.configPath + '/openclaw.json')} ` : '';
+      const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR=${shellQuote(config.workspacePath)} ` : '';
+      const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH=${shellQuote(config.configPath + '/openclaw.json')} ` : '';
       const envPrefix = `${stateDirEnv}${configPathEnv}`;
       const stopCmd = config.corePath
-        ? `cd "${config.corePath}" && ${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`
+        ? `cd ${shellQuote(config.corePath)} && ${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`
         : `${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`;
 
       window.electronAPI.exec(stopCmd).catch(() => {});
@@ -93,9 +94,10 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#fcfcfd] flex flex-col items-center justify-center p-6 font-sans">
+    <div className="h-screen bg-[#fcfcfd] flex flex-col items-center overflow-y-auto p-6 font-sans">
+      <div className="w-full max-w-2xl flex flex-col my-auto">
       {/* 頂部進度條 (Stepper UI) */}
-      <div className="w-full max-w-2xl mb-8">
+      <div className="w-full mb-8">
         <div className="flex justify-between items-center mb-4">
           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
             {currentStep === 0
@@ -143,6 +145,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
           <span className="font-bold text-gray-900 tracking-tighter">NT-ClawLaunch</span>
         </div>
       </div>
+      </div>{/* end my-auto wrapper */}
     </div>
   );
 };

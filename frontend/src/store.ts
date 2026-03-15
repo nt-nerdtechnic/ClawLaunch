@@ -21,7 +21,9 @@ interface Config {
   apiKey: string;
   platform: string;
   botToken: string;
+  gatewayPort: string;
   installDaemon: boolean;
+  useExternalTerminal: boolean;
   enabledSkills: string[];
   corePath: string;    // 主核心區
   configPath: string;  // 設定區
@@ -100,7 +102,9 @@ export const useStore = create<AppState>((set) => ({
     apiKey: '', 
     platform: 'telegram', 
     botToken: '',
+    gatewayPort: '',
     installDaemon: false,
+    useExternalTerminal: true,
     enabledSkills: [], // 初始擴展技能為空，核心技能已預設啟動
     corePath: '',
     configPath: '',

@@ -1,14 +1,15 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, Cpu, Brain, Globe, Zap, Network, AlertCircle } from 'lucide-react';
+import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, Cpu, Brain, Globe, Zap, Network, AlertCircle, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 import { execInTerminal } from '../../utils/terminal';
 
-const PathItem = ({ label, path, icon, onBrowse }) => {
+const PathItem = ({ label, path, icon, onBrowse, onChange }) => {
     const { t } = useTranslation();
+    const hasPath = !!path;
     return (
         <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center px-1">
@@ -16,21 +17,22 @@ const PathItem = ({ label, path, icon, onBrowse }) => {
                     <span className="text-blue-500 opacity-60">{icon}</span>
                     {label}
                 </p>
-                <div className={`w-1.5 h-1.5 rounded-full ${path && path !== t('modelSetup.paths.notSet') ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500 animate-pulse'}`} />
+                <div className={`w-1.5 h-1.5 rounded-full ${hasPath ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500 animate-pulse'}`} />
             </div>
-            <div 
-                onClick={onBrowse}
-                className="group flex items-center gap-3 bg-black/40 hover:bg-black/60 border border-white/5 hover:border-blue-500/30 p-2.5 rounded-xl transition-all cursor-pointer shadow-inner"
-            >
-                <div className="flex-1 min-w-0">
-                    <p className="text-[12px] text-slate-300 font-mono truncate px-1">
-                        {path || t('modelSetup.paths.clickToSelect')}
-                    </p>
-                </div>
-                <button 
-                    className="shrink-0 px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600 text-blue-400 group-hover:text-white text-[10px] font-black rounded-lg border border-blue-500/20 transition-all uppercase tracking-tighter"
+            <div className="flex items-stretch gap-2">
+                <input
+                    type="text"
+                    value={path || ''}
+                    onChange={(e) => onChange?.(e.target.value)}
+                    placeholder={t('modelSetup.paths.clickToSelect')}
+                    className="flex-1 bg-black/40 border border-white/5 focus:border-blue-500/40 rounded-xl px-3 py-2.5 text-[12px] text-slate-300 font-mono outline-none transition-colors"
+                />
+                <button
+                    onClick={onBrowse}
+                    title={t('modelSetup.paths.browse')}
+                    className="shrink-0 px-3 bg-blue-600/10 hover:bg-blue-600/30 border border-blue-500/20 rounded-xl transition-colors flex items-center justify-center"
                 >
-                    {t('modelSetup.paths.browse')}
+                    <FolderOpen size={15} className="text-blue-400" />
                 </button>
             </div>
         </div>
@@ -375,25 +377,28 @@ const SetupStepModel = ({ onNext }) => {
                     <div className="relative group">
                         <PathItem 
                             label={t('modelSetup.paths.core')} 
-                            path={config.corePath || t('modelSetup.paths.notSet')} 
+                            path={config.corePath} 
                             icon={<Package size={14}/>} 
                             onBrowse={() => handleBrowse('corePath')}
+                            onChange={(val) => setConfig({ corePath: val })}
                         />
                     </div>
                     <div className="relative group">
                         <PathItem 
                             label={t('modelSetup.paths.config')} 
-                            path={config.configPath || t('modelSetup.paths.notSet')} 
+                            path={config.configPath} 
                             icon={<Settings size={14}/>} 
                             onBrowse={() => handleBrowse('configPath')}
+                            onChange={(val) => setConfig({ configPath: val })}
                         />
                     </div>
                     <div className="relative group">
                         <PathItem 
                             label={t('modelSetup.paths.workspace')} 
-                            path={config.workspacePath || t('modelSetup.paths.notSet')} 
+                            path={config.workspacePath} 
                             icon={<Database size={14}/>} 
                             onBrowse={() => handleBrowse('workspacePath')}
+                            onChange={(val) => setConfig({ workspacePath: val })}
                         />
                     </div>
                 </div>

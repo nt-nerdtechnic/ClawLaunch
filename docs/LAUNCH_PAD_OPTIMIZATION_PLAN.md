@@ -41,3 +41,110 @@
 1. 資料來源策略：以 Gateway API 為主，日誌解析為備援。建議避免長期依賴單一 log 檔作為主資料源。
 2. 性能策略：保留目前輪詢節奏，新增快取 TTL 與 in-flight 去重，避免 renderer 頻繁重算。
 3. 風險策略：先做 read-only 觀測能力，再逐步開放 mutation 操作面，降低誤操作風險。
+
+---
+
+## Current Onboarding Flow (As-Is)
+以下為目前前端實際執行中的導引流程，目的是把「現況」與上方優化目標分開。這不是理想流程，而是目前程式碼真的會怎麼跑。
+
+### Entry Gate
+- App 啟動時先讀取本地設定 `config:read`，再立刻判斷要顯示 Onboarding 還是 Monitor。
+- 判斷條件非常寬鬆：只要 `localStorage.onboarding_finished === true`，或已儲存/偵測到任一條 `corePath`、`configPath`、`workspacePath`，就直接視為 onboarding 已完成。
+- `detect:paths` 只會暫存偵測結果到 `detectedConfig`，不會直接覆寫 store.config；但它仍會影響 onboarding 是否被跳過。
+
+### Mermaid Flow
+```mermaid
+flowchart TD
+	 A[App mount] --> B[loadConfig: config:read]
+	 B --> C[checkOnboardingStatus loadedConfig]
+	 C --> D{localStorage finished\nOR any runtime path exists?}
+	 D -- Yes --> M[set activeTab = monitor]
+	 D -- No --> O[set activeTab = onboarding]
+
+	 B --> E[initializeApp parallel tasks]
+	 E --> F[detect:paths]
+	 E --> G[checkEnvironment]
+	 E --> H[syncGatewayStatus]
+	 F --> I[cache detectedConfig/coreSkills/workspaceSkills]
+	 I --> J[checkOnboardingStatus loadedConfig + detected]
+	 J --> K{detected paths make\nflow look completed?}
+	 K -- Yes --> M
+	 K -- No --> O
+
+	 O --> W[SetupWizard]
+	 W --> W0[Welcome]
+	 W0 --> X{userType}
+
+	 X -- new --> Y[Initialize]
+	 Y --> Y1[project:initialize]
+	 Y1 --> Y2[config:write resolved paths]
+	 Y2 --> Z[Model]
+
+	 X -- existing --> Z[Model]
+
+	 Z --> Z1{pathsConfirmed?}
+	 Z1 -- No --> Z2[manual or detected path confirmation]
+	 Z2 --> Z
+	 Z1 -- Yes --> Z3[execute model]
+	 Z3 --> Z4{OAuth authChoice?}
+	 Z4 -- Yes --> Z5[open external Terminal\nrun onboard interactively]
+	 Z5 --> Z6[poll openclaw.json until auth profile appears]
+	 Z6 --> AA[Messaging]
+	 Z4 -- No --> Z7[run openclaw onboard --non-interactive]
+	 Z7 --> AA
+
+	 AA --> AA1[execute messaging]
+	 AA1 --> AA2[channels add with canonical or fallback alias]
+	 AA2 --> AA3{risky group channel?}
+	 AA3 -- Yes --> AA4[doctor --non-interactive gate]
+	 AA4 --> AB[Skills]
+	 AA3 -- No --> AB
+
+	 AB --> AB1[scan/import/delete workspace skills]
+	 AB1 --> AC[Launch]
+
+	 AC --> AC1{installDaemon?}
+	 AC1 -- Yes --> AC2[openclaw onboard --install-daemon]
+	 AC2 --> AC3[verifyLaunchReadiness]
+	 AC1 -- No --> AC4[only verify openclaw --version]
+	 AC3 --> AD[onFinished]
+	 AC4 --> AD
+	 AD --> AE[set onboarding_finished = true]
+	 AE --> M
+
+	 W --> WF[beforeunload or unmount]
+	 WF --> WG{completedRef ?}
+	 WG -- No --> WH[process:kill-all + gateway stop]
+	 WG -- Yes --> WI[skip cleanup]
+```
+
+### Step Responsibilities
+1. Welcome
+	決定 `userType` 是 `new` 或 `existing`。`new` 會清空目前設定與 `onboarding_finished`；`existing` 只預填偵測到的路徑，不直接帶入敏感授權資訊。
+2. Initialize
+	只在 `new` 模式出現。會呼叫 `project:initialize` 建立 Core / Config / Workspace，然後立即 `config:write`，避免後面被舊設定覆蓋。
+3. Model
+	先完成三區路徑確認，再做模型授權。OAuth 類型會開外部 Terminal 跑互動流程；API key / token 類型走非互動式 `openclaw onboard`。
+4. Messaging
+	呼叫 `openclaw channels add` 綁定通訊頻道，並對特定高風險群組頻道補跑 doctor 前置檢查。
+5. Skills
+	目前比較像工作區技能管理頁，不是純粹的「啟用技能」步驟。主要功能是掃描、匯入、刪除工作區技能。
+6. Launch
+	不是一律真的啟動 Gateway。若 `installDaemon=true` 才會安裝背景服務；否則只檢查 CLI 是否可用，真正啟動延後到 Dashboard。
+
+### Runtime Cleanup Behavior
+- Onboarding 尚未完成時，`SetupWizard` 在 `beforeunload` 或 unmount 會主動呼叫 `process:kill-all`，接著再嘗試執行 `openclaw gateway stop`。
+- 只有 Launch 步驟完成並觸發 `onFinished` 後，才會透過 `completedRef` 停止這段清理邏輯。
+
+### Current High-Impact Decision Points
+1. `checkOnboardingStatus` 只看 path 是否存在，不看模型授權、頻道綁定或 launch readiness；這會讓「偵測到舊安裝」直接跳過導引。
+2. `detect:paths` 雖然不直接覆寫 config，但會影響是否進 onboarding，因此它本質上仍是流程分流器。
+3. `skills` 畫面與 `useOnboardingAction('skills')` 的語義沒有完全對齊；畫面偏管理，hook 偏啟用旗標。
+4. `installDaemon=false` 時，Launch 步驟成功只代表 CLI 可執行，不代表 Gateway 已啟動。
+5. onboarding 關閉時的 cleanup 仍依賴當前 config 組合 stop 指令，因此在多實例或舊路徑殘留場景下要特別小心。
+
+### Optimization Implications
+- 若要讓導引流程變得可預期，第一優先不是換 UI，而是把 onboarding completion 的判準改成「狀態完整度」而不是「任一路徑存在」。
+- 若要保留既有安裝自動偵測，建議把它改成「候選方案」，而不是直接影響跳轉。
+- `skills` 步驟應明確定義成「管理已安裝技能」或「選擇要啟用的能力」，目前兩種語義混在一起。
+- `launch` 步驟需要明確區分「CLI ready」「daemon installed」「gateway running」三種狀態，否則使用者很容易把它們視為同一件事。

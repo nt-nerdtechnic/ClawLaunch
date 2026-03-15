@@ -1,14 +1,20 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { Package, Settings, Database, ArrowRight, Loader2, CheckCircle2, AlertCircle, Monitor } from 'lucide-react';
+import { Package, Settings, Database, ArrowRight, Loader2, CheckCircle2, AlertCircle, Monitor, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
 
-const PathItem = ({ label, path, icon, description, onBrowse, error, warning }) => {
+const PathItem = ({ label, path, icon, description, onBrowse, onChange, error, warning }) => {
     const { t } = useTranslation();
     const isError = !!error;
     const isWarning = !!warning && !isError;
+
+    const borderClass = isError
+        ? 'border-red-300'
+        : isWarning
+        ? 'border-amber-300'
+        : 'border-gray-200 focus-within:border-blue-400';
 
     return (
         <div className="flex flex-col gap-2">
@@ -22,19 +28,20 @@ const PathItem = ({ label, path, icon, description, onBrowse, error, warning }) 
                 </div>
                 <div className={`w-1.5 h-1.5 rounded-full ${path && !isError ? (isWarning ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]') : isError ? 'bg-red-500' : 'bg-gray-200'}`} />
             </div>
-            <div 
-                onClick={onBrowse}
-                className={`group flex items-center gap-3 bg-slate-50 hover:bg-white border transition-all cursor-pointer rounded-2xl p-3 ${isError ? 'border-red-200 bg-red-50' : isWarning ? 'border-amber-200 bg-amber-50/30' : 'border-gray-100 hover:border-blue-500/30'}`}
-            >
-                <div className="flex-1 min-w-0">
-                    <p className={`text-[12px] font-mono truncate px-1 ${path ? 'text-slate-700' : 'text-slate-300'}`}>
-                        {path || t('setupInitialize.selectBtn')}
-                    </p>
-                </div>
-                <button 
-                    className="shrink-0 px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600 text-blue-600 group-hover:text-white text-[10px] font-black rounded-lg border border-blue-500/10 transition-all uppercase tracking-tighter"
+            <div className={`flex items-stretch gap-2 bg-slate-50 border rounded-2xl px-3 py-1.5 transition-colors ${isError ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50/30 border-amber-200' : 'border-gray-100 focus-within:border-blue-400'}`}>
+                <input
+                    type="text"
+                    value={path || ''}
+                    onChange={(e) => onChange?.(e.target.value)}
+                    placeholder={t('setupInitialize.selectBtn')}
+                    className={`flex-1 bg-transparent text-[12px] font-mono outline-none ${path ? 'text-slate-700' : 'text-slate-400'}`}
+                />
+                <button
+                    onClick={onBrowse}
+                    title={t('modelSetup.paths.browse')}
+                    className="shrink-0 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center"
                 >
-                    {t('modelSetup.paths.browse')}
+                    <FolderOpen size={14} className="text-blue-500" />
                 </button>
             </div>
             {isError && <p className="text-[10px] text-red-500 font-bold px-1 flex items-center gap-1"><AlertCircle size={10} /> {error}</p>}
@@ -258,6 +265,7 @@ const SetupStepInitialize = ({ onNext }) => {
                         path={config.corePath}
                         icon={<Package size={14} />}
                         onBrowse={() => handleBrowse('corePath')}
+                        onChange={(val) => setConfig({ corePath: val })}
                         error={errors.corePath}
                         warning={warnings.corePath}
                     />
@@ -267,6 +275,7 @@ const SetupStepInitialize = ({ onNext }) => {
                         path={config.configPath}
                         icon={<Settings size={14} />}
                         onBrowse={() => handleBrowse('configPath')}
+                        onChange={(val) => setConfig({ configPath: val })}
                         error={errors.configPath}
                         warning={warnings.configPath}
                     />
@@ -276,6 +285,7 @@ const SetupStepInitialize = ({ onNext }) => {
                         path={config.workspacePath}
                         icon={<Database size={14} />}
                         onBrowse={() => handleBrowse('workspacePath')}
+                        onChange={(val) => setConfig({ workspacePath: val })}
                         error={errors.workspacePath}
                         warning={warnings.workspacePath}
                     />

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import type { SkillItem } from '../store';
-import { Info, Lock, ChevronDown, ChevronUp, Puzzle, ShieldCheck, RefreshCw, PackagePlus, Trash2, FolderOpen, Blocks } from 'lucide-react';
+import { Info, Lock, ChevronDown, ChevronUp, Puzzle, ShieldCheck, RefreshCw, PackagePlus, Trash2, FolderOpen, Blocks, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // ── 技能卡片元件 ──────────────────────────────────────────────────────────────
@@ -109,9 +109,14 @@ export function SkillManager() {
   const [activeTab, setActiveTab] = useState<'core' | 'workspace'>('workspace');
   const [scanning, setScanning] = useState(false);
   const [acting, setActing] = useState(false);
+  const [scanError, setScanError] = useState('');
 
   const rescan = async () => {
-    if (!window.electronAPI) return;
+    if (!window.electronAPI) {
+      setScanError('electronAPI 不可用，請確認 Electron 環境正確啟動。');
+      return;
+    }
+    setScanError('');
     setScanning(true);
     try {
       const result = await window.electronAPI.exec('detect:paths');
@@ -119,12 +124,18 @@ export function SkillManager() {
         try {
           const data = JSON.parse(result.stdout);
           if (data.coreSkills) setCoreSkills(data.coreSkills);
-          if (data.existingConfig?.workspaceSkills) setWorkspaceSkills(data.existingConfig.workspaceSkills);
+          if (data.existingConfig?.workspaceSkills !== undefined) {
+            setWorkspaceSkills(data.existingConfig.workspaceSkills);
+          }
         } catch (e) {
-          console.warn("Rescan JSON parse failed", e);
+          setScanError('技能資料解析失敗，請重試。');
         }
+      } else {
+        setScanError(result?.stderr || '掃描失敗，請重試。');
       }
-    } catch (e) {}
+    } catch (e: any) {
+      setScanError(e?.message || '掃描時發生未知錯誤。');
+    }
     setScanning(false);
   };
 
@@ -218,6 +229,13 @@ export function SkillManager() {
           </button>
         </div>
       </div>
+
+      {scanError && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 rounded-2xl text-xs text-red-600 dark:text-red-400 font-medium animate-in fade-in duration-200">
+          <AlertCircle size={14} className="shrink-0" />
+          {scanError}
+        </div>
+      )}
 
       <div className="flex gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 max-w-sm">
         {tabs.map(tab => (

@@ -8,7 +8,6 @@ import fs from 'node:fs/promises';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
-let clawProcess: any = null;
 const activeProcesses = new Set<any>();
 
 const DEV_PORT_RANGE_START = 5173;
@@ -192,9 +191,21 @@ function parseOpenClawConfig(content: string) {
         // 最終保底
         if (!authChoice && apiKey) authChoice = 'apiKey';
 
-        return { apiKey, model, workspace, botToken, corePath, authChoice };
+        // 6. 提取所有已授權的 providers
+        const providers: string[] = [];
+        if (parsed.auth?.profiles) {
+            for (const key in parsed.auth.profiles) {
+                const profile = parsed.auth.profiles[key];
+                const provider = profile.provider || key.split(':')[0];
+                if (provider && !providers.includes(provider)) {
+                    providers.push(provider);
+                }
+            }
+        }
+
+        return { apiKey, model, workspace, botToken, corePath, authChoice, providers };
     } catch (e) {
-        return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '' };
+        return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '', providers: [] as string[] };
     }
 }
 
@@ -370,37 +381,26 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 
 ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []) => {
   const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
-  
-  if (fullCommand.includes('gateway start')) {
-    if (clawProcess) return { code: 0, stdout: 'Gateway already running' };
-    clawProcess = spawn(fullCommand, { shell: true });
-    clawProcess.stdout.on('data', (data: any) => {
+
+  // gateway:start-bg <cmd> — spawn the command in background and return immediately.
+  // Used for `gateway run` which is a long-running foreground process.
+  if (fullCommand.startsWith('gateway:start-bg ')) {
+    const actualCmd = fullCommand.replace(/^gateway:start-bg\s+/, '');
+    const child = spawn(actualCmd, { shell: true });
+    activeProcesses.add(child);
+    child.stdout.on('data', (data: any) => {
       mainWindow?.webContents.send('shell:stdout', { data: data.toString(), source: 'stdout' });
     });
-    clawProcess.stderr.on('data', (data: any) => {
+    child.stderr.on('data', (data: any) => {
       mainWindow?.webContents.send('shell:stdout', { data: data.toString(), source: 'stderr' });
     });
-    clawProcess.on('exit', (code: number) => {
-      const exitedProcess = clawProcess;
-      clawProcess = null;
-      if (exitedProcess) activeProcesses.delete(exitedProcess);
-      // Only surface non-zero exits as errors; a clean exit (code 0) means the
-      // LaunchAgent was started successfully and the start command exited normally.
-      if (code !== 0) {
+    child.on('exit', (code: number) => {
+      activeProcesses.delete(child);
+      if (code !== 0 && code !== null) {
         mainWindow?.webContents.send('shell:stdout', { data: `Gateway process exited with code ${code}`, source: 'stderr' });
       }
     });
-    activeProcesses.add(clawProcess);
-    return { code: 0, stdout: 'Gateway starting...' };
-  }
-
-  if (fullCommand.includes('gateway stop')) {
-    if (clawProcess) {
-      clawProcess.kill();
-      clawProcess = null;
-      return { code: 0, stdout: 'Gateway stopped' };
-    }
-    return { code: 0, stdout: 'Gateway not running' };
+    return { code: 0, stdout: String(child.pid ?? ''), exitCode: 0 };
   }
 
   if (fullCommand.startsWith('config:write')) {
@@ -563,8 +563,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     }
 
     let workspaceSkills: any[] = [];
-    if (configPath || corePath) {
-        workspaceSkills = await scanInstalledSkills(configPath, corePath);
+    const effectiveWorkspacePath = workspacePath || possibleWorkspace;
+    if (effectiveWorkspacePath) {
+        workspaceSkills = await scanInstalledSkills(effectiveWorkspacePath);
     }
 
     return { 

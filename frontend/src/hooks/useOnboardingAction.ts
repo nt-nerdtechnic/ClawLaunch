@@ -183,6 +183,50 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     addLocalLog('✅ 網關服務連通性正常。', 'system');
   };
 
+  const runDoctorPreflight = async (params: {
+    corePath: string;
+    envPrefix: string;
+    execCmd: string;
+    addLocalLog: (text: string, source?: string) => void;
+    expectedChannel?: string;
+  }) => {
+    params.addLocalLog('🩺 正在執行導引前置檢查 (doctor --non-interactive)...', 'system');
+    const doctorCmd = `cd ${shellQuote(params.corePath)} && ${params.envPrefix}${params.execCmd} openclaw doctor --non-interactive`;
+    const doctorRes = await (window as any).electronAPI.exec(doctorCmd);
+    const doctorOutput = `${doctorRes?.stdout || ''}\n${doctorRes?.stderr || ''}`;
+
+    if (!isCommandSuccess(doctorRes)) {
+      throw new Error(doctorRes?.stderr || doctorRes?.stdout || 'Doctor 檢查失敗');
+    }
+
+    const riskyChannelMatches = Array.from(
+      doctorOutput.matchAll(
+        /channels\.(whatsapp|irc|signal|imessage)(?:\.[a-z0-9_.-]+)?\.groupPolicy is "allowlist" but groupAllowFrom(?: \(and allowFrom\))? is empty/gi,
+      ),
+    ).map((entry) => String(entry[1] || '').toLowerCase());
+
+    if (riskyChannelMatches.length === 0) {
+      params.addLocalLog('✅ Doctor 前置檢查完成，未發現群組授權風險。', 'system');
+      return;
+    }
+
+    const uniqueRiskyChannels = Array.from(new Set(riskyChannelMatches));
+    const hasExpectedChannelRisk = params.expectedChannel
+      ? uniqueRiskyChannels.includes(params.expectedChannel.toLowerCase())
+      : true;
+
+    params.addLocalLog(
+      `⚠️ Doctor 偵測到群組授權風險：${uniqueRiskyChannels.join(', ')}`,
+      'stderr',
+    );
+
+    if (hasExpectedChannelRisk) {
+      throw new Error(
+        `頻道設定尚未完成：channels.${params.expectedChannel}.groupPolicy=allowlist 但 groupAllowFrom 為空。請設定 groupAllowFrom，或改為 groupPolicy=open。`,
+      );
+    }
+  };
+
   const waitForOAuthCompletion = async (params: {
     authChoice: string;
     configPath: string;
@@ -288,7 +332,18 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           }
           case 'launch': {
             addLocalLog('🚀 啟動最終發射檢查程序 (Final Verification)...', 'system');
-            await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
+            if (config.installDaemon) {
+              await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
+            } else {
+              // installDaemon=false 時 Gateway 尚未啟動（將從儀表板手動啟動），只驗證 CLI 可用性
+              const versionRes = await (window as any).electronAPI.exec(
+                `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
+              );
+              if (!isCommandSuccess(versionRes)) {
+                throw new Error(versionRes.stderr || 'OpenClaw CLI 無法啟動');
+              }
+              addLocalLog('✅ OpenClaw CLI 可正常執行，Gateway 將於儀表板手動啟動。', 'system');
+            }
             break;
           }
           case 'skills': {
@@ -452,6 +507,29 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             }
             throw new Error(lastErr || '頻道繫結失敗');
           }
+
+          const channelsRequireSafeGroupDefault = new Set(['whatsapp', 'irc', 'signal', 'imessage']);
+          if (channelsRequireSafeGroupDefault.has(platform)) {
+            addLocalLog(`🛡️ 套用 ${platform} 群組授權預設策略 (groupPolicy=open)...`, 'system');
+            const setPolicyCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.groupPolicy ${shellQuote('"open"')} --json`;
+            const setPolicyRes = await (window as any).electronAPI.exec(setPolicyCmd);
+            if (!isCommandSuccess(setPolicyRes)) {
+              addLocalLog(
+                `⚠️ 無法自動套用 ${platform}.groupPolicy=open，將改由 doctor 前置檢查攔截。`,
+                'stderr',
+              );
+            } else {
+              addLocalLog(`✅ 已套用 channels.${platform}.groupPolicy="open"。`, 'system');
+            }
+          }
+
+          await runDoctorPreflight({
+            corePath,
+            envPrefix,
+            execCmd,
+            addLocalLog,
+            expectedChannel: platform,
+          });
           break;
         }
 
@@ -491,11 +569,18 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               throw new Error(daemonRes.stderr || '背景 Gateway 服務安裝失敗');
             }
             addLocalLog('✅ 背景 Gateway 服務安裝完成。', 'system');
+            await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
           } else {
-            addLocalLog('ℹ️ 目前設定為不安裝背景 Gateway 服務。', 'system');
+            // installDaemon=false 時 Gateway 尚未啟動（將從儀表板手動啟動），只驗證 CLI 可用性
+            addLocalLog('ℹ️ 目前設定為不安裝背景 Gateway 服務，Gateway 將於儀表板手動啟動。', 'system');
+            const versionRes = await (window as any).electronAPI.exec(
+              `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
+            );
+            if (!isCommandSuccess(versionRes)) {
+              throw new Error(versionRes.stderr || 'OpenClaw CLI 無法啟動');
+            }
+            addLocalLog('✅ OpenClaw CLI 可正常執行，請於儀表板手動啟動 Gateway。', 'system');
           }
-
-          await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
           break;
         }
       }
