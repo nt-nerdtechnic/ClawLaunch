@@ -83,6 +83,45 @@
     "openFolderFailed": "Failed to open {{zone}}: {{msg}}",
     "disconnect": "Disconnect",
     "startService": "Start Service",
+    "activeStaff": "Active Staff",
+    "actionQueue": "Action Queue",
+    "processing": "Processing...",
+    "approve": "Approve",
+    "staff": {
+      "state": {
+        "busy": "Busy",
+        "standby": "Standby",
+        "blocked": "Blocked"
+      },
+      "queue": "Queue {{count}}"
+    },
+    "taskSection": {
+      "title": "Task Operations",
+      "taskBoard": "Task Board",
+      "schedule": "Scheduling",
+      "scheduleImmediate": "Immediate",
+      "scheduleToday": "Today",
+      "scheduleBacklog": "Backlog",
+      "approvals": "Approvals",
+      "pending": "Pending",
+      "approvalFallbackTitle": "Approval Required",
+      "executionEvidence": "Execution Evidence",
+      "eventQueue": "Event Queue",
+      "emptyTasks": "No tasks in current snapshot.",
+      "emptyApprovals": "No pending approvals right now.",
+      "emptyEvidence": "No execution evidence available.",
+      "emptyEvents": "No events waiting for acknowledgment.",
+      "ack30m": "Ack 30m",
+      "ack24h": "Ack 24h",
+      "ackLoading": "Ack...",
+      "ackedHint": "Acknowledged events: {{count}} (temporarily hidden until TTL expires).",
+      "logs": {
+        "eventAcked": "Event {{eventId}} acknowledged, TTL={{ttlSec}}s",
+        "eventAckFailed": "Event {{eventId}} ack failed: {{message}}",
+        "approvalSent": "Approval {{id}} sent with decision={{decision}}",
+        "approvalRollback": "Approval {{id}} failed and optimistic state rolled back"
+      }
+    },
     "status": {
         "verified": "VERIFIED",
         "analyzing": "ANALYZING...",
@@ -363,7 +402,66 @@
     "trendTitle": "Token Consumption Trend",
     "efficiencyTitle": "Inference Efficiency Analysis",
     "noData": "No consumption data available",
-    "waitingData": "Awaiting data injection..."
+    "waitingData": "Awaiting data injection...",
+    "window": {
+      "today": "Today",
+      "7d": "Last 7 Days",
+      "30d": "Last 30 Days",
+      "tokensUnit": "tokens"
+    },
+    "labels": {
+      "dailyTotalStacked": "Daily Total Consumption (Stacked)",
+      "readModel": "Read Model",
+      "input": "Input",
+      "output": "Output",
+      "inputOutputRatio": "Input vs Output Ratio",
+      "inputLoad": "Input Load",
+      "outputDensity": "Output Density",
+      "byAgent": "Token Consumption by Agent"
+    },
+    "subscription": {
+      "title": "Subscription Window",
+      "subtitle": "Quota & Billing Cycle",
+      "notConnected": "Not Connected",
+      "defaultUnit": "USD",
+      "usedLimit": "Used {{used}} / Limit {{limit}} {{unit}}"
+    },
+    "connectors": {
+      "title": "Data Connectors",
+      "subtitle": "Connection Health",
+      "snapshot": "Read Model Snapshot",
+      "history": "Usage History",
+      "budget": "Budget Summary",
+      "subscription": "Subscription Window",
+      "context": "Context Pressure",
+      "connected": "connected",
+      "partial": "partial"
+    },
+    "context": {
+      "title": "Context Pressure",
+      "subtitle": "Sessions Near Context Limit",
+      "unknownSession": "unknown-session",
+      "unknownModel": "unknown-model",
+      "usageLine": "{{used}} / {{limit}} tokens · {{model}}",
+      "noData": "No context window data"
+    },
+    "costHotspots": {
+      "title": "Cost Hotspots",
+      "subtitle": "Where It Starts Getting Expensive",
+      "unknownSource": "unknown",
+      "noData": "No cost data"
+    },
+    "budget": {
+      "subtitle": "30-Day Budget Policy Enforcement",
+      "monthlySpent": "Monthly Spent",
+      "limit": "Limit",
+      "noLimit": "No Limit",
+      "burnRate": "Burn Rate",
+      "projectedDays": "Projected Days",
+      "infinite": "∞",
+      "days": "Days",
+      "riskOwnership": "Risk Ownership"
+    }
   },
   "setupSkills": {
     "title": "Expand Your Lobster Superpowers",

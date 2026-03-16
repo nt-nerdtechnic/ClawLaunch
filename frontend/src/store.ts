@@ -87,6 +87,7 @@ export interface ReadModelStatus {
   tokensOut: number;
   cost?: number;
   model?: string;
+  contextWindowTokens?: number;
 }
 
 export interface ReadModelBudgetEvaluation {

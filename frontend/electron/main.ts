@@ -404,6 +404,9 @@ const normalizeReadModelSnapshot = (snapshot: any) => {
     state: normalizeString(pickFirst(item, ['state', 'status'], 'unknown')).toLowerCase(),
     tokensIn: normalizeNumber(pickFirst(item, ['tokensIn', 'inputTokens', 'tokens_in'], 0), 0),
     tokensOut: normalizeNumber(pickFirst(item, ['tokensOut', 'outputTokens', 'tokens_out'], 0), 0),
+    cost: normalizeNumber(pickFirst(item, ['cost', 'totalCost', 'estimatedCost', 'costUsd'], 0), 0),
+    model: normalizeString(pickFirst(item, ['model', 'modelName'], '')),
+    contextWindowTokens: normalizeNumber(pickFirst(item, ['contextWindowTokens', 'contextTokens', 'context_limit_tokens'], 0), 0),
   }));
 
   const statusMap = new Map<string, any>();
@@ -426,6 +429,11 @@ const normalizeReadModelSnapshot = (snapshot: any) => {
         pickFirst(item, ['tokensOut', 'outputTokens', 'tokens_out', 'usageOut'], mappedStatus?.tokensOut || 0),
         0,
       ),
+      cost: normalizeNumber(
+        pickFirst(item, ['cost', 'totalCost', 'estimatedCost', 'costUsd'], mappedStatus?.cost || 0),
+        0,
+      ),
+      model: normalizeString(pickFirst(item, ['model', 'modelName'], mappedStatus?.model || '')),
       updatedAt: normalizeString(
         pickFirst(item, ['updatedAt', 'lastSeenAt', 'timestamp', 'createdAt'], raw.generatedAt || new Date().toISOString()),
       ),
@@ -2674,96 +2682,60 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     createdItems.push(dirPath);
                   };
 
-                  // 2. 初始化 Config 目錄與 openclaw.json
+                  // 2. 安裝依賴（先安裝才有可用的 CLI，讓後續 openclaw setup 可以執行）
+                  const installRes = await runCommandWithStreaming('pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
+                  if (installRes.code !== 0) {
+                    resolve({ code: 1, stderr: installRes.stderr || 'Dependency installation failed.', exitCode: 1 });
+                    return;
+                  }
+
+                  // 3. 預熱 CLI 執行環境 (會在 dist 過舊時自動建置 TypeScript)
+                  const warmupRes = await runCommandWithStreaming('pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
+                  if (warmupRes.code !== 0) {
+                    resolve({ code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 });
+                    return;
+                  }
+
+                  // 4. 用 openclaw setup 建立/更新 config（處理 workspace / gateway 欄位）
+                  //    此時 CLI 已就緒，可直接呼叫原生指令，不再依賴 Launcher 手寫模板
                   mainWindow?.webContents.send('shell:stdout', { data: `>>> Initializing config at ${finalConfigPath}...\n`, source: 'stdout' });
                   await ensureDirWithTracking(finalConfigPath);
 
                   const configFilePath = path.join(finalConfigPath, 'openclaw.json');
-                  // channels.*.enabled: true 是讓 OpenClaw bundled channel plugin 自動啟用的關鍵
-                  // （見 src/plugins/config-state.ts: isBundledChannelEnabledByChannelConfig）
-                  // 沒有這個設定的極簡 openclaw.json 會導致 telegram 等 channel 在 registry 裡
-                  // 被視為 "bundled (disabled by default)"，造成 channels add 回 "Unknown channel"。
-                  const initialConfig = {
-                    agents: {
-                      defaults: {
-                        workspace: finalWorkspacePath
-                      }
-                    },
-                    channels: {
-                      telegram: { enabled: true },
-                      discord: { enabled: true },
-                      slack: { enabled: true },
-                      whatsapp: { enabled: true, groupPolicy: 'open' },
-                      line: { enabled: true },
-                      irc: { enabled: true, groupPolicy: 'open' },
-                      googlechat: { enabled: true },
-                      signal: { enabled: true, groupPolicy: 'open' },
-                      imessage: { enabled: true, groupPolicy: 'open' }
-                    }
-                  };
+                  let configExistedBefore = false;
+                  try { await fs.stat(configFilePath); configExistedBefore = true; } catch {}
 
-                  const wroteConfig = await writeFileIfMissing(configFilePath, `${JSON.stringify(initialConfig, null, 2)}\n`);
-                  if (wroteConfig) {
-                    createdItems.push(configFilePath);
-                  } else {
+                  const setupEnv = `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_STATE_DIR=${shellQuote(finalConfigPath)}`;
+                  const setupRes = await runCommandWithStreaming(
+                    `${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)} --init-channels`,
+                    'Initializing OpenClaw config...'
+                  );
+                  if (setupRes.code !== 0) {
+                    resolve({ code: 1, stderr: setupRes.stderr || 'openclaw setup failed.', exitCode: 1 });
+                    return;
+                  }
+                  if (configExistedBefore) {
                     existingItems.push(configFilePath);
-                    // Migrate launcher-legacy keys that OpenClaw schema does not recognize.
-                    try {
-                      const raw = await fs.readFile(configFilePath, 'utf-8');
-                      const parsed = JSON.parse(raw);
-                      let changed = false;
-
-                      if (parsed && typeof parsed === 'object') {
-                        if ('version' in parsed) {
-                          delete parsed.version;
-                          changed = true;
-                        }
-                        if ('corePath' in parsed) {
-                          delete parsed.corePath;
-                          changed = true;
-                        }
-
-                        if (!parsed.agents || typeof parsed.agents !== 'object') {
-                          parsed.agents = {};
-                          changed = true;
-                        }
-                        if (!parsed.agents.defaults || typeof parsed.agents.defaults !== 'object') {
-                          parsed.agents.defaults = {};
-                          changed = true;
-                        }
-                        if (!parsed.agents.defaults.workspace) {
-                          parsed.agents.defaults.workspace = finalWorkspacePath;
-                          changed = true;
-                        }
-
-                        if (!parsed.channels || typeof parsed.channels !== 'object') {
-                          parsed.channels = {};
-                          changed = true;
-                        }
-
-                        const channelsNeedingOpenPolicy = ['whatsapp', 'irc', 'signal', 'imessage'];
-                        for (const channelName of channelsNeedingOpenPolicy) {
-                          const channelConfig = parsed.channels[channelName];
-                          if (channelConfig && typeof channelConfig === 'object' && !channelConfig.groupPolicy) {
-                            channelConfig.groupPolicy = 'open';
-                            changed = true;
-                          }
-                        }
-                      }
-
-                      if (changed) {
-                        await fs.writeFile(configFilePath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf-8');
-                        mainWindow?.webContents.send('shell:stdout', {
-                          data: '>>> Migrated openclaw.json to OpenClaw-compatible schema.\n',
-                          source: 'stdout'
-                        });
-                      }
-                    } catch {
-                      // Keep initialization resilient; failures here should not block the whole flow.
-                    }
+                  } else {
+                    createdItems.push(configFilePath);
                   }
 
-                  // 3. 初始化 Workspace 目錄與完整 bootstrap 基礎檔
+                  // 清理 Launcher 舊版可能寫入的 legacy keys（不影響 openclaw schema）
+                  try {
+                    const raw = await fs.readFile(configFilePath, 'utf-8');
+                    const parsed = JSON.parse(raw);
+                    let changed = false;
+                    if ('version' in parsed) { delete parsed.version; changed = true; }
+                    if ('corePath' in parsed) { delete parsed.corePath; changed = true; }
+                    if (changed) {
+                      await fs.writeFile(configFilePath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf-8');
+                    }
+                  } catch {
+                    // legacy cleanup 失敗不阻斷流程
+                  }
+
+                  // 6. 初始化 Workspace 附加資料夾與 Launcher 專屬 bootstrap 文件
+                  // （openclaw setup 已建立 workspace 基礎目錄與 AGENTS.md；此處補充 Launcher 專屬內容）
                   mainWindow?.webContents.send('shell:stdout', { data: `>>> Setting up workspace at ${finalWorkspacePath}...\n`, source: 'stdout' });
                   const skillsDir = path.join(finalWorkspacePath, 'skills');
                   const extensionsDir = path.join(finalWorkspacePath, 'extensions');
@@ -2779,7 +2751,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     'USER.md': '# USER\n\nCapture user context, personas, and preference assumptions.\n',
                     'HEARTBEAT.md': '# HEARTBEAT\n\nTrack operating rhythm, rituals, and handoff cadence.\n',
                     'BOOTSTRAP.md': '# BOOTSTRAP\n\nOutline startup checklist and first-run expectations.\n',
-                    'MEMORY.md': '# MEMORY\n\nPersistent project memory and verified decisions.\n',
+                    'MEMORY.md': '# MEMORY\n\nPersistent project memory and verify decisions.\n',
                   };
 
                   for (const [name, content] of Object.entries(bootstrapTemplates)) {
@@ -2790,20 +2762,6 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     } else {
                       existingItems.push(targetPath);
                     }
-                  }
-
-                  // 4. 安裝依賴，確保後續 onboarding/OAuth 不會因缺少 node_modules 失敗
-                  const installRes = await runCommandWithStreaming('pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
-                  if (installRes.code !== 0) {
-                    resolve({ code: 1, stderr: installRes.stderr || 'Dependency installation failed.', exitCode: 1 });
-                    return;
-                  }
-
-                  // 5. 預熱 CLI 執行環境 (會在 dist 過舊時自動建置 TypeScript)
-                  const warmupRes = await runCommandWithStreaming('pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
-                  if (warmupRes.code !== 0) {
-                    resolve({ code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 });
-                    return;
                   }
 
                     mainWindow?.webContents.send('shell:stdout', { data: `>>> Initialization complete!\n`, source: 'stdout' });

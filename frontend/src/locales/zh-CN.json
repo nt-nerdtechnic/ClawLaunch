@@ -83,6 +83,45 @@
     "openFolderFailed": "无法打开 {{zone}}：{{msg}}",
     "disconnect": "断开连接",
     "startService": "启动服务",
+    "activeStaff": "活跃团队成员",
+    "actionQueue": "任务操作中心",
+    "processing": "处理中...",
+    "approve": "批准",
+    "staff": {
+      "state": {
+        "busy": "忙碌",
+        "standby": "待命",
+        "blocked": "卡住"
+      },
+      "queue": "排队 {{count}}"
+    },
+    "taskSection": {
+      "title": "任务分区",
+      "taskBoard": "任务板",
+      "schedule": "排期概览",
+      "scheduleImmediate": "立即处理",
+      "scheduleToday": "今日处理",
+      "scheduleBacklog": "积压任务",
+      "approvals": "审批",
+      "pending": "待审",
+      "approvalFallbackTitle": "需要审批",
+      "executionEvidence": "执行证据",
+      "eventQueue": "事件队列",
+      "emptyTasks": "当前快照没有任务数据。",
+      "emptyApprovals": "当前没有待审批项目。",
+      "emptyEvidence": "当前没有可显示的执行证据。",
+      "emptyEvents": "当前没有待确认事件。",
+      "ack30m": "确认 30 分钟",
+      "ack24h": "确认 24 小时",
+      "ackLoading": "确认中...",
+      "ackedHint": "已确认事件：{{count}} 条（TTL 内先隐藏）。",
+      "logs": {
+        "eventAcked": "事件 {{eventId}} 已确认，TTL={{ttlSec}} 秒",
+        "eventAckFailed": "事件 {{eventId}} 确认失败：{{message}}",
+        "approvalSent": "审批 {{id}} 已送出，决策={{decision}}",
+        "approvalRollback": "审批 {{id}} 失败，已回滚 optimistic 状态"
+      }
+    },
     "status": {
         "verified": "VERIFIED",
         "analyzing": "ANALYZING...",
@@ -297,7 +336,66 @@
     "trendTitle": "Token 消耗趋势",
     "efficiencyTitle": "推论效率分析",
     "noData": "暂无消耗数据记录",
-    "waitingData": "等待数据注入..."
+    "waitingData": "等待数据注入...",
+    "window": {
+      "today": "今日",
+      "7d": "近 7 天",
+      "30d": "近 30 天",
+      "tokensUnit": "tokens"
+    },
+    "labels": {
+      "dailyTotalStacked": "每日总消耗（堆叠）",
+      "readModel": "读模快照",
+      "input": "输入",
+      "output": "输出",
+      "inputOutputRatio": "输入与输出比例",
+      "inputLoad": "输入负载",
+      "outputDensity": "输出密度",
+      "byAgent": "Agent 消耗归因"
+    },
+    "subscription": {
+      "title": "订阅视窗",
+      "subtitle": "配额与计费周期",
+      "notConnected": "未接线",
+      "defaultUnit": "USD",
+      "usedLimit": "已用 {{used}} / 上限 {{limit}} {{unit}}"
+    },
+    "connectors": {
+      "title": "数据接线",
+      "subtitle": "连接健康度",
+      "snapshot": "读模快照",
+      "history": "用量历史",
+      "budget": "预算摘要",
+      "subscription": "订阅视窗",
+      "context": "上下文压力",
+      "connected": "已连接",
+      "partial": "部分连接"
+    },
+    "context": {
+      "title": "上下文压力",
+      "subtitle": "接近 Context 上限的 Session",
+      "unknownSession": "未知 session",
+      "unknownModel": "未知模型",
+      "usageLine": "{{used}} / {{limit}} tokens · {{model}}",
+      "noData": "没有可用的 context window 数据"
+    },
+    "costHotspots": {
+      "title": "成本热点",
+      "subtitle": "最容易升高成本的来源",
+      "unknownSource": "未知来源",
+      "noData": "没有成本数据"
+    },
+    "budget": {
+      "subtitle": "30 天预算治理",
+      "monthlySpent": "本月支出",
+      "limit": "上限",
+      "noLimit": "无上限",
+      "burnRate": "燃烧速率",
+      "projectedDays": "预计可用天数",
+      "infinite": "∞",
+      "days": "天",
+      "riskOwnership": "风险归属"
+    }
   },
   "setupSkills": {
     "title": "扩展您的龙虾超能力",

@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
-import type { ReadModelSession } from '../store';
+import type { ReadModelBudgetSummary, ReadModelSession, ReadModelStatus } from '../store';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Target, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,33 @@ type DaySeries = {
   out: number;
   tokens: number;
   cost: number;
+};
+
+type SubscriptionWindow = {
+  connected: boolean;
+  planLabel: string;
+  consumed: number;
+  remaining: number;
+  limit: number;
+  usagePercent: number;
+  cycleStart: string;
+  cycleEnd: string;
+  unit: string;
+};
+
+type SubscriptionRaw = Partial<{
+  consumed: number;
+  remaining: number;
+  limit: number;
+  usagePercent: number;
+  cycleStart: string;
+  cycleEnd: string;
+  unit: string;
+  planLabel: string;
+}>;
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 };
 
 const formatDelta = (current: number, previous: number) => {
@@ -47,41 +74,43 @@ const toDateKey = (isoTime: string) => {
 
 export function Analytics() {
   const { t } = useTranslation();
-  const { setUsage, snapshot, snapshotHistory } = useStore();
+  const { setUsage, snapshot, snapshotHistory, rawSnapshot } = useStore();
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  const [usageWindow, setUsageWindow] = useState<'today' | '7d' | '30d'>('7d');
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
 
+  const snapshotSessions = snapshot?.sessions;
   const sessions: ReadModelSession[] = useMemo(() => {
-    if (!Array.isArray(snapshot?.sessions)) return [];
-    return snapshot.sessions.filter((item): item is ReadModelSession => !!item && typeof item === 'object');
-  }, [snapshot?.sessions]);
-  const budget = snapshot?.budgetSummary && typeof snapshot.budgetSummary === 'object' ? snapshot.budgetSummary : null;
+    if (!Array.isArray(snapshotSessions)) return [];
+    return snapshotSessions.filter((item): item is ReadModelSession => !!item && typeof item === 'object');
+  }, [snapshotSessions]);
+  const budget: ReadModelBudgetSummary | null = snapshot?.budgetSummary || null;
 
   const fallbackChartData = useMemo<DaySeries[]>(() => {
-    const dailyMap = new Map<string, { label: string; in: number; out: number; tokens: number }>();
+    const dailyMap = new Map<string, { label: string; in: number; out: number; tokens: number; cost: number }>();
 
     for (const session of sessions) {
       const updatedAt = typeof session.updatedAt === 'string' ? session.updatedAt : '';
       const key = toDateKey(updatedAt || snapshot?.generatedAt || '');
       if (!key) continue;
-      const current = dailyMap.get(key) || { label: toMonthDay(updatedAt || snapshot?.generatedAt || ''), in: 0, out: 0, tokens: 0 };
-      const inTokens = normalizeFinite((session as any).tokensIn, 0);
-      const outTokens = normalizeFinite((session as any).tokensOut, 0);
-      const sessionCostRaw = normalizeFinite((session as any).cost, NaN);
+      const current = dailyMap.get(key) || { label: toMonthDay(updatedAt || snapshot?.generatedAt || ''), in: 0, out: 0, tokens: 0, cost: 0 };
+      const inTokens = normalizeFinite(session.tokensIn, 0);
+      const outTokens = normalizeFinite(session.tokensOut, 0);
+      const sessionCostRaw = normalizeFinite(session.cost, NaN);
       const sessionCost = Number.isFinite(sessionCostRaw) && sessionCostRaw >= 0 ? sessionCostRaw : estimateCost(inTokens, outTokens);
 
       current.in += inTokens;
       current.out += outTokens;
       current.tokens += inTokens + outTokens;
-      (current as any).cost = normalizeFinite((current as any).cost, 0) + sessionCost;
+      current.cost += sessionCost;
       dailyMap.set(key, current);
     }
 
     return Array.from(dailyMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-7)
-        .map(([, value]) => ({ name: value.label, in: value.in, out: value.out, tokens: value.tokens, cost: normalizeFinite((value as any).cost, estimateCost(value.in, value.out)) }));
+      .map(([, value]) => ({ name: value.label, in: value.in, out: value.out, tokens: value.tokens, cost: normalizeFinite(value.cost, estimateCost(value.in, value.out)) }));
   }, [sessions, snapshot?.generatedAt]);
 
   const chartData = useMemo<DaySeries[]>(() => {
@@ -105,9 +134,9 @@ export function Analytics() {
   const totals = useMemo(() => {
     return sessions.reduce(
       (acc, session) => {
-        const input = normalizeFinite((session as any).tokensIn, 0);
-        const output = normalizeFinite((session as any).tokensOut, 0);
-        const exactCost = normalizeFinite((session as any).cost, NaN);
+        const input = normalizeFinite(session.tokensIn, 0);
+        const output = normalizeFinite(session.tokensOut, 0);
+        const exactCost = normalizeFinite(session.cost, NaN);
 
         acc.input += input;
         acc.output += output;
@@ -135,6 +164,116 @@ export function Analytics() {
     };
   }, [chartData, totals.cost, totals.input, totals.output]);
 
+  const windowedChartData = useMemo(() => {
+    if (usageWindow === 'today') return chartData.slice(-1);
+    if (usageWindow === '7d') return chartData.slice(-7);
+    return chartData.slice(-30);
+  }, [chartData, usageWindow]);
+
+  const usagePeriods = useMemo(() => {
+    const aggregate = (data: DaySeries[]) => {
+      const out = data.reduce(
+        (acc, row) => {
+          acc.tokens += normalizeFinite(row.tokens, 0);
+          acc.cost += normalizeFinite(row.cost, 0);
+          return acc;
+        },
+        { tokens: 0, cost: 0 },
+      );
+      return out;
+    };
+
+    return {
+      today: aggregate(chartData.slice(-1)),
+      '7d': aggregate(chartData.slice(-7)),
+      '30d': aggregate(chartData.slice(-30)),
+    };
+  }, [chartData]);
+
+  const subscriptionWindow = useMemo(() => {
+    const root = asRecord(rawSnapshot) || {};
+    const billing = asRecord(root.billing) || {};
+    const raw = (asRecord(root.subscription) || asRecord(billing.subscription) || {}) as SubscriptionRaw;
+    const consumed = normalizeFinite(raw.consumed, NaN);
+    const remaining = normalizeFinite(raw.remaining, NaN);
+    const limit = normalizeFinite(raw.limit, NaN);
+    const usagePercent = normalizeFinite(raw.usagePercent, NaN);
+    const computedPercent = Number.isFinite(usagePercent)
+      ? usagePercent
+      : Number.isFinite(consumed) && Number.isFinite(limit) && limit > 0
+        ? (consumed / limit) * 100
+        : NaN;
+
+    const data: SubscriptionWindow = {
+      connected:
+        Number.isFinite(computedPercent) ||
+        Boolean(String(raw.cycleStart || '').trim()) ||
+        Boolean(String(raw.cycleEnd || '').trim()),
+      planLabel: String(raw.planLabel || '').trim(),
+      consumed: Number.isFinite(consumed) ? consumed : 0,
+      remaining: Number.isFinite(remaining) ? remaining : 0,
+      limit: Number.isFinite(limit) ? limit : 0,
+      usagePercent: Number.isFinite(computedPercent) ? Math.max(0, Math.min(100, computedPercent)) : 0,
+      cycleStart: String(raw.cycleStart || '').trim(),
+      cycleEnd: String(raw.cycleEnd || '').trim(),
+      unit: String(raw.unit || t('analytics.subscription.defaultUnit')).trim() || t('analytics.subscription.defaultUnit'),
+    };
+    return data;
+  }, [rawSnapshot, t]);
+
+  const connectorStatus = useMemo(() => {
+    const rows = [
+      { key: 'snapshot', label: t('analytics.connectors.snapshot'), connected: Boolean(snapshot) },
+      { key: 'history', label: t('analytics.connectors.history'), connected: Array.isArray(snapshotHistory) && snapshotHistory.length > 0 },
+      { key: 'budget', label: t('analytics.connectors.budget'), connected: Boolean(budget) },
+      { key: 'subscription', label: t('analytics.connectors.subscription'), connected: subscriptionWindow.connected },
+      {
+        key: 'context',
+        label: t('analytics.connectors.context'),
+        connected: Array.isArray(snapshot?.statuses) && snapshot.statuses.some((item) => normalizeFinite(item?.contextWindowTokens, 0) > 0),
+      },
+    ];
+    return rows;
+  }, [budget, snapshot, snapshotHistory, subscriptionWindow.connected, t]);
+
+  const contextPressureRows = useMemo(() => {
+    const statuses: ReadModelStatus[] = Array.isArray(snapshot?.statuses) ? snapshot.statuses : [];
+    return statuses
+      .map((item) => {
+        const used = normalizeFinite(item.tokensIn, 0) + normalizeFinite(item.tokensOut, 0);
+        const limit = normalizeFinite(item.contextWindowTokens, 0);
+        const ratio = limit > 0 ? (used / limit) * 100 : 0;
+        const state = ratio >= 90 ? 'critical' : ratio >= 70 ? 'warn' : 'ok';
+        return {
+          sessionKey: String(item.sessionKey || t('analytics.context.unknownSession')),
+          model: String(item.model || t('analytics.context.unknownModel')),
+          used,
+          limit,
+          ratio,
+          state,
+        };
+      })
+      .filter((item) => item.limit > 0)
+      .sort((a, b) => b.ratio - a.ratio)
+      .slice(0, 6);
+  }, [snapshot, t]);
+
+  const costHotspots = useMemo(() => {
+    const grouped = new Map<string, number>();
+    for (const session of sessions) {
+      const key = String(session.model || session.agentId || t('analytics.costHotspots.unknownSource')).trim() || t('analytics.costHotspots.unknownSource');
+      const input = normalizeFinite(session.tokensIn, 0);
+      const output = normalizeFinite(session.tokensOut, 0);
+      const exact = normalizeFinite(session.cost, NaN);
+      const cost = Number.isFinite(exact) && exact >= 0 ? exact : estimateCost(input, output);
+      grouped.set(key, (grouped.get(key) || 0) + cost);
+    }
+    return Array.from(grouped.entries())
+      .map(([name, cost]) => ({ name, cost }))
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 5);
+  }, [sessions, t]);
+
   const agentBreakdown = useMemo(() => {
     const grouped = new Map<string, number>();
     for (const session of sessions) {
@@ -149,7 +288,7 @@ export function Analytics() {
   }, [sessions]);
 
   const scopedRiskRows = useMemo(() => {
-    const evaluations = Array.isArray((budget as any)?.evaluations) ? (budget as any).evaluations : [];
+    const evaluations = Array.isArray(budget?.evaluations) ? budget.evaluations : [];
     return [...evaluations]
       .filter((item) => !!item && typeof item === 'object')
       .map((item) => {
@@ -198,6 +337,28 @@ export function Analytics() {
         <StatCard label={t('analytics.estimatedCost')} value={`$${stats.cost.value}`} delta={stats.cost.delta} />
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-left">
+        {([
+          { key: 'today', label: t('analytics.window.today') },
+          { key: '7d', label: t('analytics.window.7d') },
+          { key: '30d', label: t('analytics.window.30d') },
+        ] as const).map((item) => {
+          const period = usagePeriods[item.key];
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setUsageWindow(item.key)}
+              className={`rounded-2xl border px-4 py-4 transition-all text-left ${usageWindow === item.key ? 'border-blue-500/40 bg-blue-500/5' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'}`}
+            >
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.label}</div>
+              <div className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-100">{period.tokens.toLocaleString()} {t('analytics.window.tokensUnit')}</div>
+              <div className="text-xs text-slate-500">${period.cost.toFixed(3)}</div>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
         {/* Main Consumption Trend */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
@@ -206,17 +367,17 @@ export function Analytics() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.trendTitle')}</h3>
-              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">Daily Total Consumption (Stacked)</p>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.labels.dailyTotalStacked')}</p>
             </div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              Read Model
+              {t('analytics.labels.readModel')}
             </div>
           </div>
 
           <div className="h-[300px] w-full">
-            {chartData.length > 0 ? (
+            {windowedChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+                <AreaChart data={windowedChartData}>
                   <defs>
                     <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -252,8 +413,8 @@ export function Analytics() {
                         color: (isDark ? '#f1f5f9' : '#0f172a')
                     }}
                   />
-                  <Area type="monotone" dataKey="in" name="Input" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorIn)" stackId="1" />
-                  <Area type="monotone" dataKey="out" name="Output" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorOut)" stackId="1" />
+                  <Area type="monotone" dataKey="in" name={t('analytics.labels.input')} stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorIn)" stackId="1" />
+                  <Area type="monotone" dataKey="out" name={t('analytics.labels.output')} stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorOut)" stackId="1" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -268,13 +429,13 @@ export function Analytics() {
           
           <div className="mb-8">
             <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.efficiencyTitle')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">Input vs Output Ratio</p>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.labels.inputOutputRatio')}</p>
           </div>
 
           <div className="h-[300px] w-full">
-            {chartData.length > 0 ? (
+            {windowedChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
+                <LineChart data={windowedChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                   <XAxis 
                     dataKey="name" 
@@ -296,12 +457,91 @@ export function Analytics() {
                         fontSize: '11px'
                     }}
                   />
-                  <Line type="stepAfter" dataKey="in" name="Input Load" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }} />
-                  <Line type="stepAfter" dataKey="out" name="Output Density" stroke="#fbbf24" strokeWidth={2} dot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
+                  <Line type="stepAfter" dataKey="in" name={t('analytics.labels.inputLoad')} stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }} />
+                  <Line type="stepAfter" dataKey="out" name={t('analytics.labels.outputDensity')} stroke="#fbbf24" strokeWidth={2} dot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-slate-700 italic">{t('analytics.waitingData')}</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
+        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
+          <div className="mb-6">
+            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.subscription.title')}</h3>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.subscription.subtitle')}</p>
+          </div>
+          <div className="space-y-3">
+            <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{subscriptionWindow.planLabel || t('analytics.subscription.notConnected')}</div>
+            <div className="text-xs text-slate-500">{subscriptionWindow.cycleStart || '--'} ~ {subscriptionWindow.cycleEnd || '--'}</div>
+            <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className={`h-full ${subscriptionWindow.usagePercent >= 90 ? 'bg-red-500' : subscriptionWindow.usagePercent >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${subscriptionWindow.usagePercent}%` }}></div>
+            </div>
+            <div className="text-xs text-slate-600 dark:text-slate-300">
+              {t('analytics.subscription.usedLimit', {
+                used: subscriptionWindow.consumed.toFixed(2),
+                limit: subscriptionWindow.limit > 0 ? subscriptionWindow.limit.toFixed(2) : '--',
+                unit: subscriptionWindow.unit,
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
+          <div className="mb-6">
+            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.connectors.title')}</h3>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.connectors.subtitle')}</p>
+          </div>
+          <div className="space-y-2">
+            {connectorStatus.map((item) => (
+              <div key={item.key} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
+                <span className="text-xs text-slate-700 dark:text-slate-200">{item.label}</span>
+                <span className={`text-[10px] font-black uppercase ${item.connected ? 'text-emerald-500' : 'text-amber-500'}`}>{item.connected ? t('analytics.connectors.connected') : t('analytics.connectors.partial')}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
+        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
+          <div className="mb-6">
+            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.context.title')}</h3>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.context.subtitle')}</p>
+          </div>
+          {contextPressureRows.length > 0 ? (
+            <div className="space-y-2">
+              {contextPressureRows.map((row) => (
+                <div key={row.sessionKey} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-mono text-slate-700 dark:text-slate-200">{row.sessionKey}</div>
+                    <div className={`text-[10px] font-black uppercase ${row.state === 'critical' ? 'text-red-500' : row.state === 'warn' ? 'text-amber-500' : 'text-emerald-500'}`}>{row.ratio.toFixed(1)}%</div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">{t('analytics.context.usageLine', { used: row.used.toLocaleString(), limit: row.limit.toLocaleString(), model: row.model })}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-slate-700 italic">{t('analytics.context.noData')}</div>
+          )}
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
+          <div className="mb-6">
+            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.costHotspots.title')}</h3>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.costHotspots.subtitle')}</p>
+          </div>
+          <div className="space-y-2">
+            {costHotspots.length > 0 ? costHotspots.map((row) => (
+              <div key={row.name} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
+                <span className="text-xs text-slate-700 dark:text-slate-200 truncate pr-2">{row.name}</span>
+                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-100">${row.cost.toFixed(3)}</span>
+              </div>
+            )) : (
+              <div className="h-full flex items-center justify-center text-slate-700 italic">{t('analytics.costHotspots.noData')}</div>
             )}
           </div>
         </div>
@@ -314,7 +554,7 @@ export function Analytics() {
           
           <div className="mb-8">
             <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.agentAttribution', 'Agent 消耗歸因')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">Token Consumption by Agent</p>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.labels.byAgent')}</p>
           </div>
 
           <div className="h-[300px] w-full">
@@ -330,7 +570,7 @@ export function Analytics() {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {agentBreakdown.map((_entry: any, index: number) => (
+                    {agentBreakdown.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} strokeWidth={0} />
                     ))}
                   </Pie>
@@ -357,7 +597,7 @@ export function Analytics() {
           
           <div className="mb-8">
             <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.budgetGovernance', '預算與治理')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">30-Day Budget Policy Enforcement</p>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.budget.subtitle')}</p>
           </div>
 
           {budget ? (
@@ -365,12 +605,12 @@ export function Analytics() {
               <div className="p-6 bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
                 <div className="flex justify-between items-end mb-4">
                   <div>
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Monthly Spent</div>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('analytics.budget.monthlySpent')}</div>
                     <div className="text-2xl font-black text-slate-900 dark:text-slate-100">${budgetMetrics.used.toFixed(2)}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Limit</div>
-                    <div className="text-sm font-bold text-slate-600 dark:text-slate-400">{budgetMetrics.limit > 0 ? `$${budgetMetrics.limit.toFixed(2)}` : 'No Limit'}</div>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('analytics.budget.limit')}</div>
+                    <div className="text-sm font-bold text-slate-600 dark:text-slate-400">{budgetMetrics.limit > 0 ? `$${budgetMetrics.limit.toFixed(2)}` : t('analytics.budget.noLimit')}</div>
                   </div>
                 </div>
                 
@@ -385,19 +625,19 @@ export function Analytics() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
                     <div className="text-emerald-600 dark:text-emerald-400 mb-2"><TrendingUp size={18} /></div>
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Burn Rate</div>
+                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{t('analytics.budget.burnRate')}</div>
                   <div className="text-sm font-black text-slate-900 dark:text-slate-100">${budgetMetrics.burnRatePerDay.toFixed(4)}/d</div>
                 </div>
                 <div className="p-4 bg-blue-500/5 dark:bg-blue-500/10 rounded-2xl border border-blue-500/20">
                     <div className="text-blue-600 dark:text-blue-500 mb-2"><Target size={18} /></div>
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Proected Days</div>
-                  <div className="text-sm font-black text-slate-900 dark:text-slate-100">{budgetMetrics.projectedDays > 0 ? budgetMetrics.projectedDays : '∞'} Days</div>
+                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{t('analytics.budget.projectedDays')}</div>
+                  <div className="text-sm font-black text-slate-900 dark:text-slate-100">{budgetMetrics.projectedDays > 0 ? budgetMetrics.projectedDays : t('analytics.budget.infinite')} {t('analytics.budget.days')}</div>
                 </div>
               </div>
 
               {scopedRiskRows.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Risk Ownership</div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{t('analytics.budget.riskOwnership')}</div>
                   <div className="space-y-2">
                     {scopedRiskRows.map((row) => (
                       <div key={`${row.scope}-${row.status}`} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/80 dark:bg-slate-900/60">

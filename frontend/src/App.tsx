@@ -848,7 +848,7 @@ NODE`;
           config.corePath ? `${config.corePath}/runtime/usage-cost.jsonl` : ''
         ].filter(Boolean);
 
-        const res = await window.electronAPI.exec(`snapshot:read-model ${JSON.stringify({ candidatePaths: snapshotCandidates, historyCandidatePaths: historyCandidates, historyDays: 7 })}`);
+        const res = await window.electronAPI.exec(`snapshot:read-model ${JSON.stringify({ candidatePaths: snapshotCandidates, historyCandidatePaths: historyCandidates, historyDays: 30 })}`);
         const code = res.code ?? res.exitCode;
         if (code === 0 && res.stdout) {
           const parsed = JSON.parse(res.stdout || '{}');

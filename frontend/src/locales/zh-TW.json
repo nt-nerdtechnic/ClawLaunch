@@ -83,6 +83,45 @@
     "openFolderFailed": "無法開啟 {{zone}}：{{msg}}",
     "disconnect": "中斷連線",
     "startService": "啟動服務",
+    "activeStaff": "活躍團隊成員",
+    "actionQueue": "任務操作中心",
+    "processing": "處理中...",
+    "approve": "批准",
+    "staff": {
+      "state": {
+        "busy": "忙碌",
+        "standby": "待命",
+        "blocked": "卡住"
+      },
+      "queue": "排隊 {{count}}"
+    },
+    "taskSection": {
+      "title": "任務分區",
+      "taskBoard": "任務板",
+      "schedule": "排期概覽",
+      "scheduleImmediate": "立即處理",
+      "scheduleToday": "今日處理",
+      "scheduleBacklog": "積壓任務",
+      "approvals": "審批",
+      "pending": "待審",
+      "approvalFallbackTitle": "需要審批",
+      "executionEvidence": "執行證據",
+      "eventQueue": "事件佇列",
+      "emptyTasks": "目前快照沒有任務資料。",
+      "emptyApprovals": "目前沒有待審批項目。",
+      "emptyEvidence": "目前沒有可顯示的執行證據。",
+      "emptyEvents": "目前沒有待確認事件。",
+      "ack30m": "確認 30 分",
+      "ack24h": "確認 24 小時",
+      "ackLoading": "確認中...",
+      "ackedHint": "已確認事件：{{count}} 筆（TTL 內先隱藏）。",
+      "logs": {
+        "eventAcked": "事件 {{eventId}} 已確認，TTL={{ttlSec}} 秒",
+        "eventAckFailed": "事件 {{eventId}} 確認失敗：{{message}}",
+        "approvalSent": "審批 {{id}} 已送出，決策={{decision}}",
+        "approvalRollback": "審批 {{id}} 失敗，已回滾 optimistic 狀態"
+      }
+    },
     "status": {
         "verified": "VERIFIED",
         "analyzing": "ANALYZING...",
@@ -377,7 +416,66 @@
     "trendTitle": "Token 消耗趨勢",
     "efficiencyTitle": "推論效率分析",
     "noData": "暫無消耗數據記錄",
-    "waitingData": "等待數據注入..."
+    "waitingData": "等待數據注入...",
+    "window": {
+      "today": "今日",
+      "7d": "近 7 天",
+      "30d": "近 30 天",
+      "tokensUnit": "tokens"
+    },
+    "labels": {
+      "dailyTotalStacked": "每日總消耗（堆疊）",
+      "readModel": "讀模快照",
+      "input": "輸入",
+      "output": "輸出",
+      "inputOutputRatio": "輸入與輸出比例",
+      "inputLoad": "輸入負載",
+      "outputDensity": "輸出密度",
+      "byAgent": "Agent 消耗歸因"
+    },
+    "subscription": {
+      "title": "訂閱視窗",
+      "subtitle": "配額與計費週期",
+      "notConnected": "未接線",
+      "defaultUnit": "USD",
+      "usedLimit": "已用 {{used}} / 上限 {{limit}} {{unit}}"
+    },
+    "connectors": {
+      "title": "資料接線",
+      "subtitle": "連線健康度",
+      "snapshot": "讀模快照",
+      "history": "用量歷史",
+      "budget": "預算摘要",
+      "subscription": "訂閱視窗",
+      "context": "上下文壓力",
+      "connected": "已連線",
+      "partial": "部分連線"
+    },
+    "context": {
+      "title": "上下文壓力",
+      "subtitle": "接近 Context 上限的 Session",
+      "unknownSession": "未知 session",
+      "unknownModel": "未知模型",
+      "usageLine": "{{used}} / {{limit}} tokens · {{model}}",
+      "noData": "沒有可用的 context window 資料"
+    },
+    "costHotspots": {
+      "title": "成本熱點",
+      "subtitle": "最容易升高成本的來源",
+      "unknownSource": "未知來源",
+      "noData": "沒有成本資料"
+    },
+    "budget": {
+      "subtitle": "30 天預算治理",
+      "monthlySpent": "本月支出",
+      "limit": "上限",
+      "noLimit": "無上限",
+      "burnRate": "燃燒速率",
+      "projectedDays": "預估可用天數",
+      "infinite": "∞",
+      "days": "天",
+      "riskOwnership": "風險歸屬"
+    }
   },
   "setupSkills": {
     "title": "擴展您的龍蝦超能力",
