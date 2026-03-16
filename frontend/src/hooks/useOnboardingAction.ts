@@ -609,15 +609,8 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           const res = await (window as any).electronAPI.exec(onboardCmd);
           if (!isCommandSuccess(res)) throw new Error(res.stderr || '核心授權失敗');
 
-          // Anthropic token/api-key 類型在個別環境偶爾只完成 profile 指向，這裡補一次 auth set 強化 agent 憑證層一致性。
-          if ((selectedAuthChoice === 'apiKey' || selectedAuthChoice === 'token') && sanitizedSecret) {
-            const syncAuthCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw auth set --token-provider anthropic --token ${shellQuote(sanitizedSecret)}`;
-            const syncRes = await (window as any).electronAPI.exec(syncAuthCmd);
-            if (!isCommandSuccess(syncRes)) {
-              throw new Error(syncRes.stderr || 'Anthropic 憑證同步失敗，請重新執行授權');
-            }
-            addLocalLog('✅ 已同步寫入 agent 憑證層 (auth-profiles)。', 'system');
-          }
+          // 新版 OpenClaw 已移除 `openclaw auth set`。
+          // 由 `openclaw onboard --auth-choice ...` 寫入後，統一透過雙層檢查驗證 global + agent 是否一致。
 
           if (!configPath) {
             throw new Error('缺少 Config Path，無法驗證授權寫入結果');

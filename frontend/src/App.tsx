@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
-import { Layout, Settings, Activity, CheckCircle2, Play, Square, Loader2, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, FolderOpen, RefreshCw, Trash2, Plus, ShieldCheck } from 'lucide-react';
+import { Layout, Settings, Activity, CheckCircle2, Play, Square, Loader2, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, FolderOpen, RefreshCw, Trash2, Plus, ShieldCheck, Brain, Cpu, Globe, Zap, Network, Database, Key } from 'lucide-react';
 import { MiniView } from './components/MiniView';
 import { SkillManager } from './components/SkillManager';
 import { ActionCenter } from './components/ActionCenter';
@@ -45,6 +45,12 @@ type AuthProfileRow = {
   diagnostics?: string[];
   severity?: 'ok' | 'warn' | 'critical';
   repairGuides?: string[];
+};
+
+type ModelOptionGroup = {
+  provider: string;
+  group: string;
+  models: string[];
 };
 
 type ViewErrorBoundaryProps = {
@@ -119,10 +125,14 @@ function App() {
   const [authProfilesError, setAuthProfilesError] = useState('');
   const [authRemovingId, setAuthRemovingId] = useState('');
   const [authAdding, setAuthAdding] = useState(false);
+  const [authAddProvider, setAuthAddProvider] = useState('anthropic');
   const [authAddChoice, setAuthAddChoice] = useState('apiKey');
   const [authAddSecret, setAuthAddSecret] = useState('');
   const [authAddError, setAuthAddError] = useState('');
-  const [dynamicModelOptions, setDynamicModelOptions] = useState<Array<{ group: string; models: string[] }>>([]);
+  const [authAddTokenCommand, setAuthAddTokenCommand] = useState('claude setup-token');
+  const [authAddTokenRunning, setAuthAddTokenRunning] = useState(false);
+  const [authAddTokenError, setAuthAddTokenError] = useState('');
+  const [dynamicModelOptions, setDynamicModelOptions] = useState<ModelOptionGroup[]>([]);
   const [dynamicModelSource, setDynamicModelSource] = useState('');
   const [dynamicModelLoading, setDynamicModelLoading] = useState(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
@@ -151,32 +161,155 @@ function App() {
     xai:       { label: 'xAI (Grok)',          models: ['xai/grok-3', 'xai/grok-2-vision'] },
   };
 
+  const PROVIDER_ALIAS_MAP: Record<string, string[]> = {
+    anthropic: ['anthropic'],
+    openai: ['openai', 'openai-codex'],
+    'openai-codex': ['openai-codex', 'openai'],
+    google: ['google', 'gemini'],
+    gemini: ['gemini', 'google'],
+    minimax: ['minimax'],
+    moonshot: ['moonshot'],
+    openrouter: ['openrouter'],
+    xai: ['xai'],
+    ollama: ['ollama'],
+    vllm: ['vllm'],
+    chutes: ['chutes'],
+    qwen: ['qwen', 'qwen-portal'],
+    'qwen-portal': ['qwen-portal', 'qwen'],
+  };
+
+  const getProviderAliases = (providerRef: string) => {
+    const normalized = String(providerRef || '').trim().toLowerCase();
+    if (!normalized) return [];
+    return PROVIDER_ALIAS_MAP[normalized] || [normalized];
+  };
+
+  const providerMatchesFilters = (providerRef: string, filters: string[]) => {
+    const providerAliases = getProviderAliases(providerRef);
+    if (filters.length === 0) return true;
+    return filters.some((filter) => {
+      const filterAliases = getProviderAliases(filter);
+      return providerAliases.some((alias) => filterAliases.includes(alias));
+    });
+  };
+
+  const inferProviderFromModel = (modelRef: string) => {
+    const model = String(modelRef || '').trim().toLowerCase();
+    if (!model) return '';
+    if (model.includes('/')) {
+      return model.split('/')[0];
+    }
+    if (model.startsWith('claude')) return 'anthropic';
+    if (model.startsWith('gpt') || model.startsWith('o1') || model.startsWith('o3')) return 'openai';
+    if (model.startsWith('gemini')) return 'google';
+    if (model.startsWith('minimax')) return 'minimax';
+    if (model.startsWith('kimi')) return 'moonshot';
+    if (model.startsWith('grok')) return 'xai';
+    if (model.startsWith('ollama')) return 'ollama';
+    return '';
+  };
+
+  const getProviderDisplayLabel = (providerRef: string, fallbackLabel?: string) => {
+    const normalized = String(providerRef || '').trim().toLowerCase();
+    return PROVIDER_MODEL_CATALOGUE[normalized]?.label || fallbackLabel || providerRef || 'Unknown';
+  };
+
   const runtimeProviders: string[] = (runtimeProfile as any)?.providers ?? [];
 
-  const settingsAuthChoices = [
-    { id: 'apiKey', label: 'Anthropic API Key' },
-    { id: 'token', label: 'Setup Token (Anthropic)' },
-    { id: 'openai-api-key', label: 'OpenAI API Key' },
-    { id: 'gemini-api-key', label: 'Gemini API Key' },
-    { id: 'minimax-api', label: 'MiniMax API Key' },
-    { id: 'moonshot-api-key', label: 'Moonshot API Key' },
-    { id: 'openrouter-api-key', label: 'OpenRouter API Key' },
-    { id: 'xai-api-key', label: 'xAI API Key' },
-    { id: 'ollama', label: 'Ollama (No Credential)' },
-    { id: 'vllm', label: 'vLLM (No Credential)' },
+  type AuthChoiceItem = { id: string; name: string; desc: string; reqKey: boolean; oauthFlow?: boolean };
+  type ProviderGroupItem = { id: string; label: string; icon: React.ReactNode; choices: AuthChoiceItem[] };
+  const SETTINGS_PROVIDER_GROUPS: ProviderGroupItem[] = [
+    {
+      id: 'anthropic', label: 'Anthropic', icon: <Brain size={13} />,
+      choices: [
+        { id: 'apiKey', name: 'API Key', desc: 'Anthropic 官方密鑰', reqKey: true },
+        { id: 'token', name: 'Setup Token', desc: 'CLI 產生的 Setup-Token', reqKey: true },
+      ],
+    },
+    {
+      id: 'openai', label: 'OpenAI', icon: <Cpu size={13} />,
+      choices: [
+        { id: 'openai-api-key', name: 'API Key', desc: 'OpenAI sk-... 密鑰', reqKey: true },
+        { id: 'openai-codex', name: 'Codex OAuth', desc: '瀏覽器登入授權，無須 Key', reqKey: false, oauthFlow: true },
+      ],
+    },
+    {
+      id: 'google', label: 'Google', icon: <Globe size={13} />,
+      choices: [
+        { id: 'gemini-api-key', name: 'API Key', desc: 'AIzaSy... Gemini 密鑰', reqKey: true },
+        { id: 'google-gemini-cli', name: 'Gemini OAuth', desc: 'CLI OAuth 非官方授權', reqKey: false, oauthFlow: true },
+      ],
+    },
+    {
+      id: 'openrouter', label: 'OpenRouter', icon: <Globe size={13} />,
+      choices: [
+        { id: 'openrouter-api-key', name: 'API Key', desc: 'OpenRouter 統一閘道密鑰', reqKey: true },
+      ],
+    },
+    {
+      id: 'minimax', label: 'MiniMax', icon: <Zap size={13} />,
+      choices: [
+        { id: 'minimax-api', name: 'API Key', desc: 'MiniMax 官方密鑰', reqKey: true },
+        { id: 'minimax-portal', name: 'OAuth', desc: '瀏覽器授權登入', reqKey: false, oauthFlow: true },
+      ],
+    },
+    {
+      id: 'moonshot', label: 'Moonshot', icon: <Zap size={13} />,
+      choices: [
+        { id: 'moonshot-api-key', name: 'Kimi API Key', desc: 'Moonshot 平台密鑰', reqKey: true },
+      ],
+    },
+    {
+      id: 'xai', label: 'xAI', icon: <Cpu size={13} />,
+      choices: [
+        { id: 'xai-api-key', name: 'Grok API Key', desc: 'xAI 平台密鑰', reqKey: true },
+      ],
+    },
+    {
+      id: 'chutes', label: 'Chutes', icon: <Network size={13} />,
+      choices: [
+        { id: 'chutes', name: 'OAuth', desc: 'Chutes 去中心化平台授權', reqKey: false, oauthFlow: true },
+      ],
+    },
+    {
+      id: 'local', label: 'Local', icon: <Database size={13} />,
+      choices: [
+        { id: 'ollama', name: 'Ollama', desc: '本地 11434 端口，隱私至上', reqKey: false },
+        { id: 'vllm', name: 'vLLM', desc: '自定義本地伺服器', reqKey: false },
+      ],
+    },
   ];
-  const fallbackModelOptions: { group: string; models: string[] }[] = runtimeProviders.length > 0
-    ? runtimeProviders
+  const healthyAuthProviders = Array.from(new Set(
+    authProfiles
+      .filter((profile) => profile.agentPresent && profile.credentialHealthy)
+      .map((profile) => String(profile.provider || profile.profileId.split(':')[0] || '').toLowerCase())
+      .filter(Boolean)
+  ));
+
+  const effectiveAuthorizedProviders = healthyAuthProviders.length > 0
+    ? healthyAuthProviders
+    : runtimeProviders.map((provider) => String(provider || '').toLowerCase()).filter(Boolean);
+
+  const fallbackModelOptions: ModelOptionGroup[] = effectiveAuthorizedProviders.length > 0
+    ? effectiveAuthorizedProviders
         .map((p: string) => {
           const entry = PROVIDER_MODEL_CATALOGUE[p.toLowerCase()];
-          return entry ? { group: entry.label, models: entry.models } : null;
+          return entry ? { provider: p.toLowerCase(), group: entry.label, models: entry.models } : null;
         })
-        .filter(Boolean) as { group: string; models: string[] }[]
-    : Object.values(PROVIDER_MODEL_CATALOGUE).map((e) => ({ group: e.label, models: e.models }));
+        .filter(Boolean) as ModelOptionGroup[]
+    : Object.entries(PROVIDER_MODEL_CATALOGUE).map(([provider, entry]) => ({ provider, group: entry.label, models: entry.models }));
 
-  const availableModelOptions: { group: string; models: string[] }[] = dynamicModelOptions.length > 0
+  const availableModelOptions: ModelOptionGroup[] = dynamicModelOptions.length > 0
     ? dynamicModelOptions
     : fallbackModelOptions;
+
+  const visibleModelOptions: ModelOptionGroup[] = availableModelOptions.filter(({ provider }) => providerMatchesFilters(provider, effectiveAuthorizedProviders));
+  const modelOptionGroups = visibleModelOptions.length > 0 ? visibleModelOptions : availableModelOptions;
+  const selectedModelProvider = inferProviderFromModel(runtimeDraftModel);
+  const selectedModelAuthorized = !runtimeDraftModel.trim() || isModelAuthorizedByProvider(runtimeDraftModel);
+  const authorizedProviderBadges = Array.from(new Set(
+    (healthyAuthProviders.length > 0 ? healthyAuthProviders : runtimeProviders.map((provider) => String(provider || '').toLowerCase()).filter(Boolean))
+  ));
 
   const buildOpenClawEnvPrefix = (cfg?: any) => {
     const configDir = normalizeConfigDir(cfg?.configPath ?? config.configPath);
@@ -375,8 +508,9 @@ function App() {
     setDynamicModelLoading(true);
     try {
       const payload = {
+        corePath: config.corePath,
         configPath: resolvedConfigDir,
-        providers: runtimeProviders,
+        providers: effectiveAuthorizedProviders,
       };
       const res = await window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`);
       if ((res.code ?? res.exitCode) !== 0) {
@@ -386,6 +520,7 @@ function App() {
       const groups = Array.isArray(parsed?.groups)
         ? parsed.groups
             .map((group: any) => ({
+              provider: String(group?.provider || group?.group || '').trim().toLowerCase() || 'unknown',
               group: String(group?.group || group?.provider || '').trim() || 'unknown',
               models: Array.isArray(group?.models) ? group.models.map((m: any) => String(m || '').trim()).filter(Boolean) : [],
             }))
@@ -404,46 +539,20 @@ function App() {
   useEffect(() => {
     if (activeTab !== 'settings') return;
     void loadDynamicModelOptions();
-  }, [activeTab, resolvedConfigDir, runtimeProviders.join('|')]);
+  }, [activeTab, resolvedConfigDir, config.corePath, effectiveAuthorizedProviders.join('|')]);
 
-  const isModelAuthorizedByProvider = (modelRef: string) => {
+  function isModelAuthorizedByProvider(modelRef: string) {
     const model = String(modelRef || '').trim().toLowerCase();
-    if (!model || runtimeProviders.length === 0) return true;
+    if (!model || effectiveAuthorizedProviders.length === 0) return true;
 
-    const providerAliases: Record<string, string[]> = {
-      anthropic: ['anthropic'],
-      openai: ['openai', 'openai-codex'],
-      'openai-codex': ['openai-codex', 'openai'],
-      google: ['google', 'gemini'],
-      gemini: ['gemini', 'google'],
-      minimax: ['minimax'],
-      moonshot: ['moonshot'],
-      openrouter: ['openrouter'],
-      xai: ['xai'],
-      ollama: ['ollama'],
-      vllm: ['vllm'],
-      chutes: ['chutes'],
-      'qwen-portal': ['qwen-portal', 'qwen'],
-      qwen: ['qwen', 'qwen-portal'],
-    };
+    const runtimeAliases = new Set(effectiveAuthorizedProviders.flatMap((provider) => getProviderAliases(provider)));
 
-    const runtimeAliases = new Set(runtimeProviders.flatMap((provider) => providerAliases[String(provider || '').toLowerCase()] || [String(provider || '').toLowerCase()]));
-
-    let inferredProvider = '';
-    if (model.includes('/')) {
-      inferredProvider = model.split('/')[0];
-    } else if (model.startsWith('claude')) inferredProvider = 'anthropic';
-    else if (model.startsWith('gpt') || model.startsWith('o1') || model.startsWith('o3')) inferredProvider = 'openai';
-    else if (model.startsWith('gemini')) inferredProvider = 'google';
-    else if (model.startsWith('minimax')) inferredProvider = 'minimax';
-    else if (model.startsWith('kimi')) inferredProvider = 'moonshot';
-    else if (model.startsWith('grok')) inferredProvider = 'xai';
-    else if (model.startsWith('ollama')) inferredProvider = 'ollama';
+    const inferredProvider = inferProviderFromModel(model);
 
     if (!inferredProvider) return true;
-    const inferredAliases = providerAliases[inferredProvider] || [inferredProvider];
+    const inferredAliases = getProviderAliases(inferredProvider);
     return inferredAliases.some((alias) => runtimeAliases.has(alias));
-  };
+  }
 
   const loadTelegramPairingRequests = async () => {
     if (!window.electronAPI || !resolvedConfigDir) {
@@ -1025,6 +1134,13 @@ NODE`;
 
   const handleSaveConfig = async () => {
     if (!window.electronAPI) return;
+
+    const gatewayPortRaw = String(config.gatewayPort ?? '').trim();
+    if (!gatewayPortRaw || !/^\d+$/.test(gatewayPortRaw)) {
+      addLog('錯誤: Gateway Port 未填或格式不正確，儲存已中止。請先至設定頁填入有效的 Gateway Port（正整數）後再儲存。', 'stderr');
+      return;
+    }
+
     addLog(t('logs.savingConfig'), 'system');
     try {
       const modelChanged = runtimeDraftModel.trim() !== effectiveRuntimeModel;
@@ -1126,7 +1242,15 @@ NODE`;
       return;
     }
 
-    const requiresSecret = !['ollama', 'vllm'].includes(authAddChoice);
+    // OAuth 選項：委派給終端機執行授權流程
+    const _curGroup = SETTINGS_PROVIDER_GROUPS.find(g => g.id === authAddProvider);
+    const _curChoice = _curGroup?.choices.find(c => c.id === authAddChoice);
+    if (_curChoice?.oauthFlow) {
+      await handleLaunchFullOnboarding();
+      return;
+    }
+
+    const requiresSecret = _curChoice?.reqKey ?? !['ollama', 'vllm'].includes(authAddChoice);
     if (requiresSecret && !authAddSecret.trim()) {
       setAuthAddError('此授權方式需要輸入憑證。');
       return;
@@ -1185,6 +1309,31 @@ NODE`;
       const msg = e?.message || '啟動完整導引失敗';
       setAuthAddError(msg);
       addLog(msg, 'stderr');
+    }
+  };
+
+  const handleRunAuthTokenCommand = async () => {
+    const command = (authAddTokenCommand || '').trim();
+    if (!command) {
+      setAuthAddTokenError('請先輸入要執行的指令');
+      return;
+    }
+    setAuthAddTokenRunning(true);
+    setAuthAddTokenError('');
+    try {
+      const res = await execInTerminal(command, {
+        title: 'Claude Token 授權流程',
+        holdOpen: true,
+        cwd: config.corePath || undefined,
+      });
+      const code = (res as any)?.code ?? (res as any)?.exitCode;
+      if (typeof code === 'number' && code !== 0) {
+        throw new Error(res?.stderr || '指令執行失敗');
+      }
+    } catch (err: any) {
+      setAuthAddTokenError(err?.message || '執行指令時發生錯誤');
+    } finally {
+      setAuthAddTokenRunning(false);
     }
   };
 
@@ -1566,35 +1715,99 @@ NODE`;
                             />
                           </div>
                           <div className="space-y-2 md:col-span-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('settings.inferenceEngine')}</label>
-                            <datalist id="model-options">
-                              {availableModelOptions.map(({ group, models }) =>
-                                models.map((m) => (
-                                  <option key={`${group}-${m}`} value={m} label={group} />
-                                ))
-                              )}
-                            </datalist>
-                            <input
-                              type="text"
-                              list="model-options"
-                              value={runtimeDraftModel}
-                              onChange={(e) => setRuntimeDraftModel(e.target.value)}
-                              placeholder="選擇或輸入模型（依授權帳號過濾）"
-                              className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-blue-600 dark:text-blue-400 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-                            />
-                            <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                              <span>模型來源：{dynamicModelOptions.length > 0 ? '動態' : '靜態'} {dynamicModelSource ? `(${dynamicModelSource})` : `(${resolvedConfigFilePath || t('monitor.pathUnset')})`}</span>
-                              {dynamicModelLoading && (
-                                <span className="inline-flex items-center gap-1 text-sky-500">
-                                  <Loader2 size={12} className="animate-spin" />
-                                  載入中
+                            <div className="flex items-center justify-between gap-3">
+                              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('settings.inferenceEngine')}</label>
+                              {selectedModelProvider && (
+                                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${selectedModelAuthorized ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300' : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+                                  <Key size={11} />
+                                  {getProviderDisplayLabel(selectedModelProvider, selectedModelProvider)}
                                 </span>
                               )}
-                              {runtimeProviders.length > 0 && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400">
-                                  {runtimeProviders.join('、')} 已授權
-                                </span>
+                            </div>
+                            <div className="rounded-[24px] border border-slate-200 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-sky-50/70 dark:from-slate-950/70 dark:via-slate-900/60 dark:to-sky-950/30 p-4 space-y-4 shadow-lg shadow-slate-200/40 dark:shadow-none">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {authorizedProviderBadges.length > 0 ? authorizedProviderBadges.map((provider) => (
+                                  <span
+                                    key={provider}
+                                    className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                  >
+                                    <ShieldCheck size={11} />
+                                    {getProviderDisplayLabel(provider, provider)}
+                                  </span>
+                                )) : (
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400">尚未偵測到可驗證授權，暫時顯示保底模型目錄。</span>
+                                )}
+                              </div>
+
+                              {modelOptionGroups.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                                  {modelOptionGroups.map(({ provider, group, models }) => (
+                                    <div
+                                      key={`${provider}-${group}`}
+                                      className="rounded-2xl border border-slate-200/80 bg-white/80 p-3 dark:border-slate-700/70 dark:bg-slate-900/60"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">
+                                          {getProviderDisplayLabel(provider, group)}
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 dark:text-slate-500">{models.length} models</div>
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {models.slice(0, 6).map((model) => {
+                                          const selected = runtimeDraftModel === model;
+                                          return (
+                                            <button
+                                              key={model}
+                                              type="button"
+                                              onClick={() => setRuntimeDraftModel(model)}
+                                              className={`rounded-xl border px-3 py-2 text-left font-mono text-[11px] transition-colors ${selected ? 'border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-500 dark:bg-sky-950/40 dark:text-sky-300' : 'border-slate-200 bg-slate-50/70 text-slate-600 hover:border-slate-300 hover:bg-white dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900'}`}
+                                            >
+                                              {model}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-300">
+                                  尚未從目前授權狀態取得可選模型。請先確認授權 profile 健康，或重新整理設定頁。
+                                </div>
                               )}
+
+                              <datalist id="authorized-model-options">
+                                {modelOptionGroups.map(({ group, models }) =>
+                                  models.map((model) => (
+                                    <option key={`${group}-${model}`} value={model} label={group} />
+                                  ))
+                                )}
+                              </datalist>
+
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  list="authorized-model-options"
+                                  value={runtimeDraftModel}
+                                  onChange={(e) => setRuntimeDraftModel(e.target.value)}
+                                  placeholder="選擇或輸入模型（依授權帳號過濾）"
+                                  className={`w-full rounded-2xl border px-4 py-3 font-mono text-xs outline-none transition-colors ${selectedModelAuthorized ? 'bg-white dark:bg-black/40 border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 focus:border-blue-400 dark:focus:border-blue-500/50' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 focus:border-amber-400 dark:focus:border-amber-600'}`}
+                                />
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                                  <span>模型來源：{dynamicModelOptions.length > 0 ? '動態' : '靜態'} {dynamicModelSource ? `(${dynamicModelSource})` : `(${resolvedConfigFilePath || t('monitor.pathUnset')})`}</span>
+                                  {dynamicModelLoading && (
+                                    <span className="inline-flex items-center gap-1 text-sky-500">
+                                      <Loader2 size={12} className="animate-spin" />
+                                      載入中
+                                    </span>
+                                  )}
+                                  {!selectedModelAuthorized && (
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300">
+                                      目前模型不在已授權 provider 範圍
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1738,48 +1951,173 @@ NODE`;
                             </div>
                           )}
 
-                          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-950/50 p-4 space-y-3">
-                            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">新增授權（增量）</div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <select
-                                value={authAddChoice}
-                                onChange={(e) => setAuthAddChoice(e.target.value)}
-                                className="bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none"
-                              >
-                                {settingsAuthChoices.map((choice) => (
-                                  <option key={choice.id} value={choice.id}>{choice.label}</option>
+                          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-950/50 p-4 space-y-4">
+                            <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-[0.2em]">新增授權（增量）</div>
+
+                            {/* Step 1: 選擇供應商 */}
+                            <div className="space-y-2">
+                              <div className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] flex items-center gap-1">
+                                <span className="w-3.5 h-3.5 bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 rounded-full inline-flex items-center justify-center text-[8px] font-black">1</span>
+                                選擇供應商
+                              </div>
+                              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5">
+                                {SETTINGS_PROVIDER_GROUPS.map(group => (
+                                  <button
+                                    key={group.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setAuthAddProvider(group.id);
+                                      setAuthAddChoice(group.choices[0].id);
+                                      setAuthAddSecret('');
+                                      setAuthAddError('');
+                                    }}
+                                    className={`p-2 rounded-xl border-2 text-left transition-all flex flex-col gap-1 ${
+                                      authAddProvider === group.id
+                                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-400 shadow-sm'
+                                        : 'border-slate-200 bg-white hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-blue-500/40'
+                                    }`}
+                                  >
+                                    <div className={`w-5 h-5 rounded-lg flex items-center justify-center ${
+                                      authAddProvider === group.id
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                    }`}>
+                                      {group.icon}
+                                    </div>
+                                    <span className={`text-[10px] font-black leading-tight ${
+                                      authAddProvider === group.id
+                                        ? 'text-blue-900 dark:text-blue-300'
+                                        : 'text-slate-700 dark:text-slate-300'
+                                    }`}>{group.label}</span>
+                                  </button>
                                 ))}
-                              </select>
-                              <input
-                                type="password"
-                                value={authAddSecret}
-                                onChange={(e) => setAuthAddSecret(e.target.value)}
-                                placeholder={['ollama', 'vllm'].includes(authAddChoice) ? '此授權類型不需憑證' : '輸入 API Key / Token'}
-                                disabled={['ollama', 'vllm'].includes(authAddChoice)}
-                                className="md:col-span-2 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none disabled:opacity-60"
-                              />
+                              </div>
                             </div>
+
+                            {/* Step 2: 選擇授權模式（多 choice 才顯示） */}
+                            {(() => {
+                              const group = SETTINGS_PROVIDER_GROUPS.find(g => g.id === authAddProvider);
+                              if (!group || group.choices.length <= 1) return null;
+                              return (
+                                <div className="space-y-2">
+                                  <div className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] flex items-center gap-1">
+                                    <span className="w-3.5 h-3.5 bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 rounded-full inline-flex items-center justify-center text-[8px] font-black">2</span>
+                                    授權模式
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {group.choices.map(choice => (
+                                      <div
+                                        key={choice.id}
+                                        onClick={() => { setAuthAddChoice(choice.id); setAuthAddSecret(''); setAuthAddError(''); }}
+                                        className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                          authAddChoice === choice.id
+                                            ? 'border-blue-500 bg-white dark:bg-slate-900 shadow-sm scale-[1.01]'
+                                            : 'border-transparent bg-white dark:bg-slate-900/50 hover:border-blue-200 dark:hover:border-blue-500/30'
+                                        }`}
+                                      >
+                                        <div className="flex justify-between items-start mb-0.5">
+                                          <span className="font-black text-[11px] text-slate-800 dark:text-slate-100">{choice.name}</span>
+                                          {choice.oauthFlow && <span className="text-[7px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-black tracking-widest">OAUTH</span>}
+                                          {!choice.reqKey && !choice.oauthFlow && <span className="text-[7px] bg-slate-400 text-white px-1.5 py-0.5 rounded font-black tracking-widest">LOCAL</span>}
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">{choice.desc}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* API Key 輸入（reqKey 時顯示） */}
+                            {(() => {
+                              const group = SETTINGS_PROVIDER_GROUPS.find(g => g.id === authAddProvider);
+                              const choice = group?.choices.find(c => c.id === authAddChoice);
+                              if (!choice?.reqKey) return null;
+                              return (
+                                <div className="space-y-3">
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                      <Key size={14} />
+                                    </div>
+                                    <input
+                                      type="password"
+                                      value={authAddSecret}
+                                      onChange={(e) => setAuthAddSecret(e.target.value)}
+                                      placeholder="輸入 API Key / Token"
+                                      className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                                    />
+                                  </div>
+                                  {choice.id === 'token' && (
+                                    <>
+                                      <div className="p-3 bg-blue-50/50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/30 rounded-xl flex items-start gap-2.5">
+                                        <div className="mt-0.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
+                                          <span className="text-[10px] text-white font-bold">i</span>
+                                        </div>
+                                        <p className="text-[11px] font-medium text-blue-700 dark:text-blue-300 leading-relaxed">
+                                          可在下方直接執行「claude setup-token」來獲取授權 Token，完成後將產生的 Token 貼到上方輸入框。
+                                        </p>
+                                      </div>
+                                      <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.25em] block">CLI 指令（直接取得 Token）</label>
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                          <input
+                                            type="text"
+                                            value={authAddTokenCommand}
+                                            onChange={(e) => setAuthAddTokenCommand(e.target.value)}
+                                            placeholder="claude setup-token"
+                                            className="flex-1 px-3 py-2.5 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono outline-none focus:border-blue-500/50 transition-colors"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => void handleRunAuthTokenCommand()}
+                                            disabled={authAddTokenRunning}
+                                            className="px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                          >
+                                            {authAddTokenRunning ? (
+                                              <><Loader2 size={12} className="animate-spin" /> 執行中</>
+                                            ) : '執行指令'}
+                                          </button>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">執行後請在彈出的終端機完成授權，取得 Token 後貼到上方密鑰欄位。</p>
+                                        {authAddTokenError && (
+                                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">{authAddTokenError}</p>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* 無憑證提示 */}
+                            {(() => {
+                              const group = SETTINGS_PROVIDER_GROUPS.find(g => g.id === authAddProvider);
+                              const choice = group?.choices.find(c => c.id === authAddChoice);
+                              if (choice?.reqKey) return null;
+                              if (choice?.oauthFlow) return (
+                                <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">
+                                  ✓ OAuth 模式：點擊「新增授權」將開啟終端機執行授權流程
+                                </p>
+                              );
+                              return (
+                                <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">
+                                  ✓ 本地模式無須憑證，直接新增即可
+                                </p>
+                              );
+                            })()}
+
                             {authAddError && (
                               <div className="text-sm text-rose-600 dark:text-rose-300">{authAddError}</div>
                             )}
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleAddAuthProfile()}
-                                disabled={authAdding}
-                                className="inline-flex items-center rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-blue-700 transition-colors hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-blue-300"
-                              >
-                                {authAdding ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Plus size={14} className="mr-2" />}
-                                新增授權
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleLaunchFullOnboarding()}
-                                className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:bg-slate-800"
-                              >
-                                完整導引（OAuth/進階）
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleAddAuthProfile()}
+                              disabled={authAdding}
+                              className="inline-flex items-center rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-blue-700 transition-colors hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-blue-300"
+                            >
+                              {authAdding ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Plus size={14} className="mr-2" />}
+                              新增授權
+                            </button>
                           </div>
                         </div>
                       </div>

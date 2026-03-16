@@ -10,6 +10,7 @@ type DaySeries = {
   in: number;
   out: number;
   tokens: number;
+  cost: number;
 };
 
 const formatDelta = (current: number, previous: number) => {
@@ -20,6 +21,11 @@ const formatDelta = (current: number, previous: number) => {
 
 const estimateCost = (inputTokens: number, outputTokens: number) => {
   return ((inputTokens + outputTokens * 2) / 1_000_000) * 0.5;
+};
+
+const normalizeFinite = (value: unknown, fallback = 0) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
 };
 
 const toMonthDay = (isoTime: string) => {
@@ -60,25 +66,36 @@ export function Analytics() {
       const key = toDateKey(updatedAt || snapshot?.generatedAt || '');
       if (!key) continue;
       const current = dailyMap.get(key) || { label: toMonthDay(updatedAt || snapshot?.generatedAt || ''), in: 0, out: 0, tokens: 0 };
-      current.in += Number(session.tokensIn || 0);
-      current.out += Number(session.tokensOut || 0);
-      current.tokens += Number(session.tokensIn || 0) + Number(session.tokensOut || 0);
+      const inTokens = normalizeFinite((session as any).tokensIn, 0);
+      const outTokens = normalizeFinite((session as any).tokensOut, 0);
+      const sessionCostRaw = normalizeFinite((session as any).cost, NaN);
+      const sessionCost = Number.isFinite(sessionCostRaw) && sessionCostRaw >= 0 ? sessionCostRaw : estimateCost(inTokens, outTokens);
+
+      current.in += inTokens;
+      current.out += outTokens;
+      current.tokens += inTokens + outTokens;
+      (current as any).cost = normalizeFinite((current as any).cost, 0) + sessionCost;
       dailyMap.set(key, current);
     }
 
     return Array.from(dailyMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-7)
-      .map(([, value]) => ({ name: value.label, in: value.in, out: value.out, tokens: value.tokens }));
+        .map(([, value]) => ({ name: value.label, in: value.in, out: value.out, tokens: value.tokens, cost: normalizeFinite((value as any).cost, estimateCost(value.in, value.out)) }));
   }, [sessions, snapshot?.generatedAt]);
 
   const chartData = useMemo<DaySeries[]>(() => {
     if (Array.isArray(snapshotHistory) && snapshotHistory.length > 0) {
       return snapshotHistory.map((point) => ({
         name: String(point.label || '').trim() || String(point.dateKey || '').slice(5),
-        in: Number.isFinite(Number(point.tokensIn || 0)) ? Number(point.tokensIn || 0) : 0,
-        out: Number.isFinite(Number(point.tokensOut || 0)) ? Number(point.tokensOut || 0) : 0,
-        tokens: Number.isFinite(Number(point.totalTokens || 0)) ? Number(point.totalTokens || 0) : 0,
+        in: normalizeFinite(point.tokensIn, 0),
+        out: normalizeFinite(point.tokensOut, 0),
+        tokens: normalizeFinite(point.totalTokens, 0),
+        cost: (() => {
+          const exactCost = normalizeFinite(point.estimatedCost, NaN);
+          if (Number.isFinite(exactCost) && exactCost >= 0) return exactCost;
+          return estimateCost(normalizeFinite(point.tokensIn, 0), normalizeFinite(point.tokensOut, 0));
+        })(),
       }));
     }
 
@@ -88,11 +105,16 @@ export function Analytics() {
   const totals = useMemo(() => {
     return sessions.reduce(
       (acc, session) => {
-        acc.input += Number(session.tokensIn || 0);
-        acc.output += Number(session.tokensOut || 0);
+        const input = normalizeFinite((session as any).tokensIn, 0);
+        const output = normalizeFinite((session as any).tokensOut, 0);
+        const exactCost = normalizeFinite((session as any).cost, NaN);
+
+        acc.input += input;
+        acc.output += output;
+        acc.cost += Number.isFinite(exactCost) && exactCost >= 0 ? exactCost : estimateCost(input, output);
         return acc;
       },
-      { input: 0, output: 0 },
+      { input: 0, output: 0, cost: 0 },
     );
   }, [sessions]);
 
@@ -102,16 +124,16 @@ export function Analytics() {
 
     const inDelta = today && yesterday ? formatDelta(today.in, yesterday.in) : '+0.0%';
     const outDelta = today && yesterday ? formatDelta(today.out, yesterday.out) : '+0.0%';
-    const todayCost = today ? estimateCost(today.in, today.out) : 0;
-    const yesterdayCost = yesterday ? estimateCost(yesterday.in, yesterday.out) : 0;
+    const todayCost = today ? normalizeFinite(today.cost, estimateCost(today.in, today.out)) : 0;
+    const yesterdayCost = yesterday ? normalizeFinite(yesterday.cost, estimateCost(yesterday.in, yesterday.out)) : 0;
     const costDelta = today && yesterday ? formatDelta(todayCost, yesterdayCost) : '+0.0%';
 
     return {
       input: { value: `${(totals.input / 1000).toFixed(1)}K`, delta: inDelta },
       output: { value: `${(totals.output / 1000).toFixed(1)}K`, delta: outDelta },
-      cost: { value: estimateCost(totals.input, totals.output).toFixed(2), delta: costDelta },
+      cost: { value: totals.cost.toFixed(2), delta: costDelta },
     };
-  }, [chartData, totals.input, totals.output]);
+  }, [chartData, totals.cost, totals.input, totals.output]);
 
   const agentBreakdown = useMemo(() => {
     const grouped = new Map<string, number>();

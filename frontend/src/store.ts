@@ -60,6 +60,8 @@ export interface ReadModelSession {
   status: string;
   tokensIn: number;
   tokensOut: number;
+  cost?: number;
+  model?: string;
   updatedAt: string;
 }
 
@@ -83,6 +85,8 @@ export interface ReadModelStatus {
   state: string;
   tokensIn: number;
   tokensOut: number;
+  cost?: number;
+  model?: string;
 }
 
 export interface ReadModelBudgetEvaluation {

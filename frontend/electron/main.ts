@@ -482,6 +482,32 @@ const resolveTokensFromLogEntry = (entry: any) => {
 
 const estimateUsageCost = (tokensIn: number, tokensOut: number) => ((tokensIn + tokensOut * 2) / 1_000_000) * 0.5;
 
+const resolveCostFromLogEntry = (entry: any, tokensIn: number, tokensOut: number) => {
+  const usageCostFromMessage = normalizeNumber(entry?.message?.usage?.cost?.total, NaN);
+  const usageCost = normalizeNumber(entry?.usage?.cost?.total, NaN);
+  const costObjectTotal = normalizeNumber(entry?.cost?.total, NaN);
+  const directCost = normalizeNumber(
+    pickFirst(entry, ['estimatedCost', 'totalCost', 'usageCost', 'costUsd', 'usd_cost', 'cost'], NaN),
+    NaN,
+  );
+
+  const candidates = [usageCostFromMessage, usageCost, costObjectTotal, directCost].filter(
+    (value) => Number.isFinite(value) && value >= 0,
+  ) as number[];
+
+  if (candidates.length > 0) return candidates[0];
+  return estimateUsageCost(tokensIn, tokensOut);
+};
+
+const resolveCostFromSessionEntry = (session: any, tokensIn: number, tokensOut: number) => {
+  const directCost = normalizeNumber(
+    pickFirst(session, ['estimatedCost', 'totalCost', 'usageCost', 'costUsd', 'usd_cost', 'cost'], NaN),
+    NaN,
+  );
+  if (Number.isFinite(directCost) && directCost >= 0) return directCost;
+  return estimateUsageCost(tokensIn, tokensOut);
+};
+
 const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
   const lines = String(content || '')
     .split(/\r?\n/)
@@ -495,6 +521,7 @@ const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
       tokensIn: number;
       tokensOut: number;
       totalTokens: number;
+      totalCost: number;
     }
   >();
 
@@ -521,10 +548,12 @@ const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
     const { tokensIn, tokensOut } = resolveTokensFromLogEntry(entry);
     if (tokensIn === 0 && tokensOut === 0) continue;
 
-    const current = daily.get(dateKey) || { label, tokensIn: 0, tokensOut: 0, totalTokens: 0 };
+    const cost = resolveCostFromLogEntry(entry, tokensIn, tokensOut);
+    const current = daily.get(dateKey) || { label, tokensIn: 0, tokensOut: 0, totalTokens: 0, totalCost: 0 };
     current.tokensIn += tokensIn;
     current.tokensOut += tokensOut;
     current.totalTokens += tokensIn + tokensOut;
+    current.totalCost += cost;
     daily.set(dateKey, current);
   }
 
@@ -537,13 +566,13 @@ const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
       tokensIn: value.tokensIn,
       tokensOut: value.tokensOut,
       totalTokens: value.totalTokens,
-      estimatedCost: estimateUsageCost(value.tokensIn, value.tokensOut),
+      estimatedCost: value.totalCost,
     }));
 };
 
 const fallbackHistoryFromSnapshot = (readModel: any, days = 7) => {
   const sessions = normalizeArray(readModel?.sessions);
-  const daily = new Map<string, { label: string; tokensIn: number; tokensOut: number; totalTokens: number }>();
+  const daily = new Map<string, { label: string; tokensIn: number; tokensOut: number; totalTokens: number; totalCost: number }>();
 
   for (const session of sessions) {
     const timestamp = normalizeString(session?.updatedAt || readModel?.generatedAt, '');
@@ -559,10 +588,12 @@ const fallbackHistoryFromSnapshot = (readModel: any, days = 7) => {
 
     const tokensIn = normalizeNumber(session?.tokensIn, 0);
     const tokensOut = normalizeNumber(session?.tokensOut, 0);
-    const current = daily.get(dateKey) || { label, tokensIn: 0, tokensOut: 0, totalTokens: 0 };
+    const cost = resolveCostFromSessionEntry(session, tokensIn, tokensOut);
+    const current = daily.get(dateKey) || { label, tokensIn: 0, tokensOut: 0, totalTokens: 0, totalCost: 0 };
     current.tokensIn += tokensIn;
     current.tokensOut += tokensOut;
     current.totalTokens += tokensIn + tokensOut;
+    current.totalCost += cost;
     daily.set(dateKey, current);
   }
 
@@ -575,7 +606,7 @@ const fallbackHistoryFromSnapshot = (readModel: any, days = 7) => {
       tokensIn: value.tokensIn,
       tokensOut: value.tokensOut,
       totalTokens: value.totalTokens,
-      estimatedCost: estimateUsageCost(value.tokensIn, value.tokensOut),
+      estimatedCost: value.totalCost,
     }));
 };
 
@@ -2306,13 +2337,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
       }
 
-      if ((authChoice === 'apiKey' || authChoice === 'token') && secret) {
-        const syncCmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw auth set --token-provider anthropic --token ${shellQuote(secret)}`;
-        const syncRes = await runShellCommand(syncCmd);
-        if ((syncRes.code ?? 0) !== 0) {
-          return { code: syncRes.code ?? 1, stdout: syncRes.stdout || '', stderr: syncRes.stderr || 'auth sync failed', exitCode: syncRes.code ?? 1 };
-        }
-      }
+      // 新版 OpenClaw 已移除 `openclaw auth set`。
+      // 授權寫入由 onboard 負責，後續以 dual-layer profile 檢查確認結果。
 
       const aliases = getChoiceAliases(authChoice);
       const listed = await collectAuthProfiles(configDir);
@@ -2331,6 +2357,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const payloadStr = fullCommand.replace('config:model-options', '').trim();
       const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const corePath = String(payload?.corePath || '').trim();
       const configDir = normalizeConfigDirectory(String(payload?.configPath || ''));
       if (!configDir) {
         return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
@@ -2339,6 +2366,57 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const filters = Array.isArray(payload?.providers)
         ? payload.providers.map((item: any) => String(item || '').toLowerCase()).filter(Boolean)
         : [];
+
+      const authOverview = await collectAuthProfiles(configDir);
+      const healthyProviders = Array.from(new Set(
+        authOverview.profiles
+          .filter((profile: any) => profile.agentPresent && profile.credentialHealthy)
+          .flatMap((profile: any) => getProfileProviderAliases(profile.profileId, { provider: profile.provider }))
+      ));
+      const effectiveFilters = healthyProviders.length > 0 ? healthyProviders : filters;
+
+      const configFilePath = path.join(configDir, 'openclaw.json');
+      const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} `;
+
+      if (corePath) {
+        const listCmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw models list --all --json`;
+        const listRes = await runShellCommand(listCmd);
+        if ((listRes.code ?? 0) === 0 && String(listRes.stdout || '').trim()) {
+          const parsedList = JSON.parse(listRes.stdout);
+          const rows = Array.isArray(parsedList?.models) ? parsedList.models : [];
+          const grouped = new Map<string, Set<string>>();
+
+          for (const row of rows) {
+            const key = String(row?.key || '').trim();
+            if (!key || row?.available === false) continue;
+            const provider = key.includes('/') ? key.split('/')[0].toLowerCase() : '';
+            if (!provider) continue;
+            if (!providerMatchesAny(provider, effectiveFilters)) continue;
+            if (!grouped.has(provider)) {
+              grouped.set(provider, new Set<string>());
+            }
+            grouped.get(provider)?.add(key);
+          }
+
+          const groups = Array.from(grouped.entries())
+            .map(([provider, models]) => ({
+              provider,
+              group: provider,
+              models: Array.from(models).sort((a, b) => a.localeCompare(b)),
+            }))
+            .filter((group) => group.models.length > 0)
+            .sort((a, b) => a.group.localeCompare(b.group));
+
+          if (groups.length > 0) {
+            return {
+              code: 0,
+              stdout: JSON.stringify({ groups, source: 'openclaw models list --all --json' }),
+              stderr: '',
+              exitCode: 0,
+            };
+          }
+        }
+      }
 
       const agentsRoot = path.join(configDir, 'agents');
       let entries: any[] = [];
@@ -2371,22 +2449,36 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         return { code: 0, stdout: JSON.stringify({ groups: [], source: '' }), stderr: '', exitCode: 0 };
       }
 
-      const parsed = (await loadJsonFile(modelFiles[0])) || {};
-      const providers = parsed?.providers || {};
-      const groups: Array<{ provider: string; group: string; models: string[] }> = [];
+      const grouped = new Map<string, Set<string>>();
+      for (const modelFile of modelFiles) {
+        const parsed = (await loadJsonFile(modelFile)) || {};
+        const providers = parsed?.providers || {};
+        for (const [providerKey, providerConfig] of Object.entries(providers)) {
+          const provider = String(providerKey || '').toLowerCase();
+          if (!providerMatchesAny(provider, effectiveFilters)) continue;
 
-      for (const [providerKey, providerConfig] of Object.entries(providers)) {
-        const provider = String(providerKey || '').toLowerCase();
-        if (!providerMatchesAny(provider, filters)) continue;
+          const rawModels = Array.isArray((providerConfig as any)?.models) ? (providerConfig as any).models : [];
+          const resolvedModels: string[] = rawModels
+            .map((item: any) => String(item?.id || item?.name || '').trim())
+            .filter(Boolean);
 
-        const rawModels = Array.isArray((providerConfig as any)?.models) ? (providerConfig as any).models : [];
-        const resolvedModels: string[] = Array.from(new Set(rawModels
-          .map((item: any) => String(item?.id || item?.name || '').trim())
-          .filter(Boolean)));
-
-        if (!resolvedModels.length) continue;
-        groups.push({ provider, group: provider, models: resolvedModels });
+          if (!grouped.has(provider)) {
+            grouped.set(provider, new Set<string>());
+          }
+          for (const model of resolvedModels) {
+            grouped.get(provider)?.add(model);
+          }
+        }
       }
+
+      const groups = Array.from(grouped.entries())
+        .map(([provider, models]) => ({
+          provider,
+          group: provider,
+          models: Array.from(models).sort((a, b) => a.localeCompare(b)),
+        }))
+        .filter((group) => group.models.length > 0)
+        .sort((a, b) => a.group.localeCompare(b.group));
 
       return {
         code: 0,
