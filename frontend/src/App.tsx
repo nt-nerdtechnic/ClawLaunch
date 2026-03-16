@@ -99,11 +99,17 @@ class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErrorBound
 }
 
 function App() {
+  const ONBOARDING_FINISHED_KEY = 'onboarding_finished';
+  const ONBOARDING_FORCE_RESET_KEY = 'onboarding_force_reset';
+
   const { running, setRunning, logs, addLog, envStatus, setEnvStatus, config, setConfig, detectedConfig, setDetectedConfig, setCoreSkills, setWorkspaceSkills, snapshot, auditTimeline, dailyDigest, setSnapshot, setSnapshotHistory, setEventQueue, setAckedEvents, setAuditTimeline, setDailyDigest, setRawSnapshot, setSnapshotSourcePath } = useStore();
   const [viewMode, setViewMode] = useState<'mini' | 'expanded'>('expanded');
   const [activeTab, setActiveTab] = useState('monitor'); // Default to monitor if onboarding finished
   const [onboardingFinished, setOnboardingFinished] = useState(
-    () => localStorage.getItem('onboarding_finished') === 'true'
+    () => {
+      const forceReset = localStorage.getItem(ONBOARDING_FORCE_RESET_KEY) === 'true';
+      return !forceReset && localStorage.getItem(ONBOARDING_FINISHED_KEY) === 'true';
+    }
   );
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [gatewayConflictModal, setGatewayConflictModal] = useState<{ message: string; detail: string; port: number } | null>(null);
@@ -806,10 +812,16 @@ NODE`;
       (detectedExisting.workspacePath && String(detectedExisting.workspacePath).trim())
     );
 
+    const forceReset = localStorage.getItem(ONBOARDING_FORCE_RESET_KEY) === 'true';
+
     // If runtime paths already exist, treat onboarding as finished even when
     // localStorage flag is missing (e.g., fresh renderer profile or cleared storage).
-    const finished = localStorage.getItem('onboarding_finished') === 'true' || hasAnyConfiguredPath;
-    if (finished) localStorage.setItem('onboarding_finished', 'true');
+    // But if user explicitly requested reset, force onboarding to show until completed again.
+    const finished = !forceReset && (localStorage.getItem(ONBOARDING_FINISHED_KEY) === 'true' || hasAnyConfiguredPath);
+    if (finished) {
+      localStorage.setItem(ONBOARDING_FINISHED_KEY, 'true');
+      localStorage.removeItem(ONBOARDING_FORCE_RESET_KEY);
+    }
     setOnboardingFinished(finished);
     if (!finished) {
       setActiveTab('onboarding');
@@ -819,7 +831,8 @@ NODE`;
   };
 
   const handleOnboardingComplete = () => {
-    localStorage.setItem('onboarding_finished', 'true');
+    localStorage.setItem(ONBOARDING_FINISHED_KEY, 'true');
+    localStorage.removeItem(ONBOARDING_FORCE_RESET_KEY);
     setOnboardingFinished(true);
     setActiveTab('monitor');
   };
@@ -1374,9 +1387,10 @@ NODE`;
         addLog('警告: Gateway 仍在執行中，可能持續占用目前 Port。', 'stderr');
       }
     }
-    localStorage.removeItem('onboarding_finished');
+    localStorage.removeItem(ONBOARDING_FINISHED_KEY);
+    localStorage.setItem(ONBOARDING_FORCE_RESET_KEY, 'true');
     setOnboardingFinished(false);
-    setActiveTab('monitor');
+    setActiveTab('onboarding');
     setShowLogoutConfirm(false);
   };
 

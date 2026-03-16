@@ -94,8 +94,20 @@ const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
 const shellSingleQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const escapeAppleScriptString = (value: string) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
+const sendToRenderer = (channel: string, payload: any) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const webContents = mainWindow.webContents;
+  if (!webContents || webContents.isDestroyed()) return false;
+  try {
+    webContents.send(channel, payload);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const emitShellStdout = (data: string, source: 'stdout' | 'stderr' = 'stdout') => {
-  mainWindow?.webContents.send('shell:stdout', { data, source });
+  sendToRenderer('shell:stdout', { data, source });
 };
 
 const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart') => {
@@ -1224,9 +1236,24 @@ function validateVersionRef(raw: string): string {
 
 function isDevServerReachable(url: string, timeoutMs = 600): Promise<boolean> {
   return new Promise((resolve) => {
-    const req = http.get(url, (res) => {
-      res.resume();
-      resolve(Boolean(res.statusCode && res.statusCode < 500));
+    const normalizedUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const req = http.get(`${normalizedUrl}/@vite/client`, (res) => {
+      const statusOk = Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 300);
+      if (!statusOk) {
+        res.resume();
+        resolve(false);
+        return;
+      }
+
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        // Ensure this is really Vite and not any random HTTP service.
+        resolve(body.includes('vite') || body.includes('/@react-refresh'));
+      });
     });
 
     req.on('error', () => resolve(false));
@@ -1243,21 +1270,21 @@ async function resolveDevServerUrl(): Promise<string> {
     return envUrl;
   }
 
+  const fixedDevUrl = 'http://localhost:5173';
   const deadline = Date.now() + DEV_SERVER_WAIT_MS;
   while (Date.now() < deadline) {
-    for (let port = DEV_PORT_RANGE_START; port <= DEV_PORT_RANGE_END; port++) {
-      const candidate = `http://localhost:${port}`;
-      // eslint-disable-next-line no-await-in-loop
-      if (await isDevServerReachable(candidate)) {
-        return candidate;
-      }
+    // Keep launcher and renderer on a fixed dev port.
+    // Scanning a range can accidentally bind to an unrelated local Vite server.
+    // eslint-disable-next-line no-await-in-loop
+    if (await isDevServerReachable(fixedDevUrl)) {
+      return fixedDevUrl;
     }
     // eslint-disable-next-line no-await-in-loop
     await sleep(250);
   }
 
   // Fallback for clearer diagnostics in renderer load failure.
-  return 'http://localhost:5173';
+  return fixedDevUrl;
 }
 
 function killAllSubprocesses() {
@@ -1314,6 +1341,10 @@ async function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
   });
 }
 
@@ -2576,7 +2607,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         const repoUrl = 'https://github.com/openclaw/openclaw.git';
         const tarballUrl = `https://github.com/openclaw/openclaw/tarball/${encodeURIComponent(targetVersion)}`;
         
-        mainWindow?.webContents.send('shell:stdout', { data: `>>> Initializing paths for version ${targetVersion} via ${downloadMethod}...\n`, source: 'stdout' });
+        emitShellStdout(`>>> Initializing paths for version ${targetVersion} via ${downloadMethod}...\n`, 'stdout');
         
         await fs.mkdir(finalCorePath, { recursive: true });
 
@@ -2584,7 +2615,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             let childProcess: any;
           const runCommandWithStreaming = (cmd: string, title: string) => {
             return new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
-              mainWindow?.webContents.send('shell:stdout', { data: `>>> ${title}\n`, source: 'stdout' });
+              emitShellStdout(`>>> ${title}\n`, 'stdout');
               const proc = spawn(cmd, { shell: true, cwd: finalCorePath });
               activeProcesses.add(proc);
               let stdout = '';
@@ -2593,13 +2624,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
               proc.stdout.on('data', (data: any) => {
                 const chunk = data.toString();
                 stdout += chunk;
-                mainWindow?.webContents.send('shell:stdout', { data: chunk, source: 'stdout' });
+                emitShellStdout(chunk, 'stdout');
               });
 
               proc.stderr.on('data', (data: any) => {
                 const chunk = data.toString();
                 stderr += chunk;
-                mainWindow?.webContents.send('shell:stdout', { data: chunk, source: 'stderr' });
+                emitShellStdout(chunk, 'stderr');
               });
 
               proc.on('error', (err: any) => {
@@ -2633,11 +2664,11 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             activeProcesses.add(childProcess);
 
             childProcess.stdout.on('data', (data: any) => {
-                mainWindow?.webContents.send('shell:stdout', { data: data.toString(), source: 'stdout' });
+                emitShellStdout(data.toString(), 'stdout');
             });
 
             childProcess.stderr.on('data', (data: any) => {
-                mainWindow?.webContents.send('shell:stdout', { data: data.toString(), source: 'stderr' });
+                emitShellStdout(data.toString(), 'stderr');
             });
 
             childProcess.on('error', (err: any) => {
@@ -2659,10 +2690,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 if (downloadMethod === 'git') {
                     const gitDirPath = path.join(finalCorePath, '.git');
                     try {
-                        mainWindow?.webContents.send('shell:stdout', { data: `>>> Detaching from Git (Cleaning up .git directory)...\n`, source: 'stdout' });
+                        emitShellStdout('>>> Detaching from Git (Cleaning up .git directory)...\n', 'stdout');
                         await fs.rm(gitDirPath, { recursive: true, force: true });
                     } catch (e) {
-                        mainWindow?.webContents.send('shell:stdout', { data: `>>> Note: Could not remove .git folder, skipping...\n`, source: 'stdout' });
+                        emitShellStdout('>>> Note: Could not remove .git folder, skipping...\n', 'stdout');
                     }
                 }
 
@@ -2698,7 +2729,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
                   // 4. 用 openclaw setup 建立/更新 config（處理 workspace / gateway 欄位）
                   //    此時 CLI 已就緒，可直接呼叫原生指令，不再依賴 Launcher 手寫模板
-                  mainWindow?.webContents.send('shell:stdout', { data: `>>> Initializing config at ${finalConfigPath}...\n`, source: 'stdout' });
+                  emitShellStdout(`>>> Initializing config at ${finalConfigPath}...\n`, 'stdout');
                   await ensureDirWithTracking(finalConfigPath);
 
                   const configFilePath = path.join(finalConfigPath, 'openclaw.json');
@@ -2707,9 +2738,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
                   const setupEnv = `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_STATE_DIR=${shellQuote(finalConfigPath)}`;
                   const setupRes = await runCommandWithStreaming(
-                    `${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)} --init-channels`,
+                    `${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}`,
                     'Initializing OpenClaw config...'
                   );
+
                   if (setupRes.code !== 0) {
                     resolve({ code: 1, stderr: setupRes.stderr || 'openclaw setup failed.', exitCode: 1 });
                     return;
@@ -2736,7 +2768,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
                   // 6. 初始化 Workspace 附加資料夾與 Launcher 專屬 bootstrap 文件
                   // （openclaw setup 已建立 workspace 基礎目錄與 AGENTS.md；此處補充 Launcher 專屬內容）
-                  mainWindow?.webContents.send('shell:stdout', { data: `>>> Setting up workspace at ${finalWorkspacePath}...\n`, source: 'stdout' });
+                  emitShellStdout(`>>> Setting up workspace at ${finalWorkspacePath}...\n`, 'stdout');
                   const skillsDir = path.join(finalWorkspacePath, 'skills');
                   const extensionsDir = path.join(finalWorkspacePath, 'extensions');
                   await ensureDirWithTracking(finalWorkspacePath);
@@ -2764,7 +2796,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     }
                   }
 
-                    mainWindow?.webContents.send('shell:stdout', { data: `>>> Initialization complete!\n`, source: 'stdout' });
+                    emitShellStdout('>>> Initialization complete!\n', 'stdout');
                     resolve({ 
                         code: 0, 
                         stdout: JSON.stringify({ 
@@ -2789,7 +2821,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
   return new Promise((resolve) => {
     // 輸出指令到 UI 日誌，方便偵錯
-    mainWindow?.webContents.send('shell:stdout', { data: `[Exec] ${fullCommand}\n`, source: 'system' });
+    sendToRenderer('shell:stdout', { data: `[Exec] ${fullCommand}\n`, source: 'system' });
     
     const child = spawn(fullCommand, { shell: true });
     activeProcesses.add(child);
@@ -2798,12 +2830,12 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     child.stdout.on('data', (data) => {
       const chunk = data.toString();
       stdout += chunk;
-      mainWindow?.webContents.send('shell:stdout', { data: chunk, source: 'stdout' });
+      emitShellStdout(chunk, 'stdout');
     });
     child.stderr.on('data', (data) => {
       const chunk = data.toString();
       stderr += chunk;
-      mainWindow?.webContents.send('shell:stdout', { data: chunk, source: 'stderr' });
+      emitShellStdout(chunk, 'stderr');
     });
     child.on('close', (code) => {
       activeProcesses.delete(child);
@@ -2949,7 +2981,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
   const selectedCommand = gatewayCommand;
 
   const emitChunk = (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => {
-    mainWindow?.webContents.send('openclaw:chat.chunk', {
+    sendToRenderer('openclaw:chat.chunk', {
       requestId: request.requestId,
       messageId,
       delta: payload.delta || '',

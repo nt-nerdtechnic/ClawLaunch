@@ -5,6 +5,13 @@ import { execInTerminal } from '../utils/terminal';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
+const shortenText = (value: string, maxLen: number = 1200) => {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen)} ...(truncated)`;
+};
+
 const SUPPORTED_AUTH_CHOICES = new Set([
   'apiKey',
   'token',
@@ -664,8 +671,20 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           };
           const candidates = channelAliasCandidates[platform] || [platform || config.platform];
 
+            // 將 channel 啟用動作延後到 messaging 步驟，避免 initialize 階段耦合授權/綁定。
+            if (platform) {
+              const enableChannelCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.enabled true --json`;
+              const enableRes = await (window as any).electronAPI.exec(enableChannelCmd);
+              if (!isCommandSuccess(enableRes)) {
+                addLocalLog(`⚠️ 無法預先啟用 channels.${platform}.enabled=true，將直接嘗試綁定頻道。`, 'stderr');
+              } else {
+                addLocalLog(`✅ 已啟用 channels.${platform}.enabled=true`, 'system');
+              }
+            }
+
           let lastErr = '';
           let success = false;
+            let lastAttemptSummary = '';
           for (let i = 0; i < candidates.length; i++) {
             const channelId = candidates[i];
             if (!/^[a-z0-9-]+$/i.test(channelId)) {
@@ -683,13 +702,47 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             }
 
             const errText = String(res?.stderr || res?.stdout || '');
-            lastErr = errText || '頻道繫結失敗';
-            const unknownChannel = /unknown channel/i.test(errText);
+              const exitCode = typeof res?.exitCode === 'number' ? res.exitCode : res?.code;
+              const stderrText = shortenText(String(res?.stderr || ''));
+              const stdoutText = shortenText(String(res?.stdout || ''));
+              const detailErr = stderrText || stdoutText || errText;
+              lastErr = detailErr || '頻道繫結失敗';
+              lastAttemptSummary = `channel=${channelId}, exitCode=${String(exitCode ?? 'unknown')}`;
+              addLocalLog(`⚠️ channels add 失敗 (${lastAttemptSummary})`, 'stderr');
+              if (stderrText) addLocalLog(`stderr: ${stderrText}`, 'stderr');
+              if (stdoutText && stdoutText !== stderrText) addLocalLog(`stdout: ${stdoutText}`, 'stderr');
+              const unknownChannel = /unknown channel/i.test(detailErr);
             if (unknownChannel && i < candidates.length - 1) {
               addLocalLog(`↻ Channel ID ${channelId} 不被支援，嘗試相容別名...`, 'system');
               continue;
             }
             break;
+          }
+
+          // config set fallback：channels add 因 plugin registry bug 回傳 "Unknown channel" → 直接寫入 botToken
+          if (!success && config.botToken) {
+            const directConfigKeyMap: Record<string, string> = {
+              telegram: 'botToken',
+              discord: 'botToken',
+              line: 'botToken',
+            };
+            const directKey = directConfigKeyMap[platform];
+            const hadUnknownChannel = /unknown channel/i.test(lastErr || '');
+            if (directKey && hadUnknownChannel) {
+              addLocalLog(`⚠️ channels add 遭遇 plugin registry 問題（Unknown channel），改以 config set 直接寫入...`, 'system');
+              const safeToken = shellQuote(JSON.stringify(config.botToken));
+              const configSetCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.${directKey} ${safeToken} --json`;
+              const configSetRes = await (window as any).electronAPI.exec(configSetCmd);
+              if (isCommandSuccess(configSetRes)) {
+                success = true;
+                addLocalLog(`✅ 已透過 config set 直接寫入 channels.${platform}.${directKey}（繞過 plugin registry 問題）`, 'system');
+              } else {
+                const fbErr = shortenText(String(configSetRes?.stderr || configSetRes?.stdout || ''));
+                if (fbErr) addLocalLog(`config-set fallback 失敗 stderr: ${fbErr}`, 'stderr');
+                lastErr = fbErr || lastErr;
+                lastAttemptSummary += ' (config-set-fallback-failed)';
+              }
+            }
           }
 
           if (!success) {
@@ -700,11 +753,19 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
                 [
                   `目前 OpenClaw 不支援 channel: ${unknownId}。`,
                   `請確認 Core Path 指向正確且可用的 OpenClaw（目前：${corePath}），並先在該目錄執行：pnpm openclaw channels add --help 檢查支援清單。`,
-                  '若清單沒有 telegram，代表該安裝版本尚未支援 Telegram，需切換/升級 OpenClaw。'
+                  '若清單沒有 telegram，代表該安裝版本尚未支援 Telegram，需切換/升級 OpenClaw。',
+                  `最後一次嘗試：${lastAttemptSummary || 'unknown'}`,
+                  `CLI 原始錯誤：${lastErr || 'unknown channel'}`
                 ].join(' ')
               );
             }
-            throw new Error(lastErr || '頻道繫結失敗');
+            throw new Error(
+              [
+                '頻道繫結失敗。',
+                `最後一次嘗試：${lastAttemptSummary || 'unknown'}`,
+                `CLI 原始錯誤：${lastErr || 'no stderr/stdout returned'}`
+              ].join(' ')
+            );
           }
 
           const channelsRequireSafeGroupDefault = new Set(['whatsapp', 'irc', 'signal', 'imessage']);

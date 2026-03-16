@@ -32,18 +32,25 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   const [currentStep, setCurrentStep] = useState(0); // Start with Step 0
   const { t } = useTranslation();
   const completedRef = useRef(false);
+  const latestConfigRef = useRef(config);
+
+  useEffect(() => {
+    latestConfigRef.current = config;
+  }, [config]);
 
   useEffect(() => {
     const stopOnboardingRuntime = () => {
       if (completedRef.current || !window.electronAPI) return;
 
+      const latestConfig = latestConfigRef.current;
+
       window.electronAPI.exec('process:kill-all').catch(() => {});
 
-      const stateDirEnv = config.workspacePath ? `OPENCLAW_STATE_DIR=${shellQuote(config.workspacePath)} ` : '';
-      const configPathEnv = config.configPath ? `OPENCLAW_CONFIG_PATH=${shellQuote(config.configPath + '/openclaw.json')} ` : '';
+      const stateDirEnv = latestConfig.workspacePath ? `OPENCLAW_STATE_DIR=${shellQuote(latestConfig.workspacePath)} ` : '';
+      const configPathEnv = latestConfig.configPath ? `OPENCLAW_CONFIG_PATH=${shellQuote(latestConfig.configPath + '/openclaw.json')} ` : '';
       const envPrefix = `${stateDirEnv}${configPathEnv}`;
-      const stopCmd = config.corePath
-        ? `cd ${shellQuote(config.corePath)} && ${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`
+      const stopCmd = latestConfig.corePath
+        ? `cd ${shellQuote(latestConfig.corePath)} && ${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`
         : `${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`;
 
       window.electronAPI.exec(stopCmd).catch(() => {});
@@ -55,7 +62,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
       window.removeEventListener('beforeunload', stopOnboardingRuntime);
       stopOnboardingRuntime();
     };
-  }, [config.corePath, config.configPath, config.workspacePath]);
+  }, []);
 
   // 定義動態步驟路徑
   const steps: StepDefinition[] = [

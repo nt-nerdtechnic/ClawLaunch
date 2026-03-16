@@ -65,6 +65,7 @@ const SetupStepInitialize = ({ onNext }) => {
     const [downloadMethod] = useState('zip');
     const [createdItems, setCreatedItems] = useState<string[]>([]);
     const [existingItems, setExistingItems] = useState<string[]>([]);
+    const [hasInitializeAttempt, setHasInitializeAttempt] = useState(false);
 
     const pushProgress = (message: string) => {
         setProgress(message);
@@ -137,6 +138,7 @@ const SetupStepInitialize = ({ onNext }) => {
         if (!config.corePath || !config.configPath || !config.workspacePath) return;
         if (Object.values(errors).some(e => e)) return;
 
+        setHasInitializeAttempt(true);
         setInitializing(true);
         setCreatedItems([]);
         setExistingItems([]);
@@ -292,17 +294,32 @@ const SetupStepInitialize = ({ onNext }) => {
                 </div>
 
                 <div className="pt-6 space-y-4">
-                    {initialized && createdItems.length > 0 && (
+                    {initialized && (
                         <div className="w-full bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
                             <p className="text-[11px] font-black text-emerald-800 uppercase tracking-wider mb-3">
-                                Created In This Init
+                                Initialization Summary
                             </p>
-                            <div className="max-h-40 overflow-auto space-y-1">
-                                {createdItems.map((item) => (
-                                    <p key={item} className="text-[11px] font-mono text-emerald-900 break-all">
-                                        {item}
+                            <div className="space-y-3">
+                                {createdItems.length > 0 ? (
+                                    <div className="max-h-40 overflow-auto space-y-1">
+                                        {createdItems.map((item) => (
+                                            <p key={item} className="text-[11px] font-mono text-emerald-900 break-all">
+                                                {item}
+                                            </p>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-[11px] text-emerald-800 font-semibold">
+                                        Success. No new files were created in this run; existing paths were reused.
                                     </p>
-                                ))}
+                                )}
+
+                                <div className="space-y-1 pt-2 border-t border-emerald-200/70">
+                                    <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">Resolved Paths</p>
+                                    <p className="text-[11px] font-mono text-emerald-900 break-all">core: {config.corePath || '-'}</p>
+                                    <p className="text-[11px] font-mono text-emerald-900 break-all">config: {config.configPath || '-'}</p>
+                                    <p className="text-[11px] font-mono text-emerald-900 break-all">workspace: {config.workspacePath || '-'}</p>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -354,14 +371,16 @@ const SetupStepInitialize = ({ onNext }) => {
                                     {t('setupInitialize.cancelBtn')}
                                 </button>
                             )}
-                            
-                            {/* 實時日誌視窗 */}
-                            <TerminalLog 
-                                logs={logs} 
-                                height="h-32" 
-                                title="OpenClaw Initialization" 
-                            />
                         </div>
+                    )}
+
+                    {/* 實時日誌視窗（曾執行初始化後持續保留，避免視窗瞬間消失） */}
+                    {(initializing || hasInitializeAttempt) && (
+                        <TerminalLog 
+                            logs={logs} 
+                            height="h-32" 
+                            title="OpenClaw Initialization" 
+                        />
                     )}
                 </div>
             </div>
