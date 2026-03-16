@@ -87,6 +87,21 @@ const SetupStepInitialize = ({ onNext }) => {
         fetchVersions();
     }, []);
 
+    // 新建專案時，對已填入的路徑自動驗證，立即顯示「目錄已有資料」警告
+    useEffect(() => {
+        const autoValidatePrefilled = async () => {
+            const keysToCheck: Array<'corePath' | 'configPath' | 'workspacePath'> = ['corePath', 'configPath', 'workspacePath'];
+            for (const key of keysToCheck) {
+                const val = config[key];
+                if (val && typeof val === 'string' && val.trim()) {
+                    await validatePath(key, val.trim());
+                }
+            }
+        };
+        autoValidatePrefilled();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleBrowse = async (key) => {
         if (window.electronAPI && window.electronAPI.selectDirectory) {
             const selectedPath = await window.electronAPI.selectDirectory();
@@ -104,12 +119,17 @@ const SetupStepInitialize = ({ onNext }) => {
             if (res.code === 0) {
                 const data = JSON.parse(res.stdout);
                 if (!data.isEmpty && !data.notExist) {
-                    let subDir = '';
-                    if (key === 'corePath') subDir = 'openclaw';
-                    if (key === 'configPath') subDir = '.openclaw';
-                    if (key === 'workspacePath') subDir = 'openclaw-workspace';
-
-                    setWarnings(prev => ({ ...prev, [key]: t('setupInitialize.pathWarning', { name: subDir }) }));
+                    let warnMsg = '';
+                    if (key === 'configPath') {
+                        // 特別提示：此目錄已有 OpenClaw 設定與授權資料，新建專案建議改用全新路徑
+                        warnMsg = '⚠️ 此目錄已有 OpenClaw 設定（含授權資料）。新建專案建議改用全新目錄，避免繼承舊授權。';
+                    } else {
+                        let subDir = '';
+                        if (key === 'corePath') subDir = 'openclaw';
+                        if (key === 'workspacePath') subDir = 'openclaw-workspace';
+                        warnMsg = t('setupInitialize.pathWarning', { name: subDir });
+                    }
+                    setWarnings(prev => ({ ...prev, [key]: warnMsg }));
                     setErrors(prev => ({ ...prev, [key]: '' }));
                 } else {
                     setErrors(prev => ({ ...prev, [key]: '' }));

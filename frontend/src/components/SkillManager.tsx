@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import type { SkillItem } from '../store';
 import { Info, Lock, ChevronDown, ChevronUp, Puzzle, ShieldCheck, RefreshCw, PackagePlus, Trash2, FolderOpen, Blocks, AlertCircle } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
 // ── 技能卡片元件 ──────────────────────────────────────────────────────────────
 function SkillCard({
@@ -206,7 +206,14 @@ export function SkillManager() {
             {t('skillManager.title')}
           </h3>
           <p className="text-sm text-slate-400 mt-1 font-medium ml-6">
-            {activeTab === 'core' ? t('skillManager.guide.core') : t('skillManager.guide.workspace')}
+            {activeTab === 'core' ? (
+              t('skillManager.guide.core')
+            ) : (
+              <Trans
+                i18nKey="skillManager.guide.workspace"
+                components={[<span key="skills-dir" className="font-mono font-semibold text-slate-600 dark:text-slate-300" />]}
+              />
+            )}
           </p>
         </div>
         
@@ -268,7 +275,10 @@ export function SkillManager() {
               <div className="col-span-full flex flex-col items-center justify-center py-24 bg-slate-50/50 dark:bg-slate-900/10 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-slate-800/50">
                 <Puzzle size={48} className="text-slate-200 dark:text-slate-800 mb-6" />
                 <p className="text-sm text-slate-400 dark:text-slate-600 max-w-xs text-center leading-relaxed font-bold">
-                  {t('skillManager.status.emptyWorkspace')}
+                  <Trans
+                    i18nKey="skillManager.status.emptyWorkspace"
+                    components={[<span key="skills-dir" className="font-mono font-semibold text-slate-600 dark:text-slate-300" />]}
+                  />
                 </p>
                 <button
                   onClick={handleImport}

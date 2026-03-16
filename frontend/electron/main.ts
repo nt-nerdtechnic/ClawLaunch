@@ -1531,6 +1531,23 @@ const hasCredential = (profile: any) => {
   return false;
 };
 
+const unwrapCliArg = (rawValue: string) => {
+  const value = String(rawValue || '').trim();
+  if (!value) return '';
+
+  if (value.startsWith("'") && value.endsWith("'")) {
+    const inner = value.slice(1, -1);
+    return inner.replace(/'\\''/g, "'");
+  }
+
+  if (value.startsWith('"') && value.endsWith('"')) {
+    const inner = value.slice(1, -1);
+    return inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  }
+
+  return value;
+};
+
 async function loadJsonFile(filePath: string): Promise<any | null> {
   try {
     const raw = await fs.readFile(filePath, 'utf-8');
@@ -2230,7 +2247,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   }
 
   if (fullCommand.startsWith('config:probe')) {
-    const probePath = fullCommand.replace('config:probe ', '').trim();
+    const probePath = unwrapCliArg(fullCommand.replace('config:probe ', '').trim());
     try {
         const stats = await fs.stat(probePath);
         let finalConfigFilePath = '';
@@ -2700,18 +2717,39 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 try {
                   const createdItems: string[] = [];
                   const existingItems: string[] = [];
+                  const preExistingItems = new Set<string>();
+
+                  const trackPreExisting = async (targetPath: string) => {
+                    try {
+                      await fs.stat(targetPath);
+                      preExistingItems.add(targetPath);
+                    } catch {
+                      // Path did not exist before initialization started.
+                    }
+                  };
+
+                  const trackOutcome = (targetPath: string) => {
+                    if (preExistingItems.has(targetPath)) {
+                      existingItems.push(targetPath);
+                    } else {
+                      createdItems.push(targetPath);
+                    }
+                  };
+
+                  const configFilePath = path.join(finalConfigPath, 'openclaw.json');
+                  const skillsDir = path.join(finalWorkspacePath, 'skills');
+                  const extensionsDir = path.join(finalWorkspacePath, 'extensions');
 
                   const ensureDirWithTracking = async (dirPath: string) => {
-                    try {
-                      const stat = await fs.stat(dirPath);
-                      if (stat.isDirectory()) {
-                        existingItems.push(dirPath);
-                        return;
-                      }
-                    } catch {}
                     await fs.mkdir(dirPath, { recursive: true });
-                    createdItems.push(dirPath);
+                    trackOutcome(dirPath);
                   };
+
+                  await trackPreExisting(finalConfigPath);
+                  await trackPreExisting(configFilePath);
+                  await trackPreExisting(finalWorkspacePath);
+                  await trackPreExisting(skillsDir);
+                  await trackPreExisting(extensionsDir);
 
                   // 2. 安裝依賴（先安裝才有可用的 CLI，讓後續 openclaw setup 可以執行）
                   const installRes = await runCommandWithStreaming('pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
@@ -2732,10 +2770,6 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                   emitShellStdout(`>>> Initializing config at ${finalConfigPath}...\n`, 'stdout');
                   await ensureDirWithTracking(finalConfigPath);
 
-                  const configFilePath = path.join(finalConfigPath, 'openclaw.json');
-                  let configExistedBefore = false;
-                  try { await fs.stat(configFilePath); configExistedBefore = true; } catch {}
-
                   const setupEnv = `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_STATE_DIR=${shellQuote(finalConfigPath)}`;
                   const setupRes = await runCommandWithStreaming(
                     `${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}`,
@@ -2746,11 +2780,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     resolve({ code: 1, stderr: setupRes.stderr || 'openclaw setup failed.', exitCode: 1 });
                     return;
                   }
-                  if (configExistedBefore) {
-                    existingItems.push(configFilePath);
-                  } else {
-                    createdItems.push(configFilePath);
-                  }
+                  trackOutcome(configFilePath);
 
                   // 清理 Launcher 舊版可能寫入的 legacy keys（不影響 openclaw schema）
                   try {
@@ -2769,8 +2799,6 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                   // 6. 初始化 Workspace 附加資料夾與 Launcher 專屬 bootstrap 文件
                   // （openclaw setup 已建立 workspace 基礎目錄與 AGENTS.md；此處補充 Launcher 專屬內容）
                   emitShellStdout(`>>> Setting up workspace at ${finalWorkspacePath}...\n`, 'stdout');
-                  const skillsDir = path.join(finalWorkspacePath, 'skills');
-                  const extensionsDir = path.join(finalWorkspacePath, 'extensions');
                   await ensureDirWithTracking(finalWorkspacePath);
                   await ensureDirWithTracking(skillsDir);
                   await ensureDirWithTracking(extensionsDir);
@@ -2786,15 +2814,22 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     'MEMORY.md': '# MEMORY\n\nPersistent project memory and verify decisions.\n',
                   };
 
+                  for (const name of Object.keys(bootstrapTemplates)) {
+                    await trackPreExisting(path.join(finalWorkspacePath, name));
+                  }
+
                   for (const [name, content] of Object.entries(bootstrapTemplates)) {
                     const targetPath = path.join(finalWorkspacePath, name);
                     const wrote = await writeFileIfMissing(targetPath, content);
-                    if (wrote) {
-                      createdItems.push(targetPath);
+                    if (!wrote) {
+                      trackOutcome(targetPath);
                     } else {
-                      existingItems.push(targetPath);
+                      createdItems.push(targetPath);
                     }
                   }
+
+                  const uniqueCreatedItems = Array.from(new Set(createdItems));
+                  const uniqueExistingItems = Array.from(new Set(existingItems));
 
                     emitShellStdout('>>> Initialization complete!\n', 'stdout');
                     resolve({ 
@@ -2803,8 +2838,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                             corePath: finalCorePath, 
                             configPath: finalConfigPath, 
                             workspacePath: finalWorkspacePath,
-                            createdItems,
-                            existingItems
+                            createdItems: uniqueCreatedItems,
+                            existingItems: uniqueExistingItems
                         }), 
                         exitCode: 0 
                     });

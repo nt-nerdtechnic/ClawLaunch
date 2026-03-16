@@ -1,6 +1,6 @@
 # NT-ClawLaunch
 
-**NT-ClawLaunch** 是一個專為加速國際開源專案啟動而設計的自主協作與管理平台。它不僅僅是一個啟動器，更是一套整合了前端介面、後端邏輯與自動化導航的完整生態系統。
+**NT-ClawLaunch** 是一個專為加速國際開源專案啟動而設計的自主協作與管理平台。它不僅僅是一個啟動器，更是一套整合前端介面與桌面端自動化控制的完整生態系統。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](CONTRIBUTING.md)
@@ -15,9 +15,22 @@
 ## 📂 專案結構
 
 *   `frontend/`：基於 React 與 Electron 的現代化 UI 介面。
-*   `backend/`：高性能的邏輯處理中心 (Rust/Python)。
-*   `shared/`：前端與後端共用的資源與型別定義。
 *   `docs/`：完整的開發與使用者文件。
+*   `vault/`：執行日誌與本地資料快照。
+
+## 🧩 一鍵更新機制規格摘要
+
+以下內容已由原本的 `shared/` 規格檔整併至 README：
+
+*   **版本檢測**：啟動時檢查本地與遠端版本，若有更新即提示。
+*   **更新執行**：透過桌面端 IPC 執行 `git pull` 與依賴安裝流程。
+*   **進度可視化**：更新期間顯示執行日誌與狀態。
+*   **完成重啟**：更新成功後提示重啟以套用新版本。
+
+目前對應的 IPC 能力（概念）如下：
+
+*   `check_version`：回傳 `local`、`remote`、`hasUpdate`。
+*   `execute_update`：回傳 `success` 與 `logs`。
 
 ## 🛠 快速啟動
 
