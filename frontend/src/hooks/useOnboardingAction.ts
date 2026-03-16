@@ -23,6 +23,26 @@ const SUPPORTED_AUTH_CHOICES = new Set([
   'qwen-portal'
 ]);
 
+const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
+  apiKey: ['anthropic'],
+  token: ['anthropic'],
+  'openai-api-key': ['openai'],
+  'openai-codex': ['openai-codex', 'openai'],
+  'gemini-api-key': ['gemini', 'google'],
+  'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
+  'minimax-api': ['minimax'],
+  'minimax-portal': ['minimax-portal', 'minimax'],
+  'moonshot-api-key': ['moonshot'],
+  'openrouter-api-key': ['openrouter'],
+  'xai-api-key': ['xai'],
+  'ollama': ['ollama'],
+  'vllm': ['vllm'],
+  'chutes': ['chutes'],
+  'qwen-portal': ['qwen-portal', 'qwen']
+};
+
+const CREDENTIALLESS_AUTH_CHOICES = new Set(['ollama', 'vllm']);
+
 export type OnboardingStep = 'model' | 'messaging' | 'skills' | 'launch';
 
 interface UseOnboardingActionReturn {
@@ -64,6 +84,148 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   };
 
   const isCommandSuccess = (res: any) => res?.exitCode === 0 || res?.code === 0;
+
+  const sanitizeSecret = (value: string) => String(value || '').replace(/\s+/g, '');
+
+  const resolveProviderAliases = (authChoice: string) => {
+    const key = String(authChoice || '').trim();
+    return AUTH_CHOICE_PROVIDER_ALIASES[key] || [key];
+  };
+
+  const profileMatchesProvider = (profileId: string, profile: any, aliases: string[]) => {
+    const provider = String(profile?.provider || '').toLowerCase();
+    const id = String(profileId || '').toLowerCase();
+    return aliases.some((alias) => {
+      const normalizedAlias = String(alias || '').toLowerCase();
+      return normalizedAlias && (provider === normalizedAlias || id.includes(normalizedAlias));
+    });
+  };
+
+  const hasAgentCredential = (profile: any) => {
+    const token = String(profile?.token || '').trim();
+    const access = String(profile?.access || '').trim();
+    if (token) {
+      return { ok: !/\s/.test(token), reason: /\s/.test(token) ? 'token_whitespace' : 'token' };
+    }
+    if (access) {
+      return { ok: true, reason: 'oauth_access' };
+    }
+    return { ok: false, reason: 'missing' };
+  };
+
+  const readAgentAuthProfiles = async (configPath: string) => {
+    const agentsDir = `${configPath}/agents`;
+    const findCmd = `find ${shellQuote(agentsDir)} -type f -path '*/agent/auth-profiles.json' 2>/dev/null | head -1`;
+    const findRes = await (window as any).electronAPI.exec(findCmd);
+    if (!isCommandSuccess(findRes) || !findRes.stdout) {
+      return null;
+    }
+
+    const profilePath = String(findRes.stdout || '').trim().split(/\r?\n/)[0] || '';
+    if (!profilePath) return null;
+
+    const readRes = await (window as any).electronAPI.exec(`cat ${shellQuote(profilePath)}`);
+    if (!isCommandSuccess(readRes) || !readRes.stdout) {
+      return null;
+    }
+
+    return {
+      profilePath,
+      parsed: JSON.parse(readRes.stdout),
+    };
+  };
+
+  const verifyDualLayerAuthPersistence = async (params: {
+    authChoice: string;
+    configPath: string;
+    addLocalLog: (text: string, source?: string) => void;
+  }) => {
+    if (CREDENTIALLESS_AUTH_CHOICES.has(String(params.authChoice || '').trim())) {
+      params.addLocalLog('ℹ️ 略過雙層憑證檢查：此授權類型不需要 token/profile。', 'system');
+      return;
+    }
+
+    const aliases = resolveProviderAliases(params.authChoice);
+    const parsed = await readOpenClawConfig(params.configPath);
+    const globalProfiles = parsed?.auth?.profiles || {};
+    const globalEntries = Object.entries(globalProfiles) as Array<[string, any]>;
+    const hasGlobalProfile = globalEntries.some(([profileId, profile]) => profileMatchesProvider(profileId, profile, aliases));
+    if (!hasGlobalProfile) {
+      throw new Error(`授權設定未完成：openclaw.json 的 auth.profiles 找不到 ${aliases.join('/')} profile。`);
+    }
+
+    params.addLocalLog('✅ 已確認全域層 auth.profiles profile 指向。', 'system');
+
+    const agentAuth = await readAgentAuthProfiles(params.configPath);
+    if (!agentAuth) {
+      throw new Error('授權設定未完成：找不到 agents/*/agent/auth-profiles.json，請重新執行模型授權。');
+    }
+
+    const agentProfiles = agentAuth.parsed?.profiles || {};
+    const agentEntries = Object.entries(agentProfiles) as Array<[string, any]>;
+    const matchedAgentEntry = agentEntries.find(([profileId, profile]) => profileMatchesProvider(profileId, profile, aliases));
+    if (!matchedAgentEntry) {
+      throw new Error(
+        `授權設定未完成：已寫入全域 profile，但 agent 憑證層 (${agentAuth.profilePath}) 找不到 ${aliases.join('/')} 的有效 profile。`,
+      );
+    }
+
+    const [agentProfileId, agentProfile] = matchedAgentEntry;
+    const credentialCheck = hasAgentCredential(agentProfile);
+    if (!credentialCheck.ok) {
+      if (credentialCheck.reason === 'token_whitespace') {
+        throw new Error(
+          `授權設定異常：agent 憑證層 (${agentProfileId}) 的 token 含有空白字元，請重新貼上 API Key/Token。`,
+        );
+      }
+      throw new Error(
+        `授權設定未完成：agent 憑證層 (${agentProfileId}) 缺少 token/access，請重新執行授權流程。`,
+      );
+    }
+
+    params.addLocalLog(`✅ 已確認 agent 憑證層 (${agentProfileId}) 可用。`, 'system');
+  };
+
+  const verifyAnyDualLayerAuthPersistence = async (params: {
+    configPath: string;
+    addLocalLog: (text: string, source?: string) => void;
+  }) => {
+    const parsed = await readOpenClawConfig(params.configPath);
+    const globalProfiles = parsed?.auth?.profiles || {};
+    const globalEntries = Object.entries(globalProfiles) as Array<[string, any]>;
+    if (globalEntries.length === 0) {
+      throw new Error('授權設定未完成：openclaw.json 的 auth.profiles 為空。');
+    }
+
+    const agentAuth = await readAgentAuthProfiles(params.configPath);
+    if (!agentAuth) {
+      throw new Error('授權設定未完成：找不到 agents/*/agent/auth-profiles.json。');
+    }
+
+    const agentProfiles = agentAuth.parsed?.profiles || {};
+    const agentEntries = Object.entries(agentProfiles) as Array<[string, any]>;
+    const matched = globalEntries.find(([globalProfileId, globalProfile]) => {
+      const provider = String(globalProfile?.provider || '').toLowerCase();
+      const profileId = String(globalProfileId || '').toLowerCase();
+      return agentEntries.some(([agentProfileId, agentProfile]) => {
+        const agentProvider = String(agentProfile?.provider || '').toLowerCase();
+        const agentProfileKey = String(agentProfileId || '').toLowerCase();
+        const providerMatched = Boolean(
+          provider && (provider === agentProvider || agentProfileKey.includes(provider) || profileId.includes(agentProvider)),
+        );
+        if (!providerMatched) return false;
+        return hasAgentCredential(agentProfile).ok;
+      });
+    });
+
+    if (!matched) {
+      throw new Error(
+        `授權設定未完成：存在全域 auth.profiles，但在 ${agentAuth.profilePath} 找不到對應且可用的 agent 憑證。`,
+      );
+    }
+
+    params.addLocalLog('✅ 已確認現有授權符合雙層可驗證（global + agent）。', 'system');
+  };
 
   const resolveExecCmd = async (corePath: string): Promise<string> => {
     const hasPnpmLock = await (window as any).electronAPI.exec(`test -f ${shellQuote(`${corePath}/pnpm-lock.yaml`)}`);
@@ -145,10 +307,14 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
   const resolveGatewayStatusError = (rawError: string) => {
     const message = String(rawError || '');
+    const rawPort = String(config.gatewayPort || '').trim();
+    const commandHint = /^\d+$/.test(rawPort)
+      ? `openclaw gateway status --deep --url ws://127.0.0.1:${rawPort}`
+      : 'Launcher 尚未設定有效 Gateway Port，請先於設定頁填入埠號後再檢查';
     if (/device signature invalid|signature invalid|1008/i.test(message)) {
       return [
         'Gateway 驗證失敗：偵測到裝置簽章不一致 (1008 / device signature invalid)。',
-        '請先執行 openclaw gateway status --deep 檢查服務與配對狀態，必要時重啟 gateway 並重新配對裝置。'
+        `請先執行 ${commandHint} 檢查服務與配對狀態，必要時重啟 gateway 並重新配對裝置。`
       ].join(' ');
     }
     if (/auth_token_mismatch|token mismatch|unauthorized/i.test(message)) {
@@ -171,7 +337,15 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     addLocalLog('✅ OpenClaw CLI 可正常執行。', 'system');
 
     addLocalLog('🔍 正在進行被動網關探測 (Gateway Pulse Check)...', 'system');
-    const gatewayRes = await (window as any).electronAPI.exec(`cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw gateway status`);
+    const rawPort = String(config.gatewayPort || '').trim();
+    if (!/^\d+$/.test(rawPort)) {
+      throw new Error('Launcher 尚未設定有效 Gateway Port，請先至設定頁填入埠號。');
+    }
+    const gatewayPort = Number(rawPort);
+    const gatewayUrl = `ws://127.0.0.1:${gatewayPort}`;
+    const gatewayRes = await (window as any).electronAPI.exec(
+      `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw gateway status --url ${shellQuote(gatewayUrl)}`,
+    );
     if (!isCommandSuccess(gatewayRes)) {
       const gatewayErr = gatewayRes.stderr || gatewayRes.stdout || '';
       if (/device signature invalid|signature invalid|1008/i.test(gatewayErr)) {
@@ -316,9 +490,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           case 'model': {
             addLocalLog('🧠 正在驗證現有模型授權設定...', 'system');
             if (!configPath) throw new Error('缺少 Config Path，無法驗證模型設定');
-            const parsed = await readOpenClawConfig(configPath);
-            const hasProfiles = Object.keys(parsed?.auth?.profiles || {}).length > 0;
-            if (!hasProfiles) throw new Error('找不到可用的模型授權設定 (auth.profiles)');
+            if (CREDENTIALLESS_AUTH_CHOICES.has(selectedAuthChoice)) {
+              addLocalLog('ℹ️ 目前模型為免憑證模式，略過雙層憑證檢查。', 'system');
+              break;
+            }
+            await verifyAnyDualLayerAuthPersistence({ configPath, addLocalLog });
             break;
           }
           case 'messaging': {
@@ -390,6 +566,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               throw new Error('OAuth 授權逾時或未完成，請在彈出的終端機完成登入後重試');
             }
 
+            await verifyDualLayerAuthPersistence({
+              authChoice: selectedAuthChoice,
+              configPath,
+              addLocalLog,
+            });
             addLocalLog('✅ OAuth 授權已完成，已寫入核心設定。', 'system');
             break;
           }
@@ -405,22 +586,47 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           };
 
           let authFlags = '';
+          const sanitizedSecret = sanitizeSecret(config.apiKey || '');
+          const secretChanged = Boolean(config.apiKey) && sanitizedSecret !== String(config.apiKey || '');
+          if (secretChanged) {
+            addLocalLog('ℹ️ 偵測到授權字串包含空白，已自動移除空白字元再寫入。', 'system');
+          }
+
           if (selectedAuthChoice === 'token') {
-            if (!config.apiKey) {
+            if (!sanitizedSecret) {
               throw new Error('缺少 Setup-Token，請先貼上由 claude setup-token 產生的 Token');
             }
-            authFlags = `--token-provider anthropic --token ${shellQuote(config.apiKey)}`;
-          } else if (config.apiKey) {
+            authFlags = `--token-provider anthropic --token ${shellQuote(sanitizedSecret)}`;
+          } else if (sanitizedSecret) {
             const flag = authFlagMapping[selectedAuthChoice];
             if (!flag) {
               throw new Error(`不支援的授權參數映射: ${selectedAuthChoice || 'unknown'}`);
             }
-            authFlags = `${flag} ${shellQuote(config.apiKey)}`;
+            authFlags = `${flag} ${shellQuote(sanitizedSecret)}`;
           }
           const onboardCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw onboard --auth-choice ${shellQuote(selectedAuthChoice)} ${authFlags} ${workspaceFlag} --no-install-daemon --skip-daemon --skip-health --non-interactive --accept-risk`;
 
           const res = await (window as any).electronAPI.exec(onboardCmd);
           if (!isCommandSuccess(res)) throw new Error(res.stderr || '核心授權失敗');
+
+          // Anthropic token/api-key 類型在個別環境偶爾只完成 profile 指向，這裡補一次 auth set 強化 agent 憑證層一致性。
+          if ((selectedAuthChoice === 'apiKey' || selectedAuthChoice === 'token') && sanitizedSecret) {
+            const syncAuthCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw auth set --token-provider anthropic --token ${shellQuote(sanitizedSecret)}`;
+            const syncRes = await (window as any).electronAPI.exec(syncAuthCmd);
+            if (!isCommandSuccess(syncRes)) {
+              throw new Error(syncRes.stderr || 'Anthropic 憑證同步失敗，請重新執行授權');
+            }
+            addLocalLog('✅ 已同步寫入 agent 憑證層 (auth-profiles)。', 'system');
+          }
+
+          if (!configPath) {
+            throw new Error('缺少 Config Path，無法驗證授權寫入結果');
+          }
+          await verifyDualLayerAuthPersistence({
+            authChoice: selectedAuthChoice,
+            configPath,
+            addLocalLog,
+          });
           break;
         }
 

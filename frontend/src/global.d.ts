@@ -48,6 +48,20 @@ declare global {
         failed?: Array<{ pid: number; reason: string }>;
         error?: string;
       }>;
+      ackEvent: (payload: {
+        eventId: string;
+        ttlMs?: number;
+        runtimeDir?: string;
+        configPath?: string;
+        workspacePath?: string;
+        corePath?: string;
+      }) => Promise<{ success: boolean; eventId?: string; ackedAt?: string; expiresAt?: string; runtimeDir?: string; error?: string }>;
+      getEventState: (payload: {
+        runtimeDir?: string;
+        configPath?: string;
+        workspacePath?: string;
+        corePath?: string;
+      }) => Promise<{ success: boolean; runtimeDir?: string; acks?: Record<string, { ackedAt: string; expiresAt: string }>; error?: string }>;
       invokeChat: (request: OpenClawChatRequest) => Promise<OpenClawChatResult>;
       abortChat: (requestId: string) => Promise<{ success: boolean; error?: string }>;
       onChatChunk: (callback: (chunk: OpenClawChatChunk) => void) => () => void;

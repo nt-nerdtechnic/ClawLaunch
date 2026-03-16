@@ -90,7 +90,73 @@
         "git": "Git Version Control",
         "pnpm": "pnpm Manager"
     },
-    "liveStream": "Live Stream"
+    "liveStream": "Live Stream",
+    "decision": {
+      "healthSummary": "健康總覽",
+      "alertsQueue": "告警佇列",
+      "taskHeartbeat": "Task Heartbeat",
+      "connectionHealth": "連線健康度",
+      "checkedToday": "今日檢查數",
+      "eligibleToday": "可執行數",
+      "startedToday": "已啟動數",
+      "heartbeatConnected": "已接上 heartbeat 日誌",
+      "heartbeatLoading": "讀取 heartbeat 中",
+      "heartbeatDegraded": "heartbeat 資料降級中",
+      "connectedRatio": "{{connected}}/{{total}} 已連線",
+      "jumpTo": "跳轉至 {{target}}",
+      "status": {
+        "connected": "已連線",
+        "degraded": "降級"
+      },
+      "health": {
+        "gatewayRunning": "Gateway 已連線且運行中。",
+        "gatewayStopped": "Gateway 未連線或尚未啟動。",
+        "configState": "已對位 {{count}} / 3 個核心路徑。",
+        "runtimeFreshness": "快照更新於 {{sec}} 秒前。",
+        "runtimeMissing": "尚未取得 runtime 快照。"
+      },
+      "filters": {
+        "all": "全部",
+        "info": "資訊",
+        "warn": "警告",
+        "actionRequired": "需處理",
+        "empty": "目前此級別沒有告警。"
+      },
+      "targets": {
+        "healthSummary": "健康總覽",
+        "actionCenter": "待審批中心",
+        "staffGrid": "活躍團隊",
+        "liveStream": "即時日誌",
+        "connectionHealth": "連線健康度"
+      },
+      "connection": {
+        "node": "Node.js Runtime",
+        "pnpm": "pnpm Toolchain",
+        "corePath": "Core Path",
+        "configPath": "Config Path",
+        "workspacePath": "Workspace Path",
+        "sessions": "Session Feed",
+        "approvals": "Approvals Feed",
+        "approvalsCount": "{{count}} 筆",
+        "taskStore": "Task Store",
+        "budget": "Budget Summary",
+        "heartbeat": "Task Heartbeat Log"
+      },
+      "alerts": {
+        "snapshotWaiting": "等待快照資料",
+        "snapshotWaitingDesc": "尚未取得 runtime 快照，顯示為初始狀態。",
+        "noActiveSessions": "沒有活躍 Session",
+        "noActiveSessionsDesc": "目前沒有可觀測的執行會話，可能尚未啟動或資料源降級。",
+        "pendingApprovals": "有待審批動作",
+        "pendingApprovalsDesc": "待處理審批 {{count}} 筆。",
+        "runtimeIssues": "Runtime 異常",
+        "runtimeIssuesDesc": "Blocked {{blocked}} / Error {{error}}。",
+        "budgetRisk": "Budget 風險",
+        "budgetRiskDesc": "Over {{over}} / Warn {{warn}}。",
+        "allClear": "目前無高優先告警",
+        "allClearDesc": "系統指標平穩，可持續觀察。"
+      }
+    }
   },
   "settings": {
     "botToken": "Telegram Bot Token",
@@ -101,7 +167,7 @@
     "configPath": "OpenClaw 設定區 (Config)",
     "configPathPlaceholder": "留空則使用預設路徑",
     "gatewayPort": "Gateway 連接埠 (Port)",
-    "gatewayPortPlaceholder": "留空則使用 OpenClaw 預設值（如 18789）",
+    "gatewayPortPlaceholder": "請填入 Launcher 指定的 Gateway Port（必填）",
     "externalTerminalTitle": "外部 Terminal 可視化啟動",
     "externalTerminalDesc": "啟用後，啟動/停止 Gateway 會強制開啟外部 Terminal 視窗；關閉後改為背景執行。",
     "workspacePath": "工作區 (Workspace)",

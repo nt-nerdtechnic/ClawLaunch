@@ -22,7 +22,309 @@ interface LauncherConfig {
   corePath?: string;
   configPath?: string;
   gatewayPort?: string;
+  autoRestartGateway?: boolean;
+  restartInForegroundTerminal?: boolean;
 }
+
+interface GatewayStartOptions {
+  autoRestart: boolean;
+  restartInForegroundTerminal: boolean;
+  maxRestarts: number;
+  baseBackoffMs: number;
+}
+
+interface GatewayWatchdogState {
+  child: any | null;
+  command: string;
+  stopRequested: boolean;
+  restartAttempts: number;
+  restartTimer: NodeJS.Timeout | null;
+  options: GatewayStartOptions;
+}
+
+interface GatewayHttpWatchdogOptions {
+  enabled: boolean;
+  healthCheckCommand: string;
+  restartCommand: string;
+  intervalMs: number;
+  failThreshold: number;
+  maxRestarts: number;
+}
+
+interface GatewayHttpWatchdogState {
+  timer: NodeJS.Timeout | null;
+  checking: boolean;
+  consecutiveFailures: number;
+  restartAttempts: number;
+  options: GatewayHttpWatchdogOptions;
+}
+
+const DEFAULT_GATEWAY_WATCHDOG_OPTIONS: GatewayStartOptions = {
+  autoRestart: false,
+  restartInForegroundTerminal: false,
+  maxRestarts: 5,
+  baseBackoffMs: 1000,
+};
+
+const DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS: GatewayHttpWatchdogOptions = {
+  enabled: false,
+  healthCheckCommand: '',
+  restartCommand: '',
+  intervalMs: 15000,
+  failThreshold: 2,
+  maxRestarts: 5,
+};
+
+const gatewayWatchdog: GatewayWatchdogState = {
+  child: null,
+  command: '',
+  stopRequested: false,
+  restartAttempts: 0,
+  restartTimer: null,
+  options: { ...DEFAULT_GATEWAY_WATCHDOG_OPTIONS },
+};
+
+const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
+  timer: null,
+  checking: false,
+  consecutiveFailures: 0,
+  restartAttempts: 0,
+  options: { ...DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS },
+};
+const shellSingleQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+const escapeAppleScriptString = (value: string) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+const emitShellStdout = (data: string, source: 'stdout' | 'stderr' = 'stdout') => {
+  mainWindow?.webContents.send('shell:stdout', { data, source });
+};
+
+const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart') => {
+  const finalCmd = `clear; echo '🚀 ${title}...'; ${command}; printf "\\n程序結束。\\n按 Enter 鍵關閉視窗..."; read -r _`;
+  const line1 = `tell application "Terminal" to do script "${escapeAppleScriptString(finalCmd)}"`;
+  const line2 = 'tell application "Terminal" to activate';
+  return `osascript -e ${shellSingleQuote(line1)} -e ${shellSingleQuote(line2)}`;
+};
+
+const clearGatewayRestartTimer = () => {
+  if (gatewayWatchdog.restartTimer) {
+    clearTimeout(gatewayWatchdog.restartTimer);
+    gatewayWatchdog.restartTimer = null;
+  }
+};
+
+const stopGatewayWatchdog = (reason = 'manual stop') => {
+  gatewayWatchdog.stopRequested = true;
+  clearGatewayRestartTimer();
+  if (gatewayWatchdog.child && !gatewayWatchdog.child.killed) {
+    try {
+      gatewayWatchdog.child.kill('SIGTERM');
+    } catch (_) {
+      // ignore
+    }
+  }
+  gatewayWatchdog.child = null;
+  gatewayWatchdog.command = '';
+  gatewayWatchdog.restartAttempts = 0;
+  gatewayWatchdog.options = { ...DEFAULT_GATEWAY_WATCHDOG_OPTIONS };
+  if (reason) {
+    emitShellStdout(`[gateway-watchdog] stopped: ${reason}\n`, 'stdout');
+  }
+};
+
+const clearGatewayHttpWatchdogTimer = () => {
+  if (gatewayHttpWatchdog.timer) {
+    clearInterval(gatewayHttpWatchdog.timer);
+    gatewayHttpWatchdog.timer = null;
+  }
+};
+
+const stopGatewayHttpWatchdog = (reason = 'manual stop') => {
+  clearGatewayHttpWatchdogTimer();
+  gatewayHttpWatchdog.checking = false;
+  gatewayHttpWatchdog.consecutiveFailures = 0;
+  gatewayHttpWatchdog.restartAttempts = 0;
+  gatewayHttpWatchdog.options = { ...DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS };
+  emitShellStdout(`[gateway-http-watchdog] stopped: ${reason}\n`, 'stdout');
+};
+
+const runGatewayHttpWatchdogCheck = async () => {
+  if (gatewayHttpWatchdog.checking) return;
+  if (!gatewayHttpWatchdog.options.enabled) return;
+  const healthCheckCommand = String(gatewayHttpWatchdog.options.healthCheckCommand || '').trim();
+  const restartCommand = String(gatewayHttpWatchdog.options.restartCommand || '').trim();
+  if (!healthCheckCommand || !restartCommand) return;
+
+  gatewayHttpWatchdog.checking = true;
+  try {
+    const healthRes = await runShellCommand(healthCheckCommand);
+    const online = isGatewayOnlineFromStatus(healthRes);
+    if (online) {
+      gatewayHttpWatchdog.consecutiveFailures = 0;
+      return;
+    }
+
+    gatewayHttpWatchdog.consecutiveFailures += 1;
+    emitShellStdout(
+      `[gateway-http-watchdog] health check failed (${gatewayHttpWatchdog.consecutiveFailures}/${gatewayHttpWatchdog.options.failThreshold})\n`,
+      'stderr',
+    );
+
+    if (gatewayHttpWatchdog.consecutiveFailures < gatewayHttpWatchdog.options.failThreshold) {
+      return;
+    }
+
+    gatewayHttpWatchdog.consecutiveFailures = 0;
+
+    if (gatewayHttpWatchdog.restartAttempts >= gatewayHttpWatchdog.options.maxRestarts) {
+      emitShellStdout(
+        `[gateway-http-watchdog] max restart attempts reached (${gatewayHttpWatchdog.options.maxRestarts}), stop restarting\n`,
+        'stderr',
+      );
+      return;
+    }
+
+    gatewayHttpWatchdog.restartAttempts += 1;
+    emitShellStdout(
+      `[gateway-http-watchdog] restart attempt ${gatewayHttpWatchdog.restartAttempts}/${gatewayHttpWatchdog.options.maxRestarts} via macOS Terminal\n`,
+      'stdout',
+    );
+
+    const ok = await launchGatewayViaTerminal(restartCommand);
+    if (ok) {
+      emitShellStdout('[gateway-http-watchdog] restart command sent to Terminal\n', 'stdout');
+    } else {
+      emitShellStdout('[gateway-http-watchdog] failed to open Terminal for restart\n', 'stderr');
+    }
+  } catch (e: any) {
+    emitShellStdout(`[gateway-http-watchdog] check error: ${String(e?.message || e)}\n`, 'stderr');
+  } finally {
+    gatewayHttpWatchdog.checking = false;
+  }
+};
+
+const startGatewayHttpWatchdog = (options: Partial<GatewayHttpWatchdogOptions>) => {
+  const nextOptions: GatewayHttpWatchdogOptions = {
+    enabled: Boolean(options.enabled),
+    healthCheckCommand: String(options.healthCheckCommand || '').trim(),
+    restartCommand: String(options.restartCommand || '').trim(),
+    intervalMs: Number.isFinite(Number(options.intervalMs)) ? Math.max(5000, Number(options.intervalMs)) : 15000,
+    failThreshold: Number.isFinite(Number(options.failThreshold)) ? Math.max(1, Number(options.failThreshold)) : 2,
+    maxRestarts: Number.isFinite(Number(options.maxRestarts)) ? Math.max(1, Number(options.maxRestarts)) : 5,
+  };
+
+  if (!nextOptions.enabled || !nextOptions.healthCheckCommand || !nextOptions.restartCommand) {
+    stopGatewayHttpWatchdog('disabled or missing command');
+    return;
+  }
+
+  clearGatewayHttpWatchdogTimer();
+  gatewayHttpWatchdog.options = nextOptions;
+  gatewayHttpWatchdog.consecutiveFailures = 0;
+  gatewayHttpWatchdog.restartAttempts = 0;
+  gatewayHttpWatchdog.checking = false;
+  emitShellStdout(
+    `[gateway-http-watchdog] started (interval=${nextOptions.intervalMs}ms, threshold=${nextOptions.failThreshold})\n`,
+    'stdout',
+  );
+
+  gatewayHttpWatchdog.timer = setInterval(() => {
+    void runGatewayHttpWatchdogCheck();
+  }, nextOptions.intervalMs);
+
+  void runGatewayHttpWatchdogCheck();
+};
+
+const launchGatewayViaTerminal = async (command: string) => {
+  const osascriptCmd = buildTerminalLaunchScript(command);
+  const res = await runShellCommand(osascriptCmd);
+  return (res.code ?? 1) === 0;
+};
+
+const spawnWatchedGatewayProcess = (command: string) => {
+  const child = spawn(command, { shell: true });
+  gatewayWatchdog.child = child;
+  activeProcesses.add(child);
+
+  emitShellStdout(`[gateway-watchdog] process started (pid=${String(child.pid ?? 'unknown')})\n`, 'stdout');
+
+  child.stdout.on('data', (data: any) => {
+    emitShellStdout(data.toString(), 'stdout');
+  });
+  child.stderr.on('data', (data: any) => {
+    emitShellStdout(data.toString(), 'stderr');
+  });
+
+  child.on('exit', async (code: number | null, signal: NodeJS.Signals | null) => {
+    activeProcesses.delete(child);
+    if (gatewayWatchdog.child === child) {
+      gatewayWatchdog.child = null;
+    }
+
+    if (gatewayWatchdog.stopRequested) {
+      return;
+    }
+
+    const failed = code !== 0 || signal !== null;
+    if (!failed) {
+      emitShellStdout('[gateway-watchdog] process exited cleanly, no restart required\n', 'stdout');
+      return;
+    }
+
+    emitShellStdout(
+      `[gateway-watchdog] process exited unexpectedly (code=${String(code)}, signal=${String(signal)})\n`,
+      'stderr',
+    );
+
+    if (!gatewayWatchdog.options.autoRestart) {
+      emitShellStdout('[gateway-watchdog] auto-restart is disabled\n', 'stderr');
+      return;
+    }
+
+    if (gatewayWatchdog.restartAttempts >= gatewayWatchdog.options.maxRestarts) {
+      emitShellStdout(
+        `[gateway-watchdog] max restart attempts reached (${gatewayWatchdog.options.maxRestarts}), stop restarting\n`,
+        'stderr',
+      );
+      return;
+    }
+
+    gatewayWatchdog.restartAttempts += 1;
+    const delayMs = Math.min(
+      gatewayWatchdog.options.baseBackoffMs * 2 ** (gatewayWatchdog.restartAttempts - 1),
+      30000,
+    );
+
+    if (gatewayWatchdog.options.restartInForegroundTerminal) {
+      emitShellStdout(
+        `[gateway-watchdog] restart attempt ${gatewayWatchdog.restartAttempts}/${gatewayWatchdog.options.maxRestarts} via macOS Terminal\n`,
+        'stdout',
+      );
+      const ok = await launchGatewayViaTerminal(gatewayWatchdog.command);
+      if (ok) {
+        emitShellStdout('[gateway-watchdog] handed over restart to foreground Terminal\n', 'stdout');
+      } else {
+        emitShellStdout('[gateway-watchdog] failed to launch foreground Terminal restart\n', 'stderr');
+      }
+      stopGatewayWatchdog('restart handed to foreground terminal');
+      return;
+    }
+
+    emitShellStdout(
+      `[gateway-watchdog] restart attempt ${gatewayWatchdog.restartAttempts}/${gatewayWatchdog.options.maxRestarts} in ${delayMs}ms\n`,
+      'stdout',
+    );
+
+    clearGatewayRestartTimer();
+    gatewayWatchdog.restartTimer = setTimeout(() => {
+      if (gatewayWatchdog.stopRequested || !gatewayWatchdog.command) {
+        return;
+      }
+      spawnWatchedGatewayProcess(gatewayWatchdog.command);
+    }, delayMs);
+  });
+
+  return child;
+};
 
 interface OpenClawChatInvokeRequest {
   requestId: string;
@@ -46,6 +348,510 @@ const normalizeConfigDir = (rawPath?: string) => {
   const trimmed = String(rawPath || '').trim();
   if (!trimmed) return '';
   return trimmed.replace(/[\\/]openclaw\.json$/i, '');
+};
+
+const normalizeArray = (value: any): any[] => (Array.isArray(value) ? value : []);
+
+const normalizeString = (value: any, fallback = '') => {
+  const text = String(value ?? '').trim();
+  return text || fallback;
+};
+
+const normalizeNumber = (value: any, fallback = 0) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+};
+
+const pickFirst = (input: any, keys: string[], fallback: any = '') => {
+  if (!input || typeof input !== 'object') return fallback;
+  for (const key of keys) {
+    const value = (input as any)[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return value;
+    }
+  }
+  return fallback;
+};
+
+const normalizeBudgetSummary = (budgetSummary: any) => {
+  const raw = budgetSummary && typeof budgetSummary === 'object' ? budgetSummary : {};
+  const evaluations = normalizeArray(raw.evaluations).map((item: any) => ({
+    scope: normalizeString(pickFirst(item, ['scope', 'target', 'id'], 'global')),
+    status: normalizeString(pickFirst(item, ['status', 'state'], 'unknown')).toLowerCase(),
+    usedCost30d: normalizeNumber(pickFirst(item, ['usedCost30d', 'used', 'usedCost'], 0), 0),
+    limitCost30d: normalizeNumber(pickFirst(item, ['limitCost30d', 'limit', 'budgetLimit'], 0), 0),
+  }));
+
+  return {
+    status: normalizeString(pickFirst(raw, ['status', 'state'], 'unknown')).toLowerCase(),
+    usedCost30d: normalizeNumber(pickFirst(raw, ['usedCost30d', 'used', 'usedCost'], 0), 0),
+    limitCost30d: normalizeNumber(pickFirst(raw, ['limitCost30d', 'limit', 'budgetLimit'], 0), 0),
+    burnRatePerDay: normalizeNumber(pickFirst(raw, ['burnRatePerDay', 'burnRate', 'dailyBurnRate'], 0), 0),
+    projectedDaysToLimit: normalizeNumber(pickFirst(raw, ['projectedDaysToLimit', 'projectedDays', 'daysToLimit'], 0), 0),
+    evaluations,
+  };
+};
+
+const normalizeReadModelSnapshot = (snapshot: any) => {
+  const raw = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const sessionsRaw = normalizeArray(raw.sessions);
+  const statusesRaw = normalizeArray(raw.statuses);
+  const tasksSource = Array.isArray(raw.tasks) ? raw.tasks : normalizeArray(raw.tasks?.tasks);
+  const approvalsSource = Array.isArray(raw.approvals) ? raw.approvals : normalizeArray(raw.approvals?.items);
+
+  const statuses = statusesRaw.map((item: any) => ({
+    sessionKey: normalizeString(pickFirst(item, ['sessionKey', 'session_id', 'session'], 'unknown')),
+    state: normalizeString(pickFirst(item, ['state', 'status'], 'unknown')).toLowerCase(),
+    tokensIn: normalizeNumber(pickFirst(item, ['tokensIn', 'inputTokens', 'tokens_in'], 0), 0),
+    tokensOut: normalizeNumber(pickFirst(item, ['tokensOut', 'outputTokens', 'tokens_out'], 0), 0),
+  }));
+
+  const statusMap = new Map<string, any>();
+  for (const status of statuses) {
+    if (status.sessionKey) statusMap.set(status.sessionKey, status);
+  }
+
+  const sessions = sessionsRaw.map((item: any) => {
+    const sessionKey = normalizeString(pickFirst(item, ['sessionKey', 'session_id', 'id', 'key'], 'unknown'));
+    const mappedStatus = statusMap.get(sessionKey);
+    return {
+      sessionKey,
+      agentId: normalizeString(pickFirst(item, ['agentId', 'agent_id', 'agent', 'owner'], 'main')),
+      status: normalizeString(pickFirst(item, ['status', 'state'], mappedStatus?.state || 'unknown')).toLowerCase(),
+      tokensIn: normalizeNumber(
+        pickFirst(item, ['tokensIn', 'inputTokens', 'tokens_in', 'usageIn'], mappedStatus?.tokensIn || 0),
+        0,
+      ),
+      tokensOut: normalizeNumber(
+        pickFirst(item, ['tokensOut', 'outputTokens', 'tokens_out', 'usageOut'], mappedStatus?.tokensOut || 0),
+        0,
+      ),
+      updatedAt: normalizeString(
+        pickFirst(item, ['updatedAt', 'lastSeenAt', 'timestamp', 'createdAt'], raw.generatedAt || new Date().toISOString()),
+      ),
+    };
+  });
+
+  const tasks = tasksSource.map((item: any) => ({
+    id: normalizeString(pickFirst(item, ['id', 'taskId', 'task_id', 'key'], 'unknown-task')),
+    title: normalizeString(pickFirst(item, ['title', 'name', 'summary'], 'Untitled Task')),
+    status: normalizeString(pickFirst(item, ['status', 'state'], 'unknown')).toLowerCase(),
+    scope: normalizeString(pickFirst(item, ['scope', 'projectId', 'agentId'], 'global')),
+    updatedAt: normalizeString(
+      pickFirst(item, ['updatedAt', 'lastHeartbeatAt', 'createdAt', 'timestamp'], raw.generatedAt || new Date().toISOString()),
+    ),
+  }));
+
+  const approvals = approvalsSource.map((item: any) => ({
+    id: normalizeString(pickFirst(item, ['id', 'approvalId', 'requestId'], 'unknown-approval')),
+    status: normalizeString(pickFirst(item, ['status', 'state'], 'pending')).toLowerCase(),
+    summary: normalizeString(pickFirst(item, ['summary', 'title', 'reason'], 'Approval Request')),
+    requestedAt: normalizeString(
+      pickFirst(item, ['requestedAt', 'createdAt', 'timestamp'], raw.generatedAt || new Date().toISOString()),
+    ),
+  }));
+
+  return {
+    generatedAt: normalizeString(pickFirst(raw, ['generatedAt', 'updatedAt', 'timestamp'], new Date().toISOString())),
+    sessions,
+    tasks,
+    approvals,
+    statuses,
+    budgetSummary: normalizeBudgetSummary(raw.budgetSummary),
+  };
+};
+
+const resolveTimestampFromLogEntry = (entry: any): string => {
+  return normalizeString(
+    pickFirst(entry, ['timestamp', 'session_timestamp', 'generatedAt', 'updatedAt', 'createdAt', 'at'], ''),
+    '',
+  );
+};
+
+const resolveTokensFromLogEntry = (entry: any) => {
+  const tokensIn = normalizeNumber(
+    pickFirst(entry, ['input_tokens', 'tokensIn', 'inputTokens', 'tokens_in', 'usageIn'], 0),
+    0,
+  );
+  const tokensOut = normalizeNumber(
+    pickFirst(entry, ['output_tokens', 'tokensOut', 'outputTokens', 'tokens_out', 'usageOut'], 0),
+    0,
+  );
+  return { tokensIn, tokensOut };
+};
+
+const estimateUsageCost = (tokensIn: number, tokensOut: number) => ((tokensIn + tokensOut * 2) / 1_000_000) * 0.5;
+
+const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
+  const lines = String(content || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const daily = new Map<
+    string,
+    {
+      label: string;
+      tokensIn: number;
+      tokensOut: number;
+      totalTokens: number;
+    }
+  >();
+
+  for (const line of lines) {
+    let entry: any = null;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    const timestamp = resolveTimestampFromLogEntry(entry);
+    if (!timestamp) continue;
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) continue;
+
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateKey = `${yyyy}-${mm}-${dd}`;
+    const label = `${mm}-${dd}`;
+
+    const { tokensIn, tokensOut } = resolveTokensFromLogEntry(entry);
+    if (tokensIn === 0 && tokensOut === 0) continue;
+
+    const current = daily.get(dateKey) || { label, tokensIn: 0, tokensOut: 0, totalTokens: 0 };
+    current.tokensIn += tokensIn;
+    current.tokensOut += tokensOut;
+    current.totalTokens += tokensIn + tokensOut;
+    daily.set(dateKey, current);
+  }
+
+  return Array.from(daily.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-Math.max(1, days))
+    .map(([dateKey, value]) => ({
+      dateKey,
+      label: value.label,
+      tokensIn: value.tokensIn,
+      tokensOut: value.tokensOut,
+      totalTokens: value.totalTokens,
+      estimatedCost: estimateUsageCost(value.tokensIn, value.tokensOut),
+    }));
+};
+
+const fallbackHistoryFromSnapshot = (readModel: any, days = 7) => {
+  const sessions = normalizeArray(readModel?.sessions);
+  const daily = new Map<string, { label: string; tokensIn: number; tokensOut: number; totalTokens: number }>();
+
+  for (const session of sessions) {
+    const timestamp = normalizeString(session?.updatedAt || readModel?.generatedAt, '');
+    if (!timestamp) continue;
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) continue;
+
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateKey = `${yyyy}-${mm}-${dd}`;
+    const label = `${mm}-${dd}`;
+
+    const tokensIn = normalizeNumber(session?.tokensIn, 0);
+    const tokensOut = normalizeNumber(session?.tokensOut, 0);
+    const current = daily.get(dateKey) || { label, tokensIn: 0, tokensOut: 0, totalTokens: 0 };
+    current.tokensIn += tokensIn;
+    current.tokensOut += tokensOut;
+    current.totalTokens += tokensIn + tokensOut;
+    daily.set(dateKey, current);
+  }
+
+  return Array.from(daily.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-Math.max(1, days))
+    .map(([dateKey, value]) => ({
+      dateKey,
+      label: value.label,
+      tokensIn: value.tokensIn,
+      tokensOut: value.tokensOut,
+      totalTokens: value.totalTokens,
+      estimatedCost: estimateUsageCost(value.tokensIn, value.tokensOut),
+    }));
+};
+
+type GovernanceEventLevel = 'info' | 'warn' | 'action-required';
+
+type GovernanceEvent = {
+  id: string;
+  level: GovernanceEventLevel;
+  title: string;
+  detail: string;
+  source: string;
+  createdAt: string;
+  entityId?: string;
+  status?: 'pending' | 'acked' | 'expired';
+  ackedAt?: string;
+  ackExpiresAt?: string;
+};
+
+type AuditTimelineEntry = {
+  id: string;
+  level: GovernanceEventLevel;
+  source: string;
+  message: string;
+  timestamp: string;
+};
+
+type EventAckRecord = {
+  ackedAt: string;
+  expiresAt: string;
+};
+
+const computeTaskGovernance = (readModel: any, timeoutMs: number, nowIso: string) => {
+  const tasks = normalizeArray(readModel?.tasks);
+  const now = new Date(nowIso).getTime();
+  const normalizedTasks = tasks.map((task: any) => ({ ...task }));
+  const events: GovernanceEvent[] = [];
+
+  for (const task of normalizedTasks) {
+    const status = normalizeString(task?.status, '').toLowerCase();
+    if (status !== 'in_progress') continue;
+    const updatedAt = normalizeString(task?.updatedAt, '');
+    const updatedTs = new Date(updatedAt).getTime();
+    if (Number.isNaN(updatedTs)) continue;
+
+    const ageMs = Math.max(0, now - updatedTs);
+    if (ageMs < timeoutMs) continue;
+
+    task.status = 'blocked';
+    events.push({
+      id: `task-blocked:${normalizeString(task?.id, 'unknown-task')}`,
+      level: 'action-required',
+      title: 'Task heartbeat timeout',
+      detail: `${normalizeString(task?.title, 'Task')} 超時未更新，已標記為 blocked。`,
+      source: 'task-heartbeat',
+      createdAt: nowIso,
+      entityId: normalizeString(task?.id, ''),
+    });
+  }
+
+  return { tasks: normalizedTasks, events };
+};
+
+const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[] => {
+  const events: GovernanceEvent[] = [];
+  const approvals = normalizeArray(readModel?.approvals);
+  const statuses = normalizeArray(readModel?.statuses);
+  const budgetEvaluations = normalizeArray(readModel?.budgetSummary?.evaluations);
+
+  const pendingApprovals = approvals.filter((item: any) => {
+    const status = normalizeString(item?.status, '').toLowerCase();
+    return status === '' || status === 'pending' || status === 'requested';
+  });
+
+  if (pendingApprovals.length > 0) {
+    events.push({
+      id: 'approval-pending',
+      level: 'action-required',
+      title: 'Pending approvals',
+      detail: `目前有 ${pendingApprovals.length} 筆待審批。`,
+      source: 'approval',
+      createdAt: nowIso,
+    });
+  }
+
+  const blockedCount = statuses.filter((s: any) => normalizeString(s?.state, '').toLowerCase() === 'blocked').length;
+  const errorCount = statuses.filter((s: any) => normalizeString(s?.state, '').toLowerCase() === 'error').length;
+  if (blockedCount > 0 || errorCount > 0) {
+    events.push({
+      id: 'runtime-risk',
+      level: 'action-required',
+      title: 'Runtime risk detected',
+      detail: `Blocked ${blockedCount} / Error ${errorCount}。`,
+      source: 'runtime',
+      createdAt: nowIso,
+    });
+  }
+
+  const overBudget = budgetEvaluations.filter((b: any) => normalizeString(b?.status, '').toLowerCase() === 'over').length;
+  const warnBudget = budgetEvaluations.filter((b: any) => normalizeString(b?.status, '').toLowerCase() === 'warn').length;
+  if (overBudget > 0 || warnBudget > 0) {
+    events.push({
+      id: 'budget-risk',
+      level: overBudget > 0 ? 'action-required' : 'warn',
+      title: 'Budget risk',
+      detail: `Over ${overBudget} / Warn ${warnBudget}。`,
+      source: 'budget',
+      createdAt: nowIso,
+    });
+  }
+
+  if (events.length === 0) {
+    events.push({
+      id: 'system-all-clear',
+      level: 'info',
+      title: 'All clear',
+      detail: '目前未檢測到高優先風險事件。',
+      source: 'system',
+      createdAt: nowIso,
+    });
+  }
+
+  return events;
+};
+
+const resolveRuntimeDirFromCandidates = async (candidatePaths: string[]) => {
+  for (const candidate of candidatePaths) {
+    const trimmed = normalizeString(candidate, '');
+    if (!trimmed) continue;
+    try {
+      const stats = await fs.stat(trimmed);
+      if (stats.isDirectory()) return trimmed;
+    } catch {
+      continue;
+    }
+  }
+  return '';
+};
+
+const loadEventAcks = async (runtimeDir: string): Promise<Record<string, EventAckRecord>> => {
+  if (!runtimeDir) return {};
+  const ackPath = path.join(runtimeDir, 'event-acks.json');
+  try {
+    const raw = await fs.readFile(ackPath, 'utf-8');
+    const parsed = safeJsonParse(raw, {});
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+};
+
+const saveEventAcks = async (runtimeDir: string, acks: Record<string, EventAckRecord>) => {
+  if (!runtimeDir) return;
+  await fs.mkdir(runtimeDir, { recursive: true });
+  const ackPath = path.join(runtimeDir, 'event-acks.json');
+  await fs.writeFile(ackPath, `${JSON.stringify(acks, null, 2)}\n`, 'utf-8');
+};
+
+const applyAckStateToEvents = (events: GovernanceEvent[], acks: Record<string, EventAckRecord>, nowIso: string) => {
+  const now = new Date(nowIso).getTime();
+  const activeEvents: GovernanceEvent[] = [];
+  const ackedEvents: GovernanceEvent[] = [];
+
+  for (const event of events) {
+    const ack = acks[event.id];
+    if (!ack) {
+      activeEvents.push({ ...event, status: 'pending' });
+      continue;
+    }
+
+    const expiresTs = new Date(ack.expiresAt).getTime();
+    if (!Number.isNaN(expiresTs) && expiresTs > now) {
+      ackedEvents.push({
+        ...event,
+        status: 'acked',
+        ackedAt: ack.ackedAt,
+        ackExpiresAt: ack.expiresAt,
+      });
+      continue;
+    }
+
+    activeEvents.push({ ...event, status: 'pending' });
+  }
+
+  return { activeEvents, ackedEvents };
+};
+
+const parseAuditLine = (line: string, source: string): AuditTimelineEntry | null => {
+  const trimmed = normalizeString(line, '');
+  if (!trimmed) return null;
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    parsed = null;
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    const timestamp = normalizeString(pickFirst(parsed, ['timestamp', 'generatedAt', 'updatedAt', 'createdAt', 'at'], new Date().toISOString()));
+    const severityRaw = normalizeString(pickFirst(parsed, ['severity', 'level', 'status'], 'info')).toLowerCase();
+    const level: GovernanceEventLevel = severityRaw === 'error' || severityRaw === 'critical' ? 'action-required' : severityRaw === 'warn' || severityRaw === 'warning' ? 'warn' : 'info';
+    const message = normalizeString(pickFirst(parsed, ['message', 'detail', 'summary', 'title'], trimmed));
+    return {
+      id: `${source}:${timestamp}:${message.slice(0, 30)}`,
+      level,
+      source,
+      message,
+      timestamp,
+    };
+  }
+
+  return {
+    id: `${source}:${Date.now()}:${trimmed.slice(0, 30)}`,
+    level: 'info',
+    source,
+    message: trimmed,
+    timestamp: new Date().toISOString(),
+  };
+};
+
+const buildAuditTimeline = async (runtimeDir: string, governanceEvents: GovernanceEvent[]) => {
+  const entries: AuditTimelineEntry[] = governanceEvents.map((event) => ({
+    id: `event:${event.id}:${event.createdAt}`,
+    level: event.level,
+    source: `event:${event.source}`,
+    message: `${event.title} - ${event.detail}`,
+    timestamp: event.createdAt,
+  }));
+
+  const candidates: Array<{ path: string; source: string }> = [
+    { path: path.join(runtimeDir, 'timeline.log'), source: 'timeline' },
+    { path: path.join(runtimeDir, 'audit.log'), source: 'audit' },
+    { path: path.join(runtimeDir, 'approvals.log'), source: 'approvals' },
+    { path: path.join(runtimeDir, 'task-heartbeat.log'), source: 'task-heartbeat' },
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const raw = await fs.readFile(candidate.path, 'utf-8');
+      const lines = raw.split(/\r?\n/).filter(Boolean).slice(-120);
+      for (const line of lines) {
+        const item = parseAuditLine(line, candidate.source);
+        if (item) entries.push(item);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return entries
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .slice(-200);
+};
+
+const buildDailyDigestMarkdown = (timeline: AuditTimelineEntry[]) => {
+  const now = new Date();
+  const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayItems = timeline.filter((item) => normalizeString(item.timestamp, '').startsWith(dateKey));
+  const counts = { info: 0, warn: 0, 'action-required': 0 };
+  for (const item of todayItems) {
+    counts[item.level] += 1;
+  }
+
+  const topItems = todayItems.slice(-5).map((item) => `- [${item.level}] ${item.message}`);
+
+  return [
+    `# Daily Digest (${dateKey})`,
+    '',
+    `- info: ${counts.info}`,
+    `- warn: ${counts.warn}`,
+    `- action-required: ${counts['action-required']}`,
+    '',
+    '## Latest Signals',
+    ...(topItems.length > 0 ? topItems : ['- no significant signals']),
+    '',
+  ].join('\n');
 };
 
 const buildGatewayUrlArg = (gatewayPort?: string) => {
@@ -416,6 +1222,8 @@ async function resolveDevServerUrl(): Promise<string> {
 }
 
 function killAllSubprocesses() {
+  stopGatewayWatchdog('kill-all-subprocesses');
+  stopGatewayHttpWatchdog('kill-all-subprocesses');
   for (const proc of activeProcesses) {
     try {
       if (!proc.killed) {
@@ -553,6 +1361,232 @@ function parseOpenClawConfig(content: string) {
     } catch (e) {
         return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '', providers: [] as string[] };
     }
+}
+
+const AUTH_CHOICE_FLAG_MAPPING: Record<string, string> = {
+  apiKey: '--anthropic-api-key',
+  'openai-api-key': '--openai-api-key',
+  'gemini-api-key': '--gemini-api-key',
+  'minimax-api': '--minimax-api-key',
+  'moonshot-api-key': '--moonshot-api-key',
+  'openrouter-api-key': '--openrouter-api-key',
+  'xai-api-key': '--xai-api-key',
+};
+
+const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
+  apiKey: ['anthropic'],
+  token: ['anthropic'],
+  'openai-api-key': ['openai'],
+  'openai-codex': ['openai-codex', 'openai'],
+  'gemini-api-key': ['gemini', 'google'],
+  'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
+  'minimax-api': ['minimax'],
+  'minimax-portal': ['minimax-portal', 'minimax'],
+  'moonshot-api-key': ['moonshot'],
+  'openrouter-api-key': ['openrouter'],
+  'xai-api-key': ['xai'],
+  ollama: ['ollama'],
+  vllm: ['vllm'],
+  chutes: ['chutes'],
+  'qwen-portal': ['qwen-portal', 'qwen'],
+};
+
+const SUPPORTED_AUTH_CHOICES = new Set(Object.keys(AUTH_CHOICE_PROVIDER_ALIASES));
+const CREDENTIALLESS_AUTH_CHOICES = new Set(['ollama', 'vllm']);
+const OAUTH_AUTH_CHOICES = new Set(['openai-codex', 'google-gemini-cli', 'chutes', 'qwen-portal', 'minimax-portal']);
+
+const sanitizeSecret = (value: string) => String(value || '').replace(/\s+/g, '');
+
+const normalizeConfigDirectory = (rawPath: string) => String(rawPath || '').trim().replace(/[\\/]openclaw\.json$/i, '');
+
+const getProfileProviderAliases = (profileId: string, profile: any) => {
+  const provider = String(profile?.provider || '').toLowerCase();
+  const id = String(profileId || '').toLowerCase();
+  const aliases = new Set<string>();
+  if (provider) aliases.add(provider);
+  if (id) aliases.add(id.split(':')[0]);
+  return Array.from(aliases).filter(Boolean);
+};
+
+const getChoiceAliases = (authChoice: string) => AUTH_CHOICE_PROVIDER_ALIASES[String(authChoice || '').trim()] || [String(authChoice || '').trim()];
+
+const providerAliasSets: Record<string, string[]> = {
+  google: ['google', 'gemini'],
+  gemini: ['gemini', 'google'],
+  anthropic: ['anthropic'],
+  openai: ['openai', 'openai-codex'],
+  'openai-codex': ['openai-codex', 'openai'],
+  minimax: ['minimax'],
+  moonshot: ['moonshot'],
+  openrouter: ['openrouter'],
+  xai: ['xai'],
+  ollama: ['ollama'],
+  vllm: ['vllm'],
+  chutes: ['chutes'],
+  qwen: ['qwen', 'qwen-portal'],
+  'qwen-portal': ['qwen-portal', 'qwen'],
+};
+
+const providerMatchesAny = (provider: string, filters: string[]) => {
+  const normalizedProvider = String(provider || '').toLowerCase();
+  if (!normalizedProvider) return false;
+  if (!filters.length) return true;
+
+  return filters.some((rawFilter) => {
+    const filter = String(rawFilter || '').toLowerCase();
+    if (!filter) return false;
+    if (normalizedProvider === filter) return true;
+    const providerAliases = providerAliasSets[normalizedProvider] || [normalizedProvider];
+    const filterAliases = providerAliasSets[filter] || [filter];
+    return providerAliases.some((alias) => filterAliases.includes(alias));
+  });
+};
+
+const profileMatchesAliases = (profileId: string, profile: any, aliases: string[]) => {
+  const provider = String(profile?.provider || '').toLowerCase();
+  const id = String(profileId || '').toLowerCase();
+  return aliases.some((alias) => {
+    const normalizedAlias = String(alias || '').toLowerCase();
+    return normalizedAlias && (provider === normalizedAlias || id.includes(normalizedAlias));
+  });
+};
+
+const hasCredential = (profile: any) => {
+  const token = String(profile?.token || '').trim();
+  const key = String(profile?.key || profile?.apiKey || profile?.api_key || '').trim();
+  const access = String(profile?.access || '').trim();
+  if (token) return !/\s/.test(token);
+  if (key) return !/\s/.test(key);
+  if (access) return true;
+  return false;
+};
+
+async function loadJsonFile(filePath: string): Promise<any | null> {
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function saveJsonFile(filePath: string, data: any): Promise<void> {
+  await fs.writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf-8');
+}
+
+async function getAgentAuthProfilePaths(configDir: string): Promise<string[]> {
+  const agentsRoot = path.join(configDir, 'agents');
+  let entries: any[] = [];
+  try {
+    entries = await fs.readdir(agentsRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const results: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const candidate = path.join(agentsRoot, entry.name, 'agent', 'auth-profiles.json');
+    try {
+      await fs.access(candidate);
+      results.push(candidate);
+    } catch {
+      // Ignore missing auth profiles for this agent.
+    }
+  }
+  return results;
+}
+
+async function collectAuthProfiles(configDir: string) {
+  const configFilePath = path.join(configDir, 'openclaw.json');
+  const configJson = (await loadJsonFile(configFilePath)) || {};
+  const globalProfiles = configJson?.auth?.profiles || {};
+  const agentFiles = await getAgentAuthProfilePaths(configDir);
+
+  const merged = new Map<string, any>();
+
+  for (const [profileId, profile] of Object.entries(globalProfiles)) {
+    merged.set(String(profileId), {
+      profileId: String(profileId),
+      provider: String((profile as any)?.provider || String(profileId).split(':')[0] || ''),
+      mode: String((profile as any)?.mode || (profile as any)?.type || ''),
+      globalPresent: true,
+      agentPresent: false,
+      agentCount: 0,
+      credentialHealthy: false,
+      diagnostics: [],
+    });
+  }
+
+  for (const authPath of agentFiles) {
+    const parsed = (await loadJsonFile(authPath)) || {};
+    const profiles = parsed?.profiles || {};
+    for (const [profileId, profile] of Object.entries(profiles)) {
+      const profileKey = String(profileId);
+      const entry = merged.get(profileKey) || {
+        profileId: profileKey,
+        provider: String((profile as any)?.provider || profileKey.split(':')[0] || ''),
+        mode: String((profile as any)?.mode || (profile as any)?.type || ''),
+        globalPresent: false,
+        agentPresent: false,
+        agentCount: 0,
+        credentialHealthy: false,
+        diagnostics: [],
+      };
+      entry.agentPresent = true;
+      entry.agentCount += 1;
+      entry.credentialHealthy = hasCredential(profile);
+      if (!entry.credentialHealthy) {
+        entry.diagnostics.push('agent_credential_missing_or_invalid');
+      }
+      if (!entry.mode) {
+        entry.mode = String((profile as any)?.mode || (profile as any)?.type || '');
+      }
+      if (!entry.provider) {
+        entry.provider = String((profile as any)?.provider || profileKey.split(':')[0] || '');
+      }
+      merged.set(profileKey, entry);
+    }
+  }
+
+  const profiles = Array.from(merged.values()).map((entry) => {
+    if (entry.globalPresent && !entry.agentPresent) {
+      entry.diagnostics.push('global_only');
+    }
+    if (!entry.globalPresent && entry.agentPresent) {
+      entry.diagnostics.push('agent_only');
+    }
+
+    const severity = entry.diagnostics.includes('agent_credential_missing_or_invalid')
+      ? 'critical'
+      : entry.diagnostics.length > 0
+        ? 'warn'
+        : 'ok';
+
+    const repairGuides: string[] = [];
+    if (entry.diagnostics.includes('agent_credential_missing_or_invalid')) {
+      repairGuides.push('重新執行授權流程，確保 agent/auth-profiles.json 有有效 token。');
+    }
+    if (entry.diagnostics.includes('global_only')) {
+      repairGuides.push('目前只有 global profile，請執行一次 onboarding/auth set 同步 agent 層。');
+    }
+    if (entry.diagnostics.includes('agent_only')) {
+      repairGuides.push('目前只有 agent profile，請補齊 openclaw.json 的 auth.profiles。');
+    }
+
+    entry.severity = severity;
+    entry.repairGuides = repairGuides;
+    return entry;
+  });
+
+  const summary = {
+    total: profiles.length,
+    healthy: profiles.filter((item: any) => item.severity === 'ok').length,
+    warn: profiles.filter((item: any) => item.severity === 'warn').length,
+    critical: profiles.filter((item: any) => item.severity === 'critical').length,
+  };
+
+  return { configFilePath, configJson, agentFiles, profiles, summary };
 }
 
 // 系統級核心技能 (不可異動)
@@ -728,25 +1762,149 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []) => {
   const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
 
+  // gateway:http-watchdog-start-json { enabled, healthCheckCommand, restartCommand, intervalMs?, failThreshold?, maxRestarts? }
+  if (fullCommand.startsWith('gateway:http-watchdog-start-json ')) {
+    try {
+      const payloadStr = fullCommand.replace(/^gateway:http-watchdog-start-json\s+/, '').trim();
+      const payload = JSON.parse(payloadStr || '{}');
+      startGatewayHttpWatchdog(payload || {});
+      return { code: 0, stdout: 'gateway http watchdog configured', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stderr: e?.message || 'Invalid gateway:http-watchdog-start-json payload', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'gateway:http-watchdog-stop') {
+    stopGatewayHttpWatchdog('manual stop command');
+    return { code: 0, stdout: 'gateway http watchdog stopped', exitCode: 0 };
+  }
+
+  // gateway:start-bg-json { command, autoRestart, restartInForegroundTerminal, maxRestarts?, baseBackoffMs? }
+  if (fullCommand.startsWith('gateway:start-bg-json ')) {
+    try {
+      const payloadStr = fullCommand.replace(/^gateway:start-bg-json\s+/, '').trim();
+      const payload = JSON.parse(payloadStr || '{}');
+      const actualCmd = String(payload?.command || '').trim();
+      if (!actualCmd) {
+        return { code: 1, stderr: 'Missing command for gateway:start-bg-json', exitCode: 1 };
+      }
+
+      stopGatewayWatchdog('replace previous gateway process');
+      stopGatewayHttpWatchdog('switch to process watchdog mode');
+      gatewayWatchdog.command = actualCmd;
+      gatewayWatchdog.stopRequested = false;
+      gatewayWatchdog.restartAttempts = 0;
+      gatewayWatchdog.options = {
+        autoRestart: Boolean(payload?.autoRestart),
+        restartInForegroundTerminal: Boolean(payload?.restartInForegroundTerminal),
+        maxRestarts: Number.isInteger(payload?.maxRestarts) ? Math.max(1, Number(payload.maxRestarts)) : 5,
+        baseBackoffMs: Number.isInteger(payload?.baseBackoffMs) ? Math.max(200, Number(payload.baseBackoffMs)) : 1000,
+      };
+
+      const child = spawnWatchedGatewayProcess(actualCmd);
+      return { code: 0, stdout: String(child.pid ?? ''), exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stderr: e?.message || 'Invalid gateway:start-bg-json payload', exitCode: 1 };
+    }
+  }
+
   // gateway:start-bg <cmd> — spawn the command in background and return immediately.
   // Used for `gateway run` which is a long-running foreground process.
   if (fullCommand.startsWith('gateway:start-bg ')) {
-    const actualCmd = fullCommand.replace(/^gateway:start-bg\s+/, '');
-    const child = spawn(actualCmd, { shell: true });
-    activeProcesses.add(child);
-    child.stdout.on('data', (data: any) => {
-      mainWindow?.webContents.send('shell:stdout', { data: data.toString(), source: 'stdout' });
-    });
-    child.stderr.on('data', (data: any) => {
-      mainWindow?.webContents.send('shell:stdout', { data: data.toString(), source: 'stderr' });
-    });
-    child.on('exit', (code: number) => {
-      activeProcesses.delete(child);
-      if (code !== 0 && code !== null) {
-        mainWindow?.webContents.send('shell:stdout', { data: `Gateway process exited with code ${code}`, source: 'stderr' });
-      }
-    });
+    const actualCmd = fullCommand.replace(/^gateway:start-bg\s+/, '').trim();
+    if (!actualCmd) {
+      return { code: 1, stderr: 'Missing command for gateway:start-bg', exitCode: 1 };
+    }
+    stopGatewayWatchdog('replace previous gateway process');
+    stopGatewayHttpWatchdog('switch to process watchdog mode');
+    gatewayWatchdog.command = actualCmd;
+    gatewayWatchdog.stopRequested = false;
+    gatewayWatchdog.restartAttempts = 0;
+    gatewayWatchdog.options = { ...DEFAULT_GATEWAY_WATCHDOG_OPTIONS };
+    const child = spawnWatchedGatewayProcess(actualCmd);
     return { code: 0, stdout: String(child.pid ?? ''), exitCode: 0 };
+  }
+
+  if (fullCommand.startsWith('snapshot:read-model')) {
+    try {
+      const payloadStr = fullCommand.replace('snapshot:read-model', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const historyCandidatePaths: string[] = Array.isArray(payload?.historyCandidatePaths)
+        ? payload.historyCandidatePaths.map((item: any) => String(item || '').trim()).filter(Boolean)
+        : [];
+      const historyDays = Math.max(1, Math.min(30, Number(payload?.historyDays || 7)));
+      const taskHeartbeatTimeoutMs = Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(payload?.taskHeartbeatTimeoutMs || 10 * 60 * 1000)));
+      const candidatePaths: string[] = Array.isArray(payload?.candidatePaths)
+        ? payload.candidatePaths.map((item: any) => String(item || '').trim()).filter(Boolean)
+        : [];
+
+      for (const snapshotPath of candidatePaths) {
+        try {
+          await fs.access(snapshotPath);
+          const content = await fs.readFile(snapshotPath, 'utf-8');
+          const rawSnapshot = JSON.parse(content);
+          const readModel = normalizeReadModelSnapshot(rawSnapshot);
+          const nowIso = new Date().toISOString();
+          const taskGovernance = computeTaskGovernance(readModel, taskHeartbeatTimeoutMs, nowIso);
+          readModel.tasks = taskGovernance.tasks;
+
+          const runtimeDir = path.dirname(snapshotPath);
+          const ackMap = await loadEventAcks(runtimeDir);
+          const governanceEvents = [
+            ...taskGovernance.events,
+            ...buildGovernanceEvents(readModel, nowIso),
+          ];
+          const { activeEvents, ackedEvents } = applyAckStateToEvents(governanceEvents, ackMap, nowIso);
+
+          const auditTimeline = await buildAuditTimeline(runtimeDir, governanceEvents);
+          const dailyDigest = buildDailyDigestMarkdown(auditTimeline);
+          let history: any[] = [];
+          let historySourcePath = '';
+
+          for (const historyPath of historyCandidatePaths) {
+            try {
+              await fs.access(historyPath);
+              const historyRaw = await fs.readFile(historyPath, 'utf-8');
+              const parsedHistory = buildReadModelHistoryFromJsonl(historyRaw, historyDays);
+              if (parsedHistory.length > 0) {
+                history = parsedHistory;
+                historySourcePath = historyPath;
+                break;
+              }
+            } catch {
+              continue;
+            }
+          }
+
+          if (history.length === 0) {
+            history = fallbackHistoryFromSnapshot(readModel, historyDays);
+          }
+
+          return {
+            code: 0,
+            stdout: JSON.stringify({
+              sourcePath: snapshotPath,
+              historySourcePath,
+              snapshot: rawSnapshot,
+              readModel,
+              history,
+              eventQueue: activeEvents,
+              ackedEvents,
+              auditTimeline,
+              dailyDigest,
+            }),
+            stderr: '',
+            exitCode: 0,
+          };
+        } catch {
+          continue;
+        }
+      }
+
+      return { code: 1, stdout: '', stderr: 'No readable snapshot found', exitCode: 1 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
+    }
   }
 
   if (fullCommand.startsWith('config:write')) {
@@ -1043,6 +2201,204 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     }
   }
 
+  if (fullCommand.startsWith('auth:list-profiles')) {
+    try {
+      const payloadStr = fullCommand.replace('auth:list-profiles', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const configDir = normalizeConfigDirectory(String(payload?.configPath || ''));
+      if (!configDir) {
+        return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
+      }
+      const data = await collectAuthProfiles(configDir);
+      return { code: 0, stdout: JSON.stringify({ profiles: data.profiles, summary: data.summary }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('auth:remove-profile')) {
+    try {
+      const payloadStr = fullCommand.replace('auth:remove-profile', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const configDir = normalizeConfigDirectory(String(payload?.configPath || ''));
+      const profileId = String(payload?.profileId || '').trim();
+      if (!configDir || !profileId) {
+        return { code: 1, stdout: '', stderr: 'Missing configPath or profileId', exitCode: 1 };
+      }
+      if (!/^[A-Za-z0-9._:-]+$/.test(profileId)) {
+        return { code: 1, stdout: '', stderr: 'Invalid profileId', exitCode: 1 };
+      }
+
+      const configFilePath = path.join(configDir, 'openclaw.json');
+      const configJson = (await loadJsonFile(configFilePath)) || {};
+      let removedGlobal = false;
+      if (configJson?.auth?.profiles && Object.prototype.hasOwnProperty.call(configJson.auth.profiles, profileId)) {
+        delete configJson.auth.profiles[profileId];
+        removedGlobal = true;
+      }
+      if (removedGlobal) {
+        await saveJsonFile(configFilePath, configJson);
+      }
+
+      const agentFiles = await getAgentAuthProfilePaths(configDir);
+      let removedAgentFiles = 0;
+      for (const authPath of agentFiles) {
+        const parsed = (await loadJsonFile(authPath)) || {};
+        if (parsed?.profiles && Object.prototype.hasOwnProperty.call(parsed.profiles, profileId)) {
+          delete parsed.profiles[profileId];
+          await saveJsonFile(authPath, parsed);
+          removedAgentFiles += 1;
+        }
+      }
+
+      return {
+        code: 0,
+        stdout: JSON.stringify({ removedGlobal, removedAgentFiles }),
+        stderr: '',
+        exitCode: 0,
+      };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('auth:add-profile')) {
+    try {
+      const payloadStr = fullCommand.replace('auth:add-profile', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const corePath = String(payload?.corePath || '').trim();
+      const configDir = normalizeConfigDirectory(String(payload?.configPath || ''));
+      const authChoice = String(payload?.authChoice || '').trim();
+      const rawSecret = String(payload?.secret || '');
+      const secret = sanitizeSecret(rawSecret);
+
+      if (!corePath || !configDir || !authChoice) {
+        return { code: 1, stdout: '', stderr: 'Missing corePath/configPath/authChoice', exitCode: 1 };
+      }
+      if (!SUPPORTED_AUTH_CHOICES.has(authChoice)) {
+        return { code: 1, stdout: '', stderr: `Unsupported authChoice: ${authChoice}`, exitCode: 1 };
+      }
+      if (OAUTH_AUTH_CHOICES.has(authChoice)) {
+        return { code: 1, stdout: '', stderr: 'OAuth requires full onboarding flow in terminal', exitCode: 1 };
+      }
+      if (!CREDENTIALLESS_AUTH_CHOICES.has(authChoice) && !secret) {
+        return { code: 1, stdout: '', stderr: 'Credential is required for this authChoice', exitCode: 1 };
+      }
+
+      const configFilePath = path.join(configDir, 'openclaw.json');
+      const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} `;
+      const workspaceFlag = String(payload?.workspacePath || '').trim() ? ` --workspace ${shellQuote(String(payload.workspacePath).trim())}` : '';
+
+      let authFlags = '';
+      if (authChoice === 'token') {
+        authFlags = ` --token-provider anthropic --token ${shellQuote(secret)}`;
+      } else if (!CREDENTIALLESS_AUTH_CHOICES.has(authChoice)) {
+        const flag = AUTH_CHOICE_FLAG_MAPPING[authChoice];
+        if (!flag) {
+          return { code: 1, stdout: '', stderr: `No auth flag mapping for ${authChoice}`, exitCode: 1 };
+        }
+        authFlags = ` ${flag} ${shellQuote(secret)}`;
+      }
+
+      const onboardCmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw onboard --auth-choice ${shellQuote(authChoice)}${authFlags}${workspaceFlag} --no-install-daemon --skip-daemon --skip-health --non-interactive --accept-risk`;
+      const onboardRes = await runShellCommand(onboardCmd);
+      if ((onboardRes.code ?? 0) !== 0) {
+        return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
+      }
+
+      if ((authChoice === 'apiKey' || authChoice === 'token') && secret) {
+        const syncCmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw auth set --token-provider anthropic --token ${shellQuote(secret)}`;
+        const syncRes = await runShellCommand(syncCmd);
+        if ((syncRes.code ?? 0) !== 0) {
+          return { code: syncRes.code ?? 1, stdout: syncRes.stdout || '', stderr: syncRes.stderr || 'auth sync failed', exitCode: syncRes.code ?? 1 };
+        }
+      }
+
+      const aliases = getChoiceAliases(authChoice);
+      const listed = await collectAuthProfiles(configDir);
+      const hasMatched = listed.profiles.some((profile: any) => profileMatchesAliases(profile.profileId, { provider: profile.provider }, aliases) && (CREDENTIALLESS_AUTH_CHOICES.has(authChoice) || profile.agentPresent));
+      if (!hasMatched) {
+        return { code: 1, stdout: '', stderr: 'Auth write finished but no matched profile found in dual layers', exitCode: 1 };
+      }
+
+      return { code: 0, stdout: JSON.stringify({ authChoice, aliases, secretSanitized: secret !== rawSecret }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('config:model-options')) {
+    try {
+      const payloadStr = fullCommand.replace('config:model-options', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const configDir = normalizeConfigDirectory(String(payload?.configPath || ''));
+      if (!configDir) {
+        return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
+      }
+
+      const filters = Array.isArray(payload?.providers)
+        ? payload.providers.map((item: any) => String(item || '').toLowerCase()).filter(Boolean)
+        : [];
+
+      const agentsRoot = path.join(configDir, 'agents');
+      let entries: any[] = [];
+      try {
+        entries = await fs.readdir(agentsRoot, { withFileTypes: true });
+      } catch {
+        return { code: 0, stdout: JSON.stringify({ groups: [], source: '' }), stderr: '', exitCode: 0 };
+      }
+
+      const modelFiles: string[] = [];
+      const mainFirst = entries
+        .filter((entry) => entry.isDirectory())
+        .sort((a, b) => {
+          if (a.name === 'main') return -1;
+          if (b.name === 'main') return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+      for (const entry of mainFirst) {
+        const candidate = path.join(agentsRoot, entry.name, 'agent', 'models.json');
+        try {
+          await fs.access(candidate);
+          modelFiles.push(candidate);
+        } catch {
+          // Ignore agents without model file.
+        }
+      }
+
+      if (!modelFiles.length) {
+        return { code: 0, stdout: JSON.stringify({ groups: [], source: '' }), stderr: '', exitCode: 0 };
+      }
+
+      const parsed = (await loadJsonFile(modelFiles[0])) || {};
+      const providers = parsed?.providers || {};
+      const groups: Array<{ provider: string; group: string; models: string[] }> = [];
+
+      for (const [providerKey, providerConfig] of Object.entries(providers)) {
+        const provider = String(providerKey || '').toLowerCase();
+        if (!providerMatchesAny(provider, filters)) continue;
+
+        const rawModels = Array.isArray((providerConfig as any)?.models) ? (providerConfig as any).models : [];
+        const resolvedModels: string[] = Array.from(new Set(rawModels
+          .map((item: any) => String(item?.id || item?.name || '').trim())
+          .filter(Boolean)));
+
+        if (!resolvedModels.length) continue;
+        groups.push({ provider, group: provider, models: resolvedModels });
+      }
+
+      return {
+        code: 0,
+        stdout: JSON.stringify({ groups, source: modelFiles[0] }),
+        stderr: '',
+        exitCode: 0,
+      };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('project:check-empty')) {
     const targetPath = fullCommand.replace('project:check-empty ', '').trim();
     try {
@@ -1086,6 +2442,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   }
 
   if (fullCommand === 'process:kill-all') {
+    stopGatewayWatchdog('process:kill-all');
+    stopGatewayHttpWatchdog('process:kill-all');
     killAllSubprocesses();
     return { code: 0, stdout: 'All tracked subprocesses killed', exitCode: 0 };
   }
@@ -1705,6 +3063,69 @@ ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
     }
 
     return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('events:ack', async (_event, payload: any) => {
+  try {
+    const eventId = normalizeString(payload?.eventId, '');
+    if (!eventId) {
+      return { success: false, error: 'Missing eventId' };
+    }
+
+    const runtimeCandidates = [
+      normalizeString(payload?.runtimeDir, ''),
+      normalizeString(payload?.configPath, '') ? path.join(normalizeString(payload?.configPath, ''), 'runtime') : '',
+      normalizeString(payload?.workspacePath, '') ? path.join(normalizeString(payload?.workspacePath, ''), 'runtime') : '',
+      normalizeString(payload?.corePath, '') ? path.join(normalizeString(payload?.corePath, ''), 'runtime') : '',
+    ].filter(Boolean);
+
+    const runtimeDir = (await resolveRuntimeDirFromCandidates(runtimeCandidates)) || runtimeCandidates[0] || '';
+    if (!runtimeDir) {
+      return { success: false, error: 'No runtimeDir available for ack storage' };
+    }
+
+    const ttlMs = Math.max(60_000, Math.min(7 * 24 * 60 * 60 * 1000, Number(payload?.ttlMs || 30 * 60 * 1000)));
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlMs);
+
+    const ackMap = await loadEventAcks(runtimeDir);
+    ackMap[eventId] = {
+      ackedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+    await saveEventAcks(runtimeDir, ackMap);
+
+    return {
+      success: true,
+      eventId,
+      ackedAt: ackMap[eventId].ackedAt,
+      expiresAt: ackMap[eventId].expiresAt,
+      runtimeDir,
+    };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('events:state', async (_event, payload: any) => {
+  try {
+    const runtimeCandidates = [
+      normalizeString(payload?.runtimeDir, ''),
+      normalizeString(payload?.configPath, '') ? path.join(normalizeString(payload?.configPath, ''), 'runtime') : '',
+      normalizeString(payload?.workspacePath, '') ? path.join(normalizeString(payload?.workspacePath, ''), 'runtime') : '',
+      normalizeString(payload?.corePath, '') ? path.join(normalizeString(payload?.corePath, ''), 'runtime') : '',
+    ].filter(Boolean);
+
+    const runtimeDir = (await resolveRuntimeDirFromCandidates(runtimeCandidates)) || runtimeCandidates[0] || '';
+    if (!runtimeDir) {
+      return { success: false, error: 'No runtimeDir available' };
+    }
+
+    const ackMap = await loadEventAcks(runtimeDir);
+    return { success: true, runtimeDir, acks: ackMap };
   } catch (e: any) {
     return { success: false, error: e.message };
   }

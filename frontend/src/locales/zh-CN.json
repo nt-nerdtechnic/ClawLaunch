@@ -101,7 +101,7 @@
     "configPath": "OpenClaw 设定区 (Config)",
     "configPathPlaceholder": "留空则使用默认路径",
     "gatewayPort": "Gateway 端口 (Port)",
-    "gatewayPortPlaceholder": "留空则使用 OpenClaw 默认值（如 18789）",
+    "gatewayPortPlaceholder": "请填写 Launcher 指定的 Gateway Port（必填）",
     "externalTerminalTitle": "外部 Terminal 可视化启动",
     "externalTerminalDesc": "启用后，启动/停止 Gateway 会强制打开外部 Terminal 窗口；关闭后改为后台执行。",
     "workspacePath": "工作区 (Workspace)",

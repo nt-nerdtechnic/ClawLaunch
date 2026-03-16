@@ -90,7 +90,73 @@
         "git": "Git Version Control",
         "pnpm": "pnpm Manager"
     },
-    "liveStream": "Live Stream"
+    "liveStream": "Live Stream",
+    "decision": {
+      "healthSummary": "Health Summary",
+      "alertsQueue": "Alerts Queue",
+      "taskHeartbeat": "Task Heartbeat",
+      "connectionHealth": "Connection Health",
+      "checkedToday": "Checked Today",
+      "eligibleToday": "Eligible Today",
+      "startedToday": "Started Today",
+      "heartbeatConnected": "Heartbeat log connected",
+      "heartbeatLoading": "Loading heartbeat data",
+      "heartbeatDegraded": "Heartbeat data is degraded",
+      "connectedRatio": "{{connected}}/{{total}} connected",
+      "jumpTo": "Jump to {{target}}",
+      "status": {
+        "connected": "connected",
+        "degraded": "degraded"
+      },
+      "health": {
+        "gatewayRunning": "Gateway is connected and running.",
+        "gatewayStopped": "Gateway is offline or not started.",
+        "configState": "{{count}} / 3 core paths are aligned.",
+        "runtimeFreshness": "Snapshot updated {{sec}} seconds ago.",
+        "runtimeMissing": "Runtime snapshot is not available yet."
+      },
+      "filters": {
+        "all": "All",
+        "info": "Info",
+        "warn": "Warn",
+        "actionRequired": "Action Required",
+        "empty": "No alerts in this level right now."
+      },
+      "targets": {
+        "healthSummary": "Health Summary",
+        "actionCenter": "Action Center",
+        "staffGrid": "Staff Grid",
+        "liveStream": "Live Stream",
+        "connectionHealth": "Connection Health"
+      },
+      "connection": {
+        "node": "Node.js Runtime",
+        "pnpm": "pnpm Toolchain",
+        "corePath": "Core Path",
+        "configPath": "Config Path",
+        "workspacePath": "Workspace Path",
+        "sessions": "Session Feed",
+        "approvals": "Approvals Feed",
+        "approvalsCount": "{{count}} item(s)",
+        "taskStore": "Task Store",
+        "budget": "Budget Summary",
+        "heartbeat": "Task Heartbeat Log"
+      },
+      "alerts": {
+        "snapshotWaiting": "Waiting for snapshot",
+        "snapshotWaitingDesc": "Runtime snapshot is not available yet, showing initial state.",
+        "noActiveSessions": "No active sessions",
+        "noActiveSessionsDesc": "No observable execution sessions right now. Service may not be started or source may be degraded.",
+        "pendingApprovals": "Pending approvals",
+        "pendingApprovalsDesc": "{{count}} approval(s) are waiting.",
+        "runtimeIssues": "Runtime issues",
+        "runtimeIssuesDesc": "Blocked {{blocked}} / Error {{error}}.",
+        "budgetRisk": "Budget risk",
+        "budgetRiskDesc": "Over {{over}} / Warn {{warn}}.",
+        "allClear": "No high-priority alerts",
+        "allClearDesc": "System signals are stable. Continue monitoring."
+      }
+    }
   },
   "settings": {
     "botToken": "Telegram Bot Token",
@@ -101,7 +167,7 @@
     "configPath": "OpenClaw Config Path",
     "configPathPlaceholder": "Leave empty for default path",
     "gatewayPort": "Gateway Port",
-    "gatewayPortPlaceholder": "Leave empty to use OpenClaw default (e.g. 18789)",
+    "gatewayPortPlaceholder": "Enter the Launcher-defined Gateway Port (required)",
     "externalTerminalTitle": "External Terminal Visual Launch",
     "externalTerminalDesc": "When enabled, start/stop Gateway always opens an external Terminal window; when disabled, commands run in background.",
     "workspacePath": "Workspace Path",

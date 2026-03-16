@@ -53,7 +53,8 @@ const SetupStepModel = ({ onNext }) => {
     const [tokenCommand, setTokenCommand] = useState('claude setup-token');
     const [tokenCommandRunning, setTokenCommandRunning] = useState(false);
     const [tokenCommandError, setTokenCommandError] = useState(null);
-    const [localError, setLocalError] = useState('');
+        const [localError, setLocalError] = useState('');
+        const [authHealthWarning, setAuthHealthWarning] = useState('');
   
   // CLI AuthChoices Alignment
   const providerGroups = [
@@ -263,6 +264,34 @@ const SetupStepModel = ({ onNext }) => {
         setPathsConfirmed
     ]);
 
+    useEffect(() => {
+        const loadAuthHealth = async () => {
+            if (!window.electronAPI || !config.configPath) {
+                setAuthHealthWarning('');
+                return;
+            }
+            try {
+                const res = await window.electronAPI.exec(`auth:list-profiles ${JSON.stringify({ configPath: config.configPath })}`);
+                const code = res.code ?? res.exitCode;
+                if (code !== 0 || !res.stdout) {
+                    setAuthHealthWarning('');
+                    return;
+                }
+                const parsed = JSON.parse(res.stdout || '{}');
+                const summary = parsed?.summary;
+                if (summary && (Number(summary.critical || 0) > 0 || Number(summary.warn || 0) > 0)) {
+                    setAuthHealthWarning(`偵測到授權風險：critical ${summary.critical || 0} / warn ${summary.warn || 0}。建議先到 Settings > 授權管理修復後再啟動。`);
+                } else {
+                    setAuthHealthWarning('');
+                }
+            } catch {
+                setAuthHealthWarning('');
+            }
+        };
+
+        loadAuthHealth();
+    }, [config.configPath]);
+
 
 
 
@@ -332,6 +361,13 @@ const SetupStepModel = ({ onNext }) => {
                     <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
                         <AlertCircle size={14} className="shrink-0 mt-0.5" />
                         <p className="font-medium">{localError}</p>
+                    </div>
+                )}
+
+                {authHealthWarning && (
+                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2 text-amber-700 text-[11px] animate-in slide-in-from-top-1">
+                        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                        <p className="font-medium">{authHealthWarning}</p>
                     </div>
                 )}
 
