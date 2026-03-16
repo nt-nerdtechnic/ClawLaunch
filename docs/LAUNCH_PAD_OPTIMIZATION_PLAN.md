@@ -55,21 +55,21 @@
 ### Mermaid Flow
 ```mermaid
 flowchart TD
-	 A[App mount] --> B[loadConfig: config:read]
-	 B --> C[checkOnboardingStatus loadedConfig]
-	 C --> D{localStorage finished\nOR any runtime path exists?}
-	 D -- Yes --> M[set activeTab = monitor]
-	 D -- No --> O[set activeTab = onboarding]
+	 A[App 啟動] --> B[讀取設定 loadConfig: config:read]
+	 B --> C[執行 checkOnboardingStatus loadedConfig]
+	 C --> D{localStorage 已完成\n或任一 runtime 路徑存在?}
+	 D -- 是 --> M[切換 activeTab = monitor]
+	 D -- 否 --> O[切換 activeTab = onboarding]
 
-	 B --> E[initializeApp parallel tasks]
+	 B --> E[initializeApp 並行任務]
 	 E --> F[detect:paths]
 	 E --> G[checkEnvironment]
 	 E --> H[syncGatewayStatus]
-	 F --> I[cache detectedConfig/coreSkills/workspaceSkills]
-	 I --> J[checkOnboardingStatus loadedConfig + detected]
-	 J --> K{detected paths make\nflow look completed?}
-	 K -- Yes --> M
-	 K -- No --> O
+	 F --> I[暫存 detectedConfig/coreSkills/workspaceSkills]
+	 I --> J[再次 checkOnboardingStatus loadedConfig + detected]
+	 J --> K{偵測到的路徑是否讓流程\n看起來已完成?}
+	 K -- 是 --> M
+	 K -- 否 --> O
 
 	 O --> W[SetupWizard]
 	 W --> W0[Welcome]
@@ -77,45 +77,45 @@ flowchart TD
 
 	 X -- new --> Y[Initialize]
 	 Y --> Y1[project:initialize]
-	 Y1 --> Y2[config:write resolved paths]
+	 Y1 --> Y2[config:write 寫入解析後路徑]
 	 Y2 --> Z[Model]
 
 	 X -- existing --> Z[Model]
 
 	 Z --> Z1{pathsConfirmed?}
-	 Z1 -- No --> Z2[manual or detected path confirmation]
+	 Z1 -- 否 --> Z2[手動或用偵測結果確認路徑]
 	 Z2 --> Z
-	 Z1 -- Yes --> Z3[execute model]
+	 Z1 -- 是 --> Z3[執行 execute model]
 	 Z3 --> Z4{OAuth authChoice?}
-	 Z4 -- Yes --> Z5[open external Terminal\nrun onboard interactively]
-	 Z5 --> Z6[poll openclaw.json until auth profile appears]
+	 Z4 -- 是 --> Z5[開外部 Terminal\n互動式執行 onboard]
+	 Z5 --> Z6[輪詢 openclaw.json 直到授權 profile 出現]
 	 Z6 --> AA[Messaging]
-	 Z4 -- No --> Z7[run openclaw onboard --non-interactive]
+	 Z4 -- 否 --> Z7[執行 openclaw onboard --non-interactive]
 	 Z7 --> AA
 
-	 AA --> AA1[execute messaging]
-	 AA1 --> AA2[channels add with canonical or fallback alias]
-	 AA2 --> AA3{risky group channel?}
-	 AA3 -- Yes --> AA4[doctor --non-interactive gate]
+	 AA --> AA1[執行 execute messaging]
+	 AA1 --> AA2[channels add: 正規名稱或 fallback 別名]
+	 AA2 --> AA3{是否為高風險群組頻道?}
+	 AA3 -- 是 --> AA4[doctor --non-interactive 前置閘門]
 	 AA4 --> AB[Skills]
-	 AA3 -- No --> AB
+	 AA3 -- 否 --> AB
 
-	 AB --> AB1[scan/import/delete workspace skills]
+	 AB --> AB1[掃描/匯入/刪除 workspace skills]
 	 AB1 --> AC[Launch]
 
 	 AC --> AC1{installDaemon?}
-	 AC1 -- Yes --> AC2[openclaw onboard --install-daemon]
+	 AC1 -- 是 --> AC2[openclaw onboard --install-daemon]
 	 AC2 --> AC3[verifyLaunchReadiness]
-	 AC1 -- No --> AC4[only verify openclaw --version]
+	 AC1 -- 否 --> AC4[僅驗證 openclaw --version]
 	 AC3 --> AD[onFinished]
 	 AC4 --> AD
-	 AD --> AE[set onboarding_finished = true]
+	 AD --> AE[設定 onboarding_finished = true]
 	 AE --> M
 
-	 W --> WF[beforeunload or unmount]
+	 W --> WF[beforeunload 或 unmount]
 	 WF --> WG{completedRef ?}
-	 WG -- No --> WH[process:kill-all + gateway stop]
-	 WG -- Yes --> WI[skip cleanup]
+	 WG -- 否 --> WH[process:kill-all + gateway stop]
+	 WG -- 是 --> WI[跳過清理]
 ```
 
 ### Step Responsibilities

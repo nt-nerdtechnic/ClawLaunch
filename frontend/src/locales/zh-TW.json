@@ -22,6 +22,24 @@
     "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
     "logoutTooltip": "登出並重新設定"
   },
+  "chat": {
+    "title": "核心對話",
+    "open": "開啟聊天",
+    "close": "關閉聊天",
+    "clear": "清除訊息",
+    "session": "Session",
+    "agent": "Agent",
+    "placeholder": "輸入要送給核心的命令或提問...",
+    "send": "送出",
+    "stop": "停止",
+    "empty": "尚無訊息，開始對話以建立上下文。",
+    "modeGateway": "Gateway 模式",
+    "modeLocal": "本機核心模式",
+    "fallbackLocal": "外部通訊斷線，已切換本機核心命令",
+    "errorGeneric": "聊天請求失敗，請稍後重試",
+    "unavailable": "目前環境無法呼叫聊天 IPC",
+    "coreRequired": "核心尚未啟動，請先啟動 Gateway（Core）再送出對話"
+  },
   "monitor": {
     "gatewayTitle": "Gateway 通訊中樞",
     "gatewayDesc": "負責維持所有 AI 代理的通訊鏈路穩定性。",

@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 const activeProcesses = new Set<any>();
+const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean }>();
 
 const DEV_PORT_RANGE_START = 5173;
 const DEV_PORT_RANGE_END = 5185;
@@ -16,6 +17,351 @@ const DEV_SERVER_WAIT_MS = 15000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+
+interface LauncherConfig {
+  corePath?: string;
+  configPath?: string;
+  gatewayPort?: string;
+}
+
+interface OpenClawChatInvokeRequest {
+  requestId: string;
+  sessionKey: string;
+  agentId: string;
+  message: string;
+  stream?: boolean;
+  deliver?: boolean;
+  forceLocal?: boolean;
+}
+
+const safeJsonParse = (value: string, fallback: any = null) => {
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return fallback;
+  }
+};
+
+const normalizeConfigDir = (rawPath?: string) => {
+  const trimmed = String(rawPath || '').trim();
+  if (!trimmed) return '';
+  return trimmed.replace(/[\\/]openclaw\.json$/i, '');
+};
+
+const buildGatewayUrlArg = (gatewayPort?: string) => {
+  const raw = String(gatewayPort || '').trim();
+  if (!raw || !/^\d+$/.test(raw)) return '';
+
+  const port = Number.parseInt(raw, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return '';
+
+  return ` --url ${shellQuote(`ws://127.0.0.1:${port}`)}`;
+};
+
+const readEnvOverride = (...keys: string[]) => {
+  for (const key of keys) {
+    const value = String(process.env[key] || '').trim();
+    if (value) return value;
+  }
+  return '';
+};
+
+const resolveGatewayCredentials = (config: any) => {
+  const configToken = String(config?.gateway?.auth?.token || '').trim();
+  const configPassword = String(config?.gateway?.auth?.password || '').trim();
+  const token = readEnvOverride('OPENCLAW_GATEWAY_TOKEN', 'CLAWDBOT_GATEWAY_TOKEN') || configToken;
+  const password = readEnvOverride('OPENCLAW_GATEWAY_PASSWORD') || configPassword;
+
+  return {
+    token,
+    password: token ? '' : password,
+  };
+};
+
+const buildGatewayAuthArg = (credentials: { token?: string; password?: string }) => {
+  if (credentials.token) {
+    return ` --token ${shellQuote(credentials.token)}`;
+  }
+  if (credentials.password) {
+    return ` --password ${shellQuote(credentials.password)}`;
+  }
+  return '';
+};
+
+const runShellCommand = (command: string) => new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+  const child = spawn(command, { shell: true });
+  activeProcesses.add(child);
+  let stdout = '';
+  let stderr = '';
+
+  child.stdout.on('data', (data: any) => {
+    stdout += data.toString();
+  });
+  child.stderr.on('data', (data: any) => {
+    stderr += data.toString();
+  });
+
+  child.on('close', (code: number) => {
+    activeProcesses.delete(child);
+    resolve({ code: code ?? 1, stdout, stderr });
+  });
+});
+
+const isGatewayOnlineFromStatus = (statusRes: { code: number; stdout: string; stderr: string }) => {
+  if ((statusRes.code ?? 1) !== 0) return false;
+
+  const raw = `${statusRes.stdout || ''}\n${statusRes.stderr || ''}`.toLowerCase();
+  if (raw.includes('"online": true') || raw.includes('"online":true') || raw.includes('online') || raw.includes('running')) {
+    return true;
+  }
+
+  const parsed = safeJsonParse(statusRes.stdout || '', null);
+  if (parsed && typeof parsed === 'object') {
+    if (parsed.online === true) return true;
+    if (parsed.gateway?.online === true) return true;
+    if (parsed.probe?.online === true || parsed.probe?.ok === true) return true;
+    if (typeof parsed.status === 'string' && /online|running/i.test(parsed.status)) return true;
+  }
+
+  return false;
+};
+
+const tryParseJsonObject = (value: string) => {
+  const parsed = safeJsonParse(value, null);
+  if (parsed && typeof parsed === 'object') return parsed;
+  return null;
+};
+
+const parseGatewayCallStdoutJson = (rawStdout: string) => {
+  const stdout = String(rawStdout || '').trim();
+  if (!stdout) return null;
+
+  const fullParsed = tryParseJsonObject(stdout);
+  if (fullParsed) return fullParsed;
+
+  const lines = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const parsedLine = tryParseJsonObject(lines[i]);
+    if (parsedLine) return parsedLine;
+  }
+
+  const firstBrace = stdout.indexOf('{');
+  const lastBrace = stdout.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const sliceParsed = tryParseJsonObject(stdout.slice(firstBrace, lastBrace + 1));
+    if (sliceParsed) return sliceParsed;
+  }
+
+  return null;
+};
+
+const pickTextFromUnknownContent = (content: any): string => {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (!item || typeof item !== 'object') return '';
+        if (typeof item.text === 'string') return item.text;
+        if (typeof item.value === 'string') return item.value;
+        if (typeof item.content === 'string') return item.content;
+        return '';
+      })
+      .join('');
+  }
+  if (content && typeof content === 'object') {
+    if (typeof content.text === 'string') return content.text;
+    if (typeof content.value === 'string') return content.value;
+    if (typeof content.content === 'string') return content.content;
+  }
+  return '';
+};
+
+const extractMessageText = (message: any): string => {
+  if (!message || typeof message !== 'object') return '';
+
+  const direct = pickTextFromUnknownContent(message.content);
+  if (direct) return direct;
+
+  if (typeof message.text === 'string') return message.text;
+  if (typeof message.message === 'string') return message.message;
+  if (typeof message.output_text === 'string') return message.output_text;
+
+  return '';
+};
+
+const isAssistantMessage = (message: any): boolean => {
+  if (!message || typeof message !== 'object') return false;
+  const role = String(message.role || message.type || message.author?.role || '').toLowerCase();
+  return role === 'assistant';
+};
+
+const extractLatestAssistantTextFromHistoryPayload = (payload: any): string => {
+  const history = payload?.result ?? payload;
+  const candidates: any[] = [
+    history?.messages,
+    history?.items,
+    history?.history,
+    history?.data?.messages,
+    history?.data?.items,
+    history?.output,
+  ];
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    for (let i = candidate.length - 1; i >= 0; i--) {
+      const msg = candidate[i];
+      if (!isAssistantMessage(msg)) continue;
+      const text = extractMessageText(msg);
+      if (text) return text;
+    }
+  }
+
+  return '';
+};
+
+const extractRunIdFromSendPayload = (payload: any): string => {
+  const result = payload?.result ?? payload;
+  const maybeRunId = result?.runId || result?.run_id || result?.id || '';
+  return typeof maybeRunId === 'string' ? maybeRunId : '';
+};
+
+const computeDeltaText = (previous: string, current: string): string => {
+  if (!current) return '';
+  if (!previous) return current;
+  if (current.startsWith(previous)) {
+    return current.slice(previous.length);
+  }
+
+  const maxPrefix = Math.min(previous.length, current.length);
+  let sameCount = 0;
+  while (sameCount < maxPrefix && previous[sameCount] === current[sameCount]) {
+    sameCount++;
+  }
+  return current.slice(sameCount);
+};
+
+const fetchLatestAssistantText = async (runtimePrefix: string, gatewayUrlArg: string, gatewayAuthArg: string, sessionKey: string, agentId?: string) => {
+  const historyParams: Record<string, any> = { sessionKey };
+  if (agentId) historyParams.agentId = agentId;
+
+  const historyCommand = `${runtimePrefix} gateway call chat.history${gatewayUrlArg}${gatewayAuthArg} --params ${shellQuote(JSON.stringify(historyParams))}`;
+  const historyRes = await runShellCommand(historyCommand);
+  if (historyRes.code !== 0) {
+    return { ok: false as const, text: '', error: historyRes.stderr || 'chat.history failed' };
+  }
+
+  const parsed = parseGatewayCallStdoutJson(historyRes.stdout);
+  if (!parsed) {
+    return { ok: false as const, text: '', error: 'chat.history returned non-JSON output' };
+  }
+
+  return { ok: true as const, text: extractLatestAssistantTextFromHistoryPayload(parsed), error: '' };
+};
+
+const waitForAssistantFinalByHistory = async ({
+  request,
+  runtimePrefix,
+  gatewayUrlArg,
+  gatewayAuthArg,
+  baseline,
+  emitChunk,
+}: {
+  request: OpenClawChatInvokeRequest;
+  runtimePrefix: string;
+  gatewayUrlArg: string;
+  gatewayAuthArg: string;
+  baseline: string;
+  emitChunk: (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => void;
+}) => {
+  const pollIntervalMs = 550;
+  const stableWindowMs = 1500;
+  const timeoutMs = 65000;
+  const startAt = Date.now();
+  let lastObserved = baseline;
+  let lastChangeAt = Date.now();
+
+  while (Date.now() - startAt < timeoutMs) {
+    const chatState = activeChatRequests.get(request.requestId);
+    if (!chatState) {
+      emitChunk({ done: true, mode: 'gateway', reason: '' });
+      return;
+    }
+
+    if (chatState.aborted) {
+      emitChunk({ done: true, mode: 'gateway', reason: '' });
+      return;
+    }
+
+    const historyRes = await fetchLatestAssistantText(runtimePrefix, gatewayUrlArg, gatewayAuthArg, request.sessionKey, request.agentId);
+    if (!historyRes.ok) {
+      emitChunk({
+        error: historyRes.error,
+        done: true,
+        mode: 'gateway',
+        reason: '',
+      });
+      return;
+    }
+
+    if (historyRes.text !== lastObserved) {
+      const delta = computeDeltaText(lastObserved, historyRes.text);
+      lastObserved = historyRes.text;
+      lastChangeAt = Date.now();
+      if (delta) {
+        emitChunk({ delta, mode: 'gateway', reason: '' });
+      }
+    }
+
+    if (Date.now() - lastChangeAt >= stableWindowMs) {
+      emitChunk({ done: true, mode: 'gateway', reason: '' });
+      return;
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    await sleep(pollIntervalMs);
+  }
+
+  emitChunk({ done: true, mode: 'gateway', reason: '' });
+};
+
+async function resolveOpenClawRuntime() {
+  const launcherConfigPath = path.join(app.getPath('userData'), 'config.json');
+  let launcherConfig: LauncherConfig = {};
+  try {
+    const raw = await fs.readFile(launcherConfigPath, 'utf-8');
+    launcherConfig = safeJsonParse(raw, {}) || {};
+  } catch (_) {
+    launcherConfig = {};
+  }
+
+  const corePath = String(launcherConfig.corePath || '').trim();
+  const configDir = normalizeConfigDir(launcherConfig.configPath);
+  const configFilePath = configDir ? path.join(configDir, 'openclaw.json') : '';
+  let openclawConfig: any = {};
+  if (configFilePath) {
+    try {
+      const raw = await fs.readFile(configFilePath, 'utf-8');
+      openclawConfig = safeJsonParse(raw, {}) || {};
+    } catch (_) {
+      openclawConfig = {};
+    }
+  }
+
+  const gatewayCredentials = resolveGatewayCredentials(openclawConfig);
+  const gatewayUrlArg = buildGatewayUrlArg(launcherConfig.gatewayPort);
+  const gatewayAuthArg = buildGatewayAuthArg(gatewayCredentials);
+  const envPrefix = `${configDir ? `OPENCLAW_STATE_DIR=${shellQuote(configDir)} ` : ''}${configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} ` : ''}`;
+  const cdPrefix = corePath ? `cd ${shellQuote(corePath)} && ` : '';
+  return {
+    corePath,
+    configDir,
+    configFilePath,
+    gatewayUrlArg,
+    gatewayAuthArg,
+    openclawPrefix: `${cdPrefix}${envPrefix}pnpm openclaw`,
+  };
+}
 
 function validateVersionRef(raw: string): string {
   const value = String(raw || '').trim();
@@ -1058,6 +1404,67 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   });
 });
 
+ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { success: false, error: 'Invalid port', port };
+  }
+
+  const lookupRes = await runShellCommand(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`);
+  const pidLines = String(lookupRes.stdout || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const pids = Array.from(new Set(pidLines
+    .map((line) => Number(line))
+    .filter((pid) => Number.isInteger(pid) && pid > 0)));
+
+  if (!pids.length) {
+    return { success: false, error: `No listening process found on port ${port}`, port };
+  }
+
+  const termSent: number[] = [];
+  const forceKilled: number[] = [];
+  const failed: Array<{ pid: number; reason: string }> = [];
+
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+      termSent.push(pid);
+    } catch (e: any) {
+      failed.push({ pid, reason: e?.message || 'SIGTERM failed' });
+    }
+  }
+
+  if (termSent.length > 0) {
+    await sleep(450);
+  }
+
+  for (const pid of termSent) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      continue;
+    }
+
+    try {
+      process.kill(pid, 'SIGKILL');
+      forceKilled.push(pid);
+    } catch (e: any) {
+      failed.push({ pid, reason: e?.message || 'SIGKILL failed' });
+    }
+  }
+
+  return {
+    success: termSent.length > 0,
+    port,
+    pids,
+    killed: termSent,
+    forceKilled,
+    failed,
+  };
+});
+
 ipcMain.handle('shell:open-external', async (_event, url: string) => {
     try {
         await shell.openExternal(url);
@@ -1065,6 +1472,242 @@ ipcMain.handle('shell:open-external', async (_event, url: string) => {
     } catch (e: any) {
         return { success: false, error: e.message };
     }
+});
+
+ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvokeRequest) => {
+  if (!request?.requestId || !request?.sessionKey || !request?.agentId || !request?.message) {
+    return {
+      success: false,
+      requestId: request?.requestId || '',
+      error: 'Missing request parameters',
+    };
+  }
+
+  const runtime = await resolveOpenClawRuntime();
+  if (!runtime.openclawPrefix) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      error: 'OpenClaw runtime not configured',
+    };
+  }
+
+  if (runtime.gatewayUrlArg && !runtime.gatewayAuthArg) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      error: '已指定 Gateway 埠號，但找不到顯式 token/password，請檢查 openclaw.json 的 gateway.auth 設定。',
+      reason: 'gateway-explicit-auth-missing',
+    };
+  }
+
+  const messageId = `${request.requestId}-assistant`;
+  const params: Record<string, any> = {
+    sessionKey: request.sessionKey,
+    message: request.message,
+    deliver: Boolean(request.deliver),
+    idempotencyKey: request.requestId,
+  };
+  if (request.agentId) params.agentId = request.agentId;
+
+  if (request.forceLocal) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode: 'gateway' as const,
+      reason: 'core-required-force-local-blocked',
+      error: '核心對話已啟用強制 Gateway 模式，請先啟動核心（Gateway）後再送出。',
+    };
+  }
+
+  const statusRes = await runShellCommand(`${runtime.openclawPrefix} gateway status${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} --json`);
+  const gatewayOnline = isGatewayOnlineFromStatus(statusRes);
+  if (!gatewayOnline) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode: 'gateway' as const,
+      reason: 'core-required-gateway-offline',
+      error: '核心尚未啟動，請先啟動 Gateway（Core）後再送出對話。',
+    };
+  }
+
+  const mode: 'gateway' = 'gateway';
+  const reason = '';
+
+  const gatewayCommand = `${runtime.openclawPrefix} gateway call chat.send${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} --params ${shellQuote(JSON.stringify(params))}`;
+  const selectedCommand = gatewayCommand;
+
+  const emitChunk = (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => {
+    mainWindow?.webContents.send('openclaw:chat.chunk', {
+      requestId: request.requestId,
+      messageId,
+      delta: payload.delta || '',
+      done: payload.done,
+      error: payload.error,
+      mode: payload.mode,
+      reason: payload.reason,
+    });
+  };
+
+  const baselineRes = await fetchLatestAssistantText(runtime.openclawPrefix, runtime.gatewayUrlArg, runtime.gatewayAuthArg, request.sessionKey, request.agentId);
+  if (!baselineRes.ok) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode,
+      reason,
+      error: baselineRes.error,
+    };
+  }
+
+  activeChatRequests.set(request.requestId, {
+    sessionKey: request.sessionKey,
+    agentId: request.agentId,
+    aborted: false,
+  });
+
+  if (!request.stream) {
+    const sendRes = await runShellCommand(selectedCommand);
+    if (sendRes.code !== 0) {
+      activeChatRequests.delete(request.requestId);
+      return {
+        success: false,
+        requestId: request.requestId,
+        messageId,
+        mode,
+        reason,
+        error: sendRes.stderr || 'Chat invoke failed',
+      };
+    }
+
+    const sendParsed = parseGatewayCallStdoutJson(sendRes.stdout);
+    const runId = extractRunIdFromSendPayload(sendParsed);
+    if (runId) {
+      const state = activeChatRequests.get(request.requestId);
+      if (state) activeChatRequests.set(request.requestId, { ...state, runId });
+    }
+
+    const timeoutMs = 65000;
+    const startAt = Date.now();
+    let finalText = baselineRes.text;
+    let lastChangeAt = Date.now();
+    while (Date.now() - startAt < timeoutMs) {
+      const state = activeChatRequests.get(request.requestId);
+      if (!state || state.aborted) break;
+
+      // eslint-disable-next-line no-await-in-loop
+      const historyRes = await fetchLatestAssistantText(runtime.openclawPrefix, runtime.gatewayUrlArg, runtime.gatewayAuthArg, request.sessionKey, request.agentId);
+      if (!historyRes.ok) {
+        activeChatRequests.delete(request.requestId);
+        return {
+          success: false,
+          requestId: request.requestId,
+          messageId,
+          mode,
+          reason,
+          error: historyRes.error,
+        };
+      }
+
+      if (historyRes.text !== finalText) {
+        finalText = historyRes.text;
+        lastChangeAt = Date.now();
+      }
+
+      if (Date.now() - lastChangeAt >= 1500) {
+        break;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(550);
+    }
+
+    activeChatRequests.delete(request.requestId);
+
+    return {
+      success: true,
+      requestId: request.requestId,
+      messageId,
+      content: finalText,
+      mode,
+      reason,
+    };
+  }
+
+  const sendRes = await runShellCommand(selectedCommand);
+  if (sendRes.code !== 0) {
+    activeChatRequests.delete(request.requestId);
+    emitChunk({
+      error: sendRes.stderr || 'Chat invoke failed',
+      done: true,
+      mode,
+      reason,
+    });
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode,
+      reason,
+      error: sendRes.stderr || 'Chat invoke failed',
+    };
+  }
+
+  const sendParsed = parseGatewayCallStdoutJson(sendRes.stdout);
+  const runId = extractRunIdFromSendPayload(sendParsed);
+  if (runId) {
+    const state = activeChatRequests.get(request.requestId);
+    if (state) activeChatRequests.set(request.requestId, { ...state, runId });
+  }
+
+  waitForAssistantFinalByHistory({
+    request,
+    runtimePrefix: runtime.openclawPrefix,
+    gatewayUrlArg: runtime.gatewayUrlArg,
+    gatewayAuthArg: runtime.gatewayAuthArg,
+    baseline: baselineRes.text,
+    emitChunk,
+  }).finally(() => {
+    activeChatRequests.delete(request.requestId);
+  });
+
+  return {
+    success: true,
+    requestId: request.requestId,
+    messageId,
+    mode,
+    reason,
+  };
+});
+
+ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
+  const chatState = activeChatRequests.get(requestId);
+  if (!chatState) {
+    return { success: false, error: 'No active chat request' };
+  }
+
+  activeChatRequests.set(requestId, { ...chatState, aborted: true });
+
+  try {
+    const runtime = await resolveOpenClawRuntime();
+    const abortParams: Record<string, any> = { sessionKey: chatState.sessionKey };
+    if (chatState.runId) abortParams.runId = chatState.runId;
+    if (chatState.agentId) abortParams.agentId = chatState.agentId;
+
+    const abortCommand = `${runtime.openclawPrefix} gateway call chat.abort${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} --params ${shellQuote(JSON.stringify(abortParams))}`;
+    const abortRes = await runShellCommand(abortCommand);
+    if (abortRes.code !== 0) {
+      return { success: false, error: abortRes.stderr || 'Failed to abort chat run' };
+    }
+
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {

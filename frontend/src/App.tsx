@@ -7,6 +7,7 @@ import { StaffGrid } from './components/StaffGrid';
 import { Analytics } from './components/Analytics';
 import { ThemeToggle } from './components/ThemeToggle';
 import { LanguageToggle } from './components/LanguageToggle';
+import { ChatWidget } from './components/chat/ChatWidget';
 import { useTranslation } from 'react-i18next';
 // @ts-ignore
 import SetupWizard from './components/onboarding/SetupWizard';
@@ -39,7 +40,9 @@ function App() {
     () => localStorage.getItem('onboarding_finished') === 'true'
   );
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [gatewayConflictModal, setGatewayConflictModal] = useState<{ message: string; detail: string } | null>(null);
+  const [gatewayConflictModal, setGatewayConflictModal] = useState<{ message: string; detail: string; port: number } | null>(null);
+  const [killingGatewayPortHolder, setKillingGatewayPortHolder] = useState(false);
+  const [gatewayConflictActionMessage, setGatewayConflictActionMessage] = useState('');
   const [runtimeProfile, setRuntimeProfile] = useState<any>(null);
   const [runtimeDraftModel, setRuntimeDraftModel] = useState('');
   const [runtimeDraftBotToken, setRuntimeDraftBotToken] = useState('');
@@ -644,7 +647,9 @@ NODE`;
           const message = `錯誤: 啟動前檢查到 Port ${precheck.port} 已被占用${hint}，請改用其他 Gateway Port。`;
           addLog(message, 'stderr');
           addLog(precheckOutput, 'stderr');
-          setGatewayConflictModal({ message, detail: precheckOutput });
+          setGatewayConflictActionMessage('');
+          setKillingGatewayPortHolder(false);
+          setGatewayConflictModal({ message, detail: precheckOutput, port: precheck.port });
           return;
         }
 
@@ -711,6 +716,52 @@ NODE`;
       } catch (e: any) {
         addLog(t('logs.startGatewayFailed', { msg: e.message }), 'stderr');
       }
+    }
+  };
+
+  const closeGatewayConflictModal = () => {
+    setGatewayConflictModal(null);
+    setGatewayConflictActionMessage('');
+    setKillingGatewayPortHolder(false);
+  };
+
+  const handleKillGatewayPortHolder = async () => {
+    if (!window.electronAPI || !gatewayConflictModal) {
+      return;
+    }
+
+    setKillingGatewayPortHolder(true);
+    setGatewayConflictActionMessage('');
+
+    try {
+      const result = await window.electronAPI.killPortHolder(gatewayConflictModal.port);
+      if (result.success) {
+        const allKilled = [
+          ...(result.killed || []),
+          ...(result.forceKilled || []),
+        ];
+        const uniqueKilled = Array.from(new Set(allKilled));
+        const partialFailed = (result.failed || []).length > 0;
+        const successMsg = uniqueKilled.length > 0
+          ? `已強制關閉 Port ${gatewayConflictModal.port} 占用程序（PID: ${uniqueKilled.join(', ')}）${partialFailed ? '，但仍有部分 PID 關閉失敗。' : '。'}`
+          : `已嘗試強制關閉 Port ${gatewayConflictModal.port} 占用程序。`;
+        setGatewayConflictActionMessage(successMsg);
+        addLog(successMsg, partialFailed ? 'stderr' : 'system');
+        // 強制關閉成功後自動關閉衝突視窗，避免使用者再手動關閉。
+        window.setTimeout(() => {
+          closeGatewayConflictModal();
+        }, 350);
+      } else {
+        const errorMsg = result.error || `無法關閉 Port ${gatewayConflictModal.port} 的占用程序`;
+        setGatewayConflictActionMessage(errorMsg);
+        addLog(errorMsg, 'stderr');
+      }
+    } catch (e: any) {
+      const errorMsg = e?.message || `關閉 Port ${gatewayConflictModal.port} 占用程序時發生錯誤`;
+      setGatewayConflictActionMessage(errorMsg);
+      addLog(errorMsg, 'stderr');
+    } finally {
+      setKillingGatewayPortHolder(false);
     }
   };
 
@@ -830,7 +881,12 @@ NODE`;
   };
 
   if (viewMode === 'mini') {
-    return <MiniView running={running} onToggle={toggleGateway} onExpand={toggleViewMode} />;
+    return (
+      <>
+        <MiniView running={running} onToggle={toggleGateway} onExpand={toggleViewMode} />
+        <ChatWidget compact />
+      </>
+    );
   }
 
   // If not finished onboarding, show the wizard
@@ -937,14 +993,14 @@ NODE`;
 
         {gatewayConflictModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setGatewayConflictModal(null)}></div>
+            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeGatewayConflictModal}></div>
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-xl rounded-[32px] shadow-2xl overflow-hidden relative z-10 animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
               <div className="p-8 space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-500">
                     <AlertCircle size={24} />
                   </div>
-                  <button onClick={() => setGatewayConflictModal(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                  <button onClick={closeGatewayConflictModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                     <X size={20} />
                   </button>
                 </div>
@@ -963,6 +1019,12 @@ NODE`;
                   </pre>
                 </div>
 
+                {!!gatewayConflictActionMessage && (
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 p-4 text-sm text-slate-600 dark:text-slate-300">
+                    {gatewayConflictActionMessage}
+                  </div>
+                )}
+
                 <div className="flex gap-4 pt-2">
                   <button
                     onClick={() => setActiveTab('settings')}
@@ -971,10 +1033,11 @@ NODE`;
                     前往設定修改 Port
                   </button>
                   <button
-                    onClick={() => setGatewayConflictModal(null)}
-                    className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-500/25 transition-all active:scale-95"
+                    onClick={handleKillGatewayPortHolder}
+                    disabled={killingGatewayPortHolder}
+                    className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/25 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    我知道了
+                    {killingGatewayPortHolder ? '處理中...' : '強制關閉該程序'}
                   </button>
                 </div>
               </div>
@@ -1336,6 +1399,7 @@ NODE`;
           )}
         </div>
       </main>
+      <ChatWidget />
     </div>
   );
 }

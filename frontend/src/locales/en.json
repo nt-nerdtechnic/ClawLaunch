@@ -22,6 +22,24 @@
     "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
     "logoutTooltip": "Logout & Reconfigure"
   },
+  "chat": {
+    "title": "Core Chat",
+    "open": "Open Chat",
+    "close": "Close Chat",
+    "clear": "Clear Messages",
+    "session": "Session",
+    "agent": "Agent",
+    "placeholder": "Type a command or prompt for the core...",
+    "send": "Send",
+    "stop": "Stop",
+    "empty": "No messages yet. Start a chat to create context.",
+    "modeGateway": "Gateway Mode",
+    "modeLocal": "Local Core Mode",
+    "fallbackLocal": "External channel is offline, switched to local core command path",
+    "errorGeneric": "Chat request failed, please retry",
+    "unavailable": "Chat IPC is unavailable in this environment",
+    "coreRequired": "Core is not running. Start Gateway (Core) before sending a chat message"
+  },
   "monitor": {
     "gatewayTitle": "Gateway Hub",
     "gatewayDesc": "Maintains communication stability for all AI agents.",
