@@ -5,14 +5,14 @@ import type { ReadModelSnapshot } from '../../store';
 
 type EnvStatus = { node: string; git: string; pnpm: string };
 type AppConfig = { corePath: string; configPath: string; workspacePath: string; gatewayPort?: string };
-type HeartbeatState = 'loading' | 'connected' | 'degraded' | 'unavailable';
+type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
 
-type HeartbeatSummary = {
-  checked: number;
-  eligible: number;
-  executed: number;
+type AuditLogSummary = {
+  writes: number;
+  changedPaths: number;
+  suspicious: number;
   updatedAt: string;
-  state: HeartbeatState;
+  state: AuditLogState;
 };
 
 type DashboardAlertLevel = 'info' | 'warn' | 'action-required';
@@ -51,10 +51,10 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
   const { t } = useTranslation();
   const { running, envStatus, config, resolvedConfigDir, snapshot } = props;
   const [alertsFilter, setAlertsFilter] = useState<'all' | DashboardAlertLevel>('all');
-  const [heartbeat, setHeartbeat] = useState<HeartbeatSummary>({
-    checked: 0,
-    eligible: 0,
-    executed: 0,
+  const [auditLog, setAuditLog] = useState<AuditLogSummary>({
+    writes: 0,
+    changedPaths: 0,
+    suspicious: 0,
     updatedAt: '',
     state: 'loading',
   });
@@ -63,103 +63,68 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     let cancelled = false;
 
     if (!running) {
-      setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'unavailable' });
+      setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable' });
       return () => {
         cancelled = true;
       };
     }
 
-    const loadHeartbeatSummary = async () => {
+    const loadAuditLogSummary = async () => {
       if (!window.electronAPI?.exec) {
         if (!cancelled) {
-          setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'unavailable' });
+          setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable' });
         }
         return;
       }
 
       const configDir = normalizeConfigDir(config.configPath);
-      const configFilePath = configDir ? `${configDir}/openclaw.json` : '';
-      const stateDirEnv = configDir ? `OPENCLAW_STATE_DIR=${shellQuote(configDir)} ` : '';
-      const configPathEnv = configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} ` : '';
-      const corePrefix = config.corePath ? `cd ${shellQuote(config.corePath)} && ` : '';
-
-      const rawPort = String(config.gatewayPort || '').trim();
-      if (!/^\d+$/.test(rawPort)) {
-        if (!cancelled) {
-          setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'unavailable' });
-        }
-        return;
-      }
-      const gatewayPort = Number(rawPort);
-      const gatewayUrl = `ws://127.0.0.1:${gatewayPort}`;
-      const statusCmd = `${corePrefix}${stateDirEnv}${configPathEnv}pnpm openclaw gateway status --json --no-probe --url ${shellQuote(gatewayUrl)}`;
-
-      let gatewayReachable = false;
-      try {
-        const statusRes = await window.electronAPI.exec(statusCmd);
-        const statusCode = statusRes.code ?? statusRes.exitCode;
-        if (statusCode === 0) {
-          gatewayReachable = true;
-        }
-      } catch {
-        gatewayReachable = false;
-      }
-
-      if (!gatewayReachable) {
-        if (!cancelled) {
-          setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'degraded' });
-        }
-        return;
-      }
-
       const candidates = Array.from(
         new Set(
           [
-            resolvedConfigDir ? `${resolvedConfigDir}/runtime/task-heartbeat.log` : '',
-            config.workspacePath ? `${config.workspacePath}/runtime/task-heartbeat.log` : '',
-            config.corePath ? `${config.corePath}/runtime/task-heartbeat.log` : '',
+            resolvedConfigDir ? `${resolvedConfigDir}/logs/config-audit.jsonl` : '',
+            configDir ? `${configDir}/logs/config-audit.jsonl` : '',
+            config.workspacePath ? `${config.workspacePath}/logs/config-audit.jsonl` : '',
+            config.corePath ? `${config.corePath}/logs/config-audit.jsonl` : '',
           ].filter(Boolean),
         ),
       );
 
       if (candidates.length === 0) {
         if (!cancelled) {
-          setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'unavailable' });
+          setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable' });
         }
         return;
       }
 
-      for (const heartbeatPath of candidates) {
+      for (const auditLogPath of candidates) {
         const parserScript = [
           "const fs = require('fs');",
-          "const file = process.env.HEARTBEAT_LOG;",
+          "const file = process.env.AUDIT_LOG;",
           "if (!file || !fs.existsSync(file)) { process.stdout.write(JSON.stringify({ ok: false, reason: 'missing' })); process.exit(0); }",
           "const raw = fs.readFileSync(file, 'utf8');",
           "const lines = raw.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);",
-          "let checked = 0; let eligible = 0; let executed = 0; let lastTs = 0;",
+          "let writes = 0; let changedPaths = 0; let suspicious = 0; let lastTs = 0;",
           "const today = new Date();",
           "const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');",
           "for (const line of lines) {",
           "  let item;",
           "  try { item = JSON.parse(line); } catch { continue; }",
-          "  const ts = item?.generatedAt || item?.timestamp || item?.at || item?.finishedAt || item?.startedAt || item?.updatedAt;",
+          "  const ts = item?.ts || item?.timestamp || item?.updatedAt || item?.at;",
           "  if (!ts) continue;",
           "  const date = new Date(ts);",
           "  if (Number.isNaN(date.getTime())) continue;",
-          "  const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');",
-          "  if (key !== todayKey) continue;",
-          "  const checkedValue = Number(item?.checked ?? item?.summary?.checked ?? item?.metrics?.checked ?? 0);",
-          "  const eligibleValue = Number(item?.eligible ?? item?.summary?.eligible ?? item?.metrics?.eligible ?? 0);",
-          "  const executedValue = Number(item?.executed ?? item?.summary?.executed ?? item?.metrics?.executed ?? item?.promoted ?? 0);",
-          "  checked += Number.isFinite(checkedValue) ? checkedValue : 0;",
-          "  eligible += Number.isFinite(eligibleValue) ? eligibleValue : 0;",
-          "  executed += Number.isFinite(executedValue) ? executedValue : 0;",
           "  const tsMs = date.getTime();",
           "  if (tsMs > lastTs) lastTs = tsMs;",
+          "  const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');",
+          "  if (key !== todayKey) continue;",
+          "  writes += 1;",
+          "  const changedPathValue = Number(item?.changedPathCount ?? 0);",
+          "  changedPaths += Number.isFinite(changedPathValue) ? changedPathValue : 0;",
+          "  suspicious += Array.isArray(item?.suspicious) ? item.suspicious.length : 0;",
           "}",
-          "process.stdout.write(JSON.stringify({ ok: true, checked, eligible, executed, updatedAt: lastTs ? new Date(lastTs).toISOString() : '' }));",
+          "process.stdout.write(JSON.stringify({ ok: true, writes, changedPaths, suspicious, updatedAt: lastTs ? new Date(lastTs).toISOString() : '' }));",
         ].join(' ');
-        const cmd = `HEARTBEAT_LOG=${shellQuote(heartbeatPath)} node -e ${shellQuote(parserScript)}`;
+        const cmd = `AUDIT_LOG=${shellQuote(auditLogPath)} node -e ${shellQuote(parserScript)}`;
 
         try {
           const res = await window.electronAPI.exec(cmd);
@@ -169,10 +134,10 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           if (!parsed?.ok) continue;
 
           if (!cancelled) {
-            setHeartbeat({
-              checked: Number(parsed.checked || 0),
-              eligible: Number(parsed.eligible || 0),
-              executed: Number(parsed.executed || 0),
+            setAuditLog({
+              writes: Number(parsed.writes || 0),
+              changedPaths: Number(parsed.changedPaths || 0),
+              suspicious: Number(parsed.suspicious || 0),
               updatedAt: String(parsed.updatedAt || ''),
               state: 'connected',
             });
@@ -184,17 +149,13 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       }
 
       if (!cancelled) {
-        if (gatewayReachable) {
-          setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'connected' });
-        } else {
-          setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'degraded' });
-        }
+        setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'degraded' });
       }
     };
 
-    void loadHeartbeatSummary();
+    void loadAuditLogSummary();
     const timer = setInterval(() => {
-      void loadHeartbeatSummary();
+      void loadAuditLogSummary();
     }, 15000);
 
     return () => {
@@ -272,8 +233,8 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         level: 'action-required',
         title: t('monitor.decision.alerts.taskBlockedByHeartbeat', '任務心跳超時'),
         detail: t('monitor.decision.alerts.taskBlockedByHeartbeatDesc', '有 {{count}} 筆任務因長時間未更新被標記為 blocked。', { count: blockedTasks }),
-        targetId: 'monitor-task-heartbeat',
-        targetLabel: t('monitor.decision.taskHeartbeat'),
+        targetId: 'monitor-live-stream',
+        targetLabel: t('monitor.decision.targets.liveStream'),
       });
     }
 
@@ -430,11 +391,11 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       },
       {
         key: 'heartbeat',
-        name: t('monitor.decision.connection.heartbeat', 'Task Heartbeat Log'),
-        status: heartbeat.state === 'connected' ? 'connected' : heartbeat.state === 'loading' ? 'degraded' : 'degraded',
+        name: t('monitor.decision.connection.heartbeat', 'Config Audit Log'),
+        status: auditLog.state === 'connected' ? 'connected' : auditLog.state === 'loading' ? 'degraded' : 'degraded',
       },
     ];
-  }, [config.configPath, config.corePath, config.workspacePath, envStatus.node, envStatus.pnpm, heartbeat.state, snapshot, t]);
+  }, [auditLog.state, config.configPath, config.corePath, config.workspacePath, envStatus.node, envStatus.pnpm, snapshot, t]);
 
   const connectedCount = connectionRows.filter((row) => row.status === 'connected').length;
 
@@ -540,7 +501,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section id="monitor-task-heartbeat" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
+        <section id="monitor-config-audit" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
               {t('monitor.decision.taskHeartbeat')}
@@ -549,27 +510,27 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.checkedToday', '今日檢查數')}</div>
-              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{heartbeat.checked}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.checkedToday', '今日寫入數')}</div>
+              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.writes}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.eligibleToday', '可執行數')}</div>
-              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{heartbeat.eligible}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.eligibleToday', '今日異動路徑')}</div>
+              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.changedPaths}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.startedToday', '已啟動數')}</div>
-              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{heartbeat.executed}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.startedToday', '今日可疑變更')}</div>
+              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.suspicious}</div>
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             <span>
-              {heartbeat.state === 'connected'
+              {auditLog.state === 'connected'
                 ? t('monitor.decision.heartbeatConnected')
-                : heartbeat.state === 'loading'
+                : auditLog.state === 'loading'
                   ? t('monitor.decision.heartbeatLoading')
                   : t('monitor.decision.heartbeatDegraded')}
             </span>
-            <span>{heartbeat.updatedAt ? new Date(heartbeat.updatedAt).toLocaleString() : '-'}</span>
+            <span>{auditLog.updatedAt ? new Date(auditLog.updatedAt).toLocaleString() : '-'}</span>
           </div>
         </section>
 

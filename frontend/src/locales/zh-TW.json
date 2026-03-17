@@ -220,14 +220,14 @@
     "decision": {
       "healthSummary": "健康總覽",
       "alertsQueue": "告警佇列",
-      "taskHeartbeat": "Task Heartbeat",
+      "taskHeartbeat": "設定稽核日誌",
       "connectionHealth": "連線健康度",
-      "checkedToday": "今日檢查數",
-      "eligibleToday": "可執行數",
-      "startedToday": "已啟動數",
-      "heartbeatConnected": "已接上 heartbeat 日誌",
-      "heartbeatLoading": "讀取 heartbeat 中",
-      "heartbeatDegraded": "heartbeat 資料降級中",
+      "checkedToday": "今日寫入數",
+      "eligibleToday": "今日異動路徑",
+      "startedToday": "今日可疑變更",
+      "heartbeatConnected": "已接上設定稽核日誌",
+      "heartbeatLoading": "讀取設定稽核日誌中",
+      "heartbeatDegraded": "找不到設定稽核日誌",
       "connectedRatio": "{{connected}}/{{total}} 已連線",
       "jumpTo": "跳轉至 {{target}}",
       "status": {
@@ -266,7 +266,7 @@
         "approvalsCount": "{{count}} 筆",
         "taskStore": "Task Store",
         "budget": "Budget Summary",
-        "heartbeat": "Task Heartbeat Log"
+        "heartbeat": "設定稽核日誌"
       },
       "alerts": {
         "snapshotWaiting": "等待快照資料",

@@ -220,14 +220,14 @@
     "decision": {
       "healthSummary": "Health Summary",
       "alertsQueue": "Alerts Queue",
-      "taskHeartbeat": "Task Heartbeat",
+      "taskHeartbeat": "Config Audit Log",
       "connectionHealth": "Connection Health",
-      "checkedToday": "Checked Today",
-      "eligibleToday": "Eligible Today",
-      "startedToday": "Started Today",
-      "heartbeatConnected": "Heartbeat log connected",
-      "heartbeatLoading": "Loading heartbeat data",
-      "heartbeatDegraded": "Heartbeat data is degraded",
+      "checkedToday": "Writes Today",
+      "eligibleToday": "Changed Paths Today",
+      "startedToday": "Suspicious Changes Today",
+      "heartbeatConnected": "Config audit log connected",
+      "heartbeatLoading": "Loading config audit log",
+      "heartbeatDegraded": "Config audit log is unavailable",
       "connectedRatio": "{{connected}}/{{total}} connected",
       "jumpTo": "Jump to {{target}}",
       "status": {
@@ -266,7 +266,7 @@
         "approvalsCount": "{{count}} item(s)",
         "taskStore": "Task Store",
         "budget": "Budget Summary",
-        "heartbeat": "Task Heartbeat Log"
+        "heartbeat": "Config Audit Log"
       },
       "alerts": {
         "snapshotWaiting": "Waiting for snapshot",
