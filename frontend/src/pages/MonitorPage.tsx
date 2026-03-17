@@ -9,6 +9,7 @@ import TerminalLog from '../components/common/TerminalLog';
 interface MonitorPageProps {
   running: boolean;
   onToggleGateway: () => Promise<void>;
+  onOpenRuntimeSettings: () => void;
   config: any;
   resolvedConfigDir: string;
   snapshot: any;
@@ -56,6 +57,7 @@ const StatusCard: React.FC<{ label: string; status: 'loading' | 'ok' | 'error' }
 export const MonitorPage: React.FC<MonitorPageProps> = ({
   running,
   onToggleGateway,
+  onOpenRuntimeSettings,
   config,
   resolvedConfigDir,
   snapshot,
@@ -68,8 +70,63 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  const accessIssue = React.useMemo(() => {
+    const recentLogs = [...logs].slice(-120).reverse();
+    const trigger = recentLogs.find((entry) => /openclaw:\s*access not configured/i.test(String(entry?.text || '')));
+    if (!trigger) return null;
+
+    const userLine = recentLogs.find((entry) => /your telegram user id\s*:/i.test(String(entry?.text || '')));
+    const codeLine = recentLogs.find((entry) => /pairing code\s*:/i.test(String(entry?.text || '')));
+    const approveLine = recentLogs.find((entry) => /openclaw pairing approve telegram/i.test(String(entry?.text || '')));
+
+    const userIdMatch = String(userLine?.text || '').match(/your telegram user id\s*:\s*(\d+)/i);
+    const codeMatch = String(codeLine?.text || '').match(/pairing code\s*:\s*([A-Z0-9-]+)/i);
+
+    return {
+      userId: userIdMatch?.[1] || '',
+      pairingCode: codeMatch?.[1] || '',
+      approveCmd: String(approveLine?.text || '').trim(),
+    };
+  }, [logs]);
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {accessIssue && (
+        <div className="rounded-3xl border border-amber-300/80 bg-amber-50/80 p-6 shadow-lg dark:border-amber-700/60 dark:bg-amber-950/30">
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
+            OpenClaw Access 未設定
+          </div>
+          <div className="mt-2 text-sm text-amber-800 dark:text-amber-200">
+            偵測到 Gateway 回報 access 尚未配置。請先到 Runtime 設定補齊 `Config Path` 與授權設定，之後再啟動服務。
+          </div>
+          <div className="mt-4 grid gap-2 text-xs text-amber-900 dark:text-amber-100">
+            <div>Telegram User ID：{accessIssue.userId || '未解析到'}</div>
+            <div>Pairing Code：{accessIssue.pairingCode || '未解析到'}</div>
+            {accessIssue.approveCmd ? (
+              <div className="rounded-xl border border-amber-300/70 bg-white/80 px-3 py-2 font-mono dark:border-amber-700/60 dark:bg-amber-950/40">
+                {accessIssue.approveCmd}
+              </div>
+            ) : null}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={onOpenRuntimeSettings}
+              className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-500"
+            >
+              前往 Runtime 設定
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenZoneFolder(t('monitor.zoneConfig'), resolvedConfigDir)}
+              className="rounded-xl border border-amber-300/80 bg-white/80 px-4 py-2 text-xs font-bold text-amber-800 transition-colors hover:bg-white dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200"
+            >
+              打開 Config 目錄
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Gateway Control Card */}
       <div className="bg-slate-50 dark:bg-slate-900/30 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-8 rounded-3xl flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between shadow-lg">
         <div className="w-full lg:max-w-[72%]">

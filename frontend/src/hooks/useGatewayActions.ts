@@ -1,5 +1,7 @@
 import { execInTerminal } from '../utils/terminal';
 
+const NT_CLAW_TERMINAL_MARKER_PREFIX = '__NT_CLAWLAUNCH_MANAGED__';
+
 type LogSource = 'system' | 'stderr' | 'stdout';
 type TFn = (key: string, params?: Record<string, any>) => string;
 
@@ -47,6 +49,22 @@ export function useGatewayActions({
   const shouldUseExternalTerminal = (cfg?: any) =>
     (cfg?.useExternalTerminal ?? config.useExternalTerminal) !== false;
 
+  const waitForGatewayListening = async (
+    runtimeConfig?: any,
+    timeoutMs = 15000,
+    intervalMs = 500,
+  ): Promise<boolean> => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const listening = await isGatewayListeningOnConfiguredPort(runtimeConfig || config);
+      if (listening === true) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return false;
+  };
+
   const syncGatewayStatus = async (runtimeConfig?: any) => {
     try {
       const effectiveConfig = runtimeConfig || config;
@@ -55,6 +73,75 @@ export function useGatewayActions({
         setRunning(listening);
       }
     } catch {
+    }
+  };
+
+  const stopGateway = async (options?: { killTerminalAndPortHolders?: boolean }) => {
+    if (!window.electronAPI) {
+      addLog(t('logs.commFailed', { msg: 'Electron API not available' }), 'stderr');
+      return;
+    }
+
+    if (!config.corePath || !config.corePath.trim()) {
+      addLog('錯誤: 尚未設定 Core Path，請至「配置編輯」填入 OpenClaw 主核心區絕對路徑後再試。', 'stderr');
+      return;
+    }
+
+    addLog(t('logs.stoppingGateway'), 'system');
+    try {
+      await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
+      const envPrefix = buildOpenClawEnvPrefix();
+      const portArg = resolveGatewayPortArg();
+      const portInfo = resolveGatewayPortForPrecheck();
+      if (portArg === null) {
+        addLog(t('logs.invalidGatewayPort'), 'stderr');
+        return;
+      }
+      const hasConfigIsolation = !!config.configPath?.trim();
+      const hasPortIsolation = portArg !== null;
+      if (!hasConfigIsolation && !hasPortIsolation) {
+        addLog('錯誤: 未設定 Config Path 且未指定 Gateway Port，無法安全識別目標實例，拒絕停止以避免誤停其他並行服務。', 'stderr');
+        return;
+      }
+
+      if (options?.killTerminalAndPortHolders) {
+        if (portInfo) {
+          try {
+            const killRes = await window.electronAPI.killPortHolder(portInfo.port);
+            if (killRes.success) {
+              const allKilled = [...(killRes.killed || []), ...(killRes.forceKilled || [])];
+              if (allKilled.length > 0) {
+                addLog(`已先行關閉 Port ${portInfo.port} 相關程序（PID: ${Array.from(new Set(allKilled)).join(', ')}）`, 'system');
+              }
+            }
+          } catch (e: any) {
+            addLog(`關閉 Port ${portInfo.port} 相關程序時發生錯誤：${e?.message || e}`, 'stderr');
+          }
+        }
+
+        await window.electronAPI.exec('process:kill-all').catch(() => {});
+        const closeTerminalWindowsCmd = `osascript -e 'tell application "Terminal"' -e 'set targetWindows to {}' -e 'repeat with w in windows' -e 'set shouldClose to false' -e 'repeat with t in tabs of w' -e 'try' -e 'set tabText to (contents of t as text)' -e 'if tabText contains "${NT_CLAW_TERMINAL_MARKER_PREFIX}" then set shouldClose to true' -e 'end try' -e 'end repeat' -e 'if shouldClose then copy w to end of targetWindows' -e 'end repeat' -e 'repeat with w in targetWindows' -e 'try' -e 'close w' -e 'end try' -e 'end repeat' -e 'end tell'`;
+        await window.electronAPI.exec(closeTerminalWindowsCmd).catch(() => {});
+      }
+
+      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop${portArg}`;
+      const resRaw: any = shouldUseExternalTerminal()
+        ? await execInTerminal(cmd, {
+            title: 'Stopping OpenClaw Gateway',
+            holdOpen: false,
+            cwd: config.corePath,
+          })
+        : await window.electronAPI.exec(cmd);
+      const code = resRaw.code ?? resRaw.exitCode;
+
+      if (code !== 0) {
+        addLog(t('logs.stopGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
+      }
+
+      setRunning(false);
+      addLog(t('logs.gatewayStopped'), 'system');
+    } catch (e: any) {
+      addLog(t('logs.stopGatewayFailed', { msg: e.message }), 'stderr');
     }
   };
 
@@ -70,39 +157,7 @@ export function useGatewayActions({
     }
 
     if (running) {
-      addLog(t('logs.stoppingGateway'), 'system');
-      try {
-        await window.electronAPI.exec('gateway:http-watchdog-stop').catch(() => {});
-        const envPrefix = buildOpenClawEnvPrefix();
-        const portArg = resolveGatewayPortArg();
-        if (portArg === null) {
-          addLog(t('logs.invalidGatewayPort'), 'stderr');
-          return;
-        }
-        const hasConfigIsolation = !!config.configPath?.trim();
-        const hasPortIsolation = portArg !== null;
-        if (!hasConfigIsolation && !hasPortIsolation) {
-          addLog('錯誤: 未設定 Config Path 且未指定 Gateway Port，無法安全識別目標實例，拒絕停止以避免誤停其他並行服務。', 'stderr');
-          return;
-        }
-        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop${portArg}`;
-        const resRaw: any = shouldUseExternalTerminal()
-          ? await execInTerminal(cmd, {
-              title: 'Stopping OpenClaw Gateway',
-              holdOpen: false,
-              cwd: config.corePath,
-            })
-          : await window.electronAPI.exec(cmd);
-        const code = resRaw.code ?? resRaw.exitCode;
-        if (code === 0) {
-          setRunning(false);
-          addLog(t('logs.gatewayStopped'), 'system');
-        } else {
-          addLog(t('logs.stopGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
-        }
-      } catch (e: any) {
-        addLog(t('logs.stopGatewayFailed', { msg: e.message }), 'stderr');
-      }
+      await stopGateway();
       return;
     }
 
@@ -146,7 +201,7 @@ export function useGatewayActions({
           ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start${portArg}`
           : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run${portArg} --verbose --force`;
 
-        await window.electronAPI.exec('gateway:http-watchdog-stop').catch(() => {});
+        await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
 
         const resRaw: any = await execInTerminal(startCmd, {
           title: 'Starting OpenClaw Gateway',
@@ -161,7 +216,7 @@ export function useGatewayActions({
         addLog(t('logs.gatewayStartCmdSent'), 'system');
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } else if (config.installDaemon) {
-        await window.electronAPI.exec('gateway:http-watchdog-stop').catch(() => {});
+        await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
         const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start${portArg}`;
         const resRaw: any = await window.electronAPI.exec(cmd);
         const code = resRaw.code ?? resRaw.exitCode;
@@ -172,7 +227,7 @@ export function useGatewayActions({
           return;
         }
       } else {
-        await window.electronAPI.exec('gateway:http-watchdog-stop').catch(() => {});
+        await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
         const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run${portArg} --verbose --force`;
         const payload = {
           command: runCmd,
@@ -189,7 +244,7 @@ export function useGatewayActions({
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      const listening = await isGatewayListeningOnConfiguredPort(config);
+      const listening = await waitForGatewayListening(config);
       if (listening) {
         setRunning(true);
         addLog(t('logs.gatewayStarted'), 'system');
@@ -204,6 +259,8 @@ export function useGatewayActions({
             intervalMs: 15000,
             failThreshold: 2,
             maxRestarts: 5,
+            startupGraceMs: 20000,
+            restartCooldownMs: 20000,
           };
           const wdRes: any = await window.electronAPI.exec(`gateway:http-watchdog-start-json ${JSON.stringify(watchdogPayload)}`);
           const wdCode = wdRes.code ?? wdRes.exitCode;
@@ -264,6 +321,7 @@ export function useGatewayActions({
 
   return {
     toggleGateway,
+    stopGateway,
     syncGatewayStatus,
     handleKillGatewayPortHolder,
   };

@@ -1,5 +1,5 @@
 import { useState, useEffect, Component, type ErrorInfo, type ReactNode } from 'react';
-import { Layout, Settings, Activity, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, Brain, Cpu, Globe, Zap, Network, Database } from 'lucide-react';
+import { Layout, Settings, Activity, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, Brain, Cpu, Globe, Zap, Network, Database, Radar } from 'lucide-react';
 import { MiniView } from './components/MiniView';
 import { ThemeToggle } from './components/ThemeToggle';
 import { LanguageToggle } from './components/LanguageToggle';
@@ -23,6 +23,7 @@ import { RuntimeSettingsPage } from './pages/RuntimeSettingsPage';
 import { MonitorPage } from './pages/MonitorPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SkillsPage } from './pages/SkillsPage';
+import { ControlCenterPage } from './pages/ControlCenterPage';
 
 type ModelOptionGroup = {
   provider: string;
@@ -99,6 +100,13 @@ function App() {
     gatewayConflictActionMessage,
     setGatewayConflictActionMessage,
     closeGatewayConflictModal,
+    stopServiceModalOpen,
+    setStopServiceModalOpen,
+    stoppingServiceWithCleanup,
+    setStoppingServiceWithCleanup,
+    stopServiceActionMessage,
+    setStopServiceActionMessage,
+    closeStopServiceModal,
   } = useGatewayControl();
   const resolvedConfigDir = ConfigService.normalizeConfigDir(config.configPath);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
@@ -433,6 +441,7 @@ function App() {
   });
   const {
     toggleGateway,
+    stopGateway,
     syncGatewayStatus,
     handleKillGatewayPortHolder,
   } = useGatewayActions({
@@ -452,6 +461,31 @@ function App() {
     setGatewayConflictActionMessage,
     closeGatewayConflictModal,
   });
+
+  const handleToggleGatewayWithStopModal = async () => {
+    if (running) {
+      setStopServiceActionMessage('');
+      setStopServiceModalOpen(true);
+      return;
+    }
+    await toggleGateway();
+  };
+
+  const handleConfirmStopService = async () => {
+    setStoppingServiceWithCleanup(true);
+    setStopServiceActionMessage('正在關閉相關進程與終端機視窗，請稍候...');
+    try {
+      await stopGateway({ killTerminalAndPortHolders: true });
+      setStopServiceActionMessage('已停止服務並完成清理。');
+      window.setTimeout(() => {
+        closeStopServiceModal();
+      }, 350);
+    } catch (e: any) {
+      setStopServiceActionMessage(`停止服務失敗：${e?.message || e}`);
+    } finally {
+      setStoppingServiceWithCleanup(false);
+    }
+  };
   const { handleOnboardingComplete } = useAppBootstrap({
     setOnboardingFinished,
     setActiveTab,
@@ -518,7 +552,7 @@ function App() {
   if (viewMode === 'mini') {
     return (
       <>
-        <MiniView running={running} onToggle={toggleGateway} onExpand={toggleViewMode} />
+        <MiniView running={running} onToggle={handleToggleGatewayWithStopModal} onExpand={toggleViewMode} />
         <ChatWidget compact />
       </>
     );
@@ -545,6 +579,7 @@ function App() {
         
         <nav className="flex-1 space-y-1">
           <NavItem icon={<Activity size={18}/>} label={t('app.tabs.monitor')} active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} />
+          <NavItem icon={<Radar size={18}/>} label={t('app.tabs.controlCenter')} active={activeTab === 'controlCenter'} onClick={() => setActiveTab('controlCenter')} />
           <NavItem icon={<BarChart3 size={18}/>} label={t('app.tabs.analytics')} active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
           <NavItem icon={<Boxes size={18}/>} label={t('app.tabs.skills')} active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
           <NavItem icon={<Database size={18}/>} label={t('app.tabs.runtimeSettings')} active={activeTab === 'runtimeSettings'} onClick={() => setActiveTab('runtimeSettings')} />
@@ -566,7 +601,7 @@ function App() {
         <header className="h-20 border-b border-slate-200 dark:border-slate-800/50 flex items-center px-10 justify-between relative backdrop-blur-md bg-white/20 dark:bg-slate-950/20">
           <div>
             <h2 className="font-bold text-xl text-slate-900 dark:text-slate-100 uppercase tracking-tight">
-                {activeTab === 'monitor' ? t('app.headers.monitor') : activeTab === 'analytics' ? t('app.headers.analytics') : activeTab === 'skills' ? t('app.headers.skills') : activeTab === 'launcherSettings' ? t('app.headers.launcherSettings') : t('app.headers.runtimeSettings')}
+              {activeTab === 'monitor' ? t('app.headers.monitor') : activeTab === 'controlCenter' ? t('app.headers.controlCenter') : activeTab === 'analytics' ? t('app.headers.analytics') : activeTab === 'skills' ? t('app.headers.skills') : activeTab === 'launcherSettings' ? t('app.headers.launcherSettings') : t('app.headers.runtimeSettings')}
             </h2>
           </div>
           <div className="flex items-center space-x-4">
@@ -690,8 +725,57 @@ function App() {
           </div>
         )}
 
+        {stopServiceModalOpen && (
+          <div className="fixed inset-0 z-[101] flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={closeStopServiceModal}></div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-xl rounded-[32px] shadow-2xl overflow-hidden relative z-10 animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
+              <div className="p-8 space-y-6">
+                <div className="flex justify-between items-start">
+                  <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500">
+                    <AlertCircle size={24} />
+                  </div>
+                  <button onClick={closeStopServiceModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">停止服務並清理終端機</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                    將先終止相關 Gateway 進程，再關閉已開啟的 Gateway 終端機視窗，最後切回「啟動服務」。
+                  </p>
+                </div>
+
+                {!!stopServiceActionMessage && (
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 p-4 text-sm text-slate-600 dark:text-slate-300">
+                    {stopServiceActionMessage}
+                  </div>
+                )}
+
+                <div className="flex gap-4 pt-2">
+                  <button
+                    onClick={closeStopServiceModal}
+                    disabled={stoppingServiceWithCleanup}
+                    className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleConfirmStopService}
+                    disabled={stoppingServiceWithCleanup}
+                    className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/25 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {stoppingServiceWithCleanup ? '處理中...' : '停止並清理'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 p-10 overflow-y-auto relative">
           {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
+          {activeTab === 'controlCenter' && <ControlCenterPage />}
           {activeTab === 'skills' && <SkillsPage />}
 
           {activeTab === 'analytics' && (
@@ -706,7 +790,8 @@ function App() {
           {activeTab === 'monitor' && (
             <MonitorPage
               running={running}
-              onToggleGateway={toggleGateway}
+              onToggleGateway={handleToggleGatewayWithStopModal}
+              onOpenRuntimeSettings={() => setActiveTab('runtimeSettings')}
               config={config}
               resolvedConfigDir={resolvedConfigDir}
               snapshot={snapshot}

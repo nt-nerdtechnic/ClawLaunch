@@ -9,6 +9,7 @@
     "version": "VER 2026.1.0",
     "tabs": {
       "monitor": "Process Monitor",
+      "controlCenter": "Control Center",
       "analytics": "Data Analytics",
       "skills": "Skill Manager",
       "settings": "Configuration",
@@ -17,6 +18,7 @@
     },
     "headers": {
       "monitor": "Core Process Sentinel",
+      "controlCenter": "Operations Control Center",
       "analytics": "Token Consumption",
       "skills": "Skill Plugin Matrix",
       "settings": "Global Config Matrix",
@@ -25,6 +27,79 @@
     },
     "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
     "logoutTooltip": "Logout & Reconfigure"
+  },
+  "controlCenter": {
+    "kpi": {
+      "health": "Health Score",
+      "tasks": "Tasks",
+      "projects": "Projects",
+      "pendingQueue": "Pending Queue",
+      "pendingApprovals": "Pending Approvals",
+      "budgetRisk": "Budget Risk"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "loading": "Loading...",
+      "add": "Add",
+      "addQueue": "Add Queue Item",
+      "ack": "Acknowledge",
+      "addApproval": "Add Approval",
+      "approve": "Approve",
+      "reject": "Reject",
+      "savePolicy": "Save Policy"
+    },
+    "tasks": {
+      "title": "Task Hub",
+      "newTaskPlaceholder": "Enter task title"
+    },
+    "projects": {
+      "title": "Project Hub",
+      "newProjectPlaceholder": "Enter project name"
+    },
+    "queue": {
+      "title": "Action Queue",
+      "newQueueTitlePlaceholder": "Intervention title",
+      "newQueueDetailPlaceholder": "Details (optional)"
+    },
+    "approvals": {
+      "title": "Approval Center",
+      "modeDryRun": "Dry-Run Mode",
+      "modeLive": "Live Mode",
+      "newApprovalTitlePlaceholder": "Approval title",
+      "newApprovalDetailPlaceholder": "Approval detail (optional)"
+    },
+    "budget": {
+      "title": "Budget Policy",
+      "limitLabel": "Daily Budget Limit (USD)",
+      "warnRatioLabel": "Warn Ratio (0~1)",
+      "estimatedToday": "Estimated Cost Today",
+      "riskStatus": "Risk Status"
+    },
+    "security": {
+      "title": "Operation Security",
+      "currentMode": "Current Mode",
+      "tokenRequired": "Token Required",
+      "tokenNotRequired": "Open (No Token)",
+      "currentTokenPlaceholder": "Current token (if enabled)",
+      "newTokenPlaceholder": "New token (leave empty to disable)",
+      "helper": "After setting, all mutation actions require the same token in this page.",
+      "saveToken": "Save Token Settings"
+    },
+    "audit": {
+      "title": "Audit Trail"
+    },
+    "empty": {
+      "tasks": "No tasks yet",
+      "projects": "No projects yet",
+      "queue": "No pending queue items",
+      "approvals": "No approvals yet",
+      "audit": "No audit records yet"
+    },
+    "errors": {
+      "loadFailed": "Failed to load control center data",
+      "mutationFailed": "Control center action failed",
+      "tokenUpdateFailed": "Failed to update token settings"
+    }
   },
   "chat": {
     "title": "Core Chat",

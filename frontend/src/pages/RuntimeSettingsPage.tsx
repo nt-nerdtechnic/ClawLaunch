@@ -125,16 +125,16 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   onHandleAddAuthProfile,
   onHandleRunAuthTokenCommand: _onHandleRunAuthTokenCommand,
   onHandleLaunchFullOnboarding,
-  telegramPairingRequests: _telegramPairingRequests,
-  telegramAuthorizedUsers: _telegramAuthorizedUsers,
-  telegramPairingLoading: _telegramPairingLoading,
-  telegramPairingApprovingCode: _telegramPairingApprovingCode,
-  telegramPairingRejectingCode: _telegramPairingRejectingCode,
-  telegramPairingClearing: _telegramPairingClearing,
-  telegramPairingError: _telegramPairingError,
-  onHandleApproveTelegramPairing: _onHandleApproveTelegramPairing,
-  onHandleRejectTelegramPairing: _onHandleRejectTelegramPairing,
-  onHandleClearTelegramPairingRequests: _onHandleClearTelegramPairingRequests,
+  telegramPairingRequests,
+  telegramAuthorizedUsers,
+  telegramPairingLoading,
+  telegramPairingApprovingCode,
+  telegramPairingRejectingCode,
+  telegramPairingClearing,
+  telegramPairingError,
+  onHandleApproveTelegramPairing,
+  onHandleRejectTelegramPairing,
+  onHandleClearTelegramPairingRequests,
   onSave,
   saveState = 'idle',
   onBrowsePath,
@@ -529,6 +529,103 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             >
               或啟動完整導引
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Telegram Pairing Section */}
+      <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+              Telegram 配對管理
+            </div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              管理待核准配對清單與已授權 Telegram 使用者。
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onHandleClearTelegramPairingRequests}
+            disabled={telegramPairingClearing || telegramPairingLoading || telegramPairingRequests.length === 0}
+            className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {telegramPairingClearing ? '清空中...' : '清空待配對'}
+          </button>
+        </div>
+
+        {telegramPairingError && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
+            {telegramPairingError}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="space-y-3">
+            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">等待配對清單</div>
+            {telegramPairingLoading ? (
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <Loader2 size={14} className="animate-spin" />
+                讀取中...
+              </div>
+            ) : telegramPairingRequests.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                目前沒有待審核配對。
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {telegramPairingRequests.map((request) => (
+                  <div
+                    key={request.id || request.code}
+                    className="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-900/50"
+                  >
+                    <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{request.id || 'unknown-id'}</div>
+                    <div className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">Code: {request.code || '-'}</div>
+                    {request.meta?.accountId && (
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">User ID: {request.meta.accountId}</div>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onHandleApproveTelegramPairing(request)}
+                        disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-60"
+                      >
+                        {telegramPairingApprovingCode === request.code ? '核准中...' : '核准'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onHandleRejectTelegramPairing(request)}
+                        disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
+                        className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-rose-500 disabled:opacity-60"
+                      >
+                        {telegramPairingRejectingCode === request.code ? '拒絕中...' : '拒絕'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">已授權使用者</div>
+            {telegramAuthorizedUsers.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                尚無已授權 Telegram 帳號。
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {telegramAuthorizedUsers.map((user: any) => (
+                  <span
+                    key={String(user?.id || '')}
+                    className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+                  >
+                    {String(user?.id || '')}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

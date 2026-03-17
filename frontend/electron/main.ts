@@ -17,6 +17,7 @@ const DEV_SERVER_WAIT_MS = 15000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+const NT_CLAW_TERMINAL_MARKER_PREFIX = '__NT_CLAWLAUNCH_MANAGED__';
 
 interface LauncherConfig {
   corePath?: string;
@@ -49,6 +50,8 @@ interface GatewayHttpWatchdogOptions {
   intervalMs: number;
   failThreshold: number;
   maxRestarts: number;
+  startupGraceMs: number;
+  restartCooldownMs: number;
 }
 
 interface GatewayHttpWatchdogState {
@@ -56,6 +59,7 @@ interface GatewayHttpWatchdogState {
   checking: boolean;
   consecutiveFailures: number;
   restartAttempts: number;
+  suppressChecksUntil: number;
   options: GatewayHttpWatchdogOptions;
 }
 
@@ -73,6 +77,8 @@ const DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS: GatewayHttpWatchdogOptions = {
   intervalMs: 15000,
   failThreshold: 2,
   maxRestarts: 5,
+  startupGraceMs: 20000,
+  restartCooldownMs: 20000,
 };
 
 const gatewayWatchdog: GatewayWatchdogState = {
@@ -89,6 +95,7 @@ const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
   checking: false,
   consecutiveFailures: 0,
   restartAttempts: 0,
+  suppressChecksUntil: 0,
   options: { ...DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS },
 };
 const shellSingleQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -111,7 +118,8 @@ const emitShellStdout = (data: string, source: 'stdout' | 'stderr' = 'stdout') =
 };
 
 const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart') => {
-  const finalCmd = `clear; echo '🚀 ${title}...'; ${command}; printf "\\n程序結束。\\n按 Enter 鍵關閉視窗..."; read -r _`;
+  const marker = `${NT_CLAW_TERMINAL_MARKER_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+  const finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; ${command}; printf "\\n程序結束。\\n按 Enter 鍵關閉視窗..."; read -r _`;
   const line1 = `tell application "Terminal" to do script "${escapeAppleScriptString(finalCmd)}"`;
   const line2 = 'tell application "Terminal" to activate';
   return `osascript -e ${shellSingleQuote(line1)} -e ${shellSingleQuote(line2)}`;
@@ -155,6 +163,7 @@ const stopGatewayHttpWatchdog = (reason = 'manual stop') => {
   gatewayHttpWatchdog.checking = false;
   gatewayHttpWatchdog.consecutiveFailures = 0;
   gatewayHttpWatchdog.restartAttempts = 0;
+  gatewayHttpWatchdog.suppressChecksUntil = 0;
   gatewayHttpWatchdog.options = { ...DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS };
   emitShellStdout(`[gateway-http-watchdog] stopped: ${reason}\n`, 'stdout');
 };
@@ -162,6 +171,7 @@ const stopGatewayHttpWatchdog = (reason = 'manual stop') => {
 const runGatewayHttpWatchdogCheck = async () => {
   if (gatewayHttpWatchdog.checking) return;
   if (!gatewayHttpWatchdog.options.enabled) return;
+  if (Date.now() < gatewayHttpWatchdog.suppressChecksUntil) return;
   const healthCheckCommand = String(gatewayHttpWatchdog.options.healthCheckCommand || '').trim();
   const restartCommand = String(gatewayHttpWatchdog.options.restartCommand || '').trim();
   if (!healthCheckCommand || !restartCommand) return;
@@ -176,12 +186,24 @@ const runGatewayHttpWatchdogCheck = async () => {
     }
 
     gatewayHttpWatchdog.consecutiveFailures += 1;
+    const failStdout = String(healthRes.stdout || '').trim();
+    const failStderr = String(healthRes.stderr || '').trim();
     emitShellStdout(
-      `[gateway-http-watchdog] health check failed (${gatewayHttpWatchdog.consecutiveFailures}/${gatewayHttpWatchdog.options.failThreshold})\n`,
+      `[gateway-http-watchdog] health check failed (${gatewayHttpWatchdog.consecutiveFailures}/${gatewayHttpWatchdog.options.failThreshold}) code=${String(healthRes.code)} stdout=${failStdout ? 'non-empty' : 'empty'} stderr=${failStderr ? 'non-empty' : 'empty'}\n`,
       'stderr',
     );
 
     if (gatewayHttpWatchdog.consecutiveFailures < gatewayHttpWatchdog.options.failThreshold) {
+      return;
+    }
+
+    // 重啟前二次確認，降低瞬時抖動造成的誤判。
+    await sleep(1200);
+    const recheckRes = await runShellCommand(healthCheckCommand);
+    const recheckOnline = isGatewayOnlineFromStatus(recheckRes);
+    if (recheckOnline) {
+      gatewayHttpWatchdog.consecutiveFailures = 0;
+      emitShellStdout('[gateway-http-watchdog] false alarm recovered on recheck, skip restart\n', 'stdout');
       return;
     }
 
@@ -203,6 +225,7 @@ const runGatewayHttpWatchdogCheck = async () => {
 
     const ok = await launchGatewayViaTerminal(restartCommand);
     if (ok) {
+      gatewayHttpWatchdog.suppressChecksUntil = Date.now() + gatewayHttpWatchdog.options.restartCooldownMs;
       emitShellStdout('[gateway-http-watchdog] restart command sent to Terminal\n', 'stdout');
     } else {
       emitShellStdout('[gateway-http-watchdog] failed to open Terminal for restart\n', 'stderr');
@@ -222,6 +245,8 @@ const startGatewayHttpWatchdog = (options: Partial<GatewayHttpWatchdogOptions>) 
     intervalMs: Number.isFinite(Number(options.intervalMs)) ? Math.max(5000, Number(options.intervalMs)) : 15000,
     failThreshold: Number.isFinite(Number(options.failThreshold)) ? Math.max(1, Number(options.failThreshold)) : 2,
     maxRestarts: Number.isFinite(Number(options.maxRestarts)) ? Math.max(1, Number(options.maxRestarts)) : 5,
+    startupGraceMs: Number.isFinite(Number(options.startupGraceMs)) ? Math.max(3000, Number(options.startupGraceMs)) : 20000,
+    restartCooldownMs: Number.isFinite(Number(options.restartCooldownMs)) ? Math.max(3000, Number(options.restartCooldownMs)) : 20000,
   };
 
   if (!nextOptions.enabled || !nextOptions.healthCheckCommand || !nextOptions.restartCommand) {
@@ -233,6 +258,7 @@ const startGatewayHttpWatchdog = (options: Partial<GatewayHttpWatchdogOptions>) 
   gatewayHttpWatchdog.options = nextOptions;
   gatewayHttpWatchdog.consecutiveFailures = 0;
   gatewayHttpWatchdog.restartAttempts = 0;
+  gatewayHttpWatchdog.suppressChecksUntil = Date.now() + nextOptions.startupGraceMs;
   gatewayHttpWatchdog.checking = false;
   emitShellStdout(
     `[gateway-http-watchdog] started (interval=${nextOptions.intervalMs}ms, threshold=${nextOptions.failThreshold})\n`,
@@ -969,6 +995,12 @@ const isGatewayOnlineFromStatus = (statusRes: { code: number; stdout: string; st
 
   const raw = `${statusRes.stdout || ''}\n${statusRes.stderr || ''}`.toLowerCase();
   if (raw.includes('"online": true') || raw.includes('"online":true') || raw.includes('online') || raw.includes('running')) {
+    return true;
+  }
+
+  // 支援通用 shell health check（例如 lsof）。
+  // 這類命令通常以 code=0 + stdout 非空表示健康。
+  if (String(statusRes.stdout || '').trim()) {
     return true;
   }
 
@@ -1834,6 +1866,328 @@ function uniqueNonEmptyPaths(paths: Array<string | undefined | null>): string[] 
   return out;
 }
 
+type ControlTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
+type ControlProjectStatus = 'active' | 'paused' | 'done';
+type ControlQueueSeverity = 'info' | 'warn' | 'critical';
+type ControlApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+interface ControlTaskItem {
+  id: string;
+  title: string;
+  status: ControlTaskStatus;
+  projectId: string;
+  owner: string;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ControlProjectItem {
+  id: string;
+  name: string;
+  status: ControlProjectStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ControlQueueItem {
+  id: string;
+  title: string;
+  detail: string;
+  severity: ControlQueueSeverity;
+  status: 'pending' | 'acked';
+  createdAt: string;
+  ackedAt?: string;
+}
+
+interface ControlAuditItem {
+  id: string;
+  action: string;
+  targetId: string;
+  ok: boolean;
+  message: string;
+  createdAt: string;
+}
+
+interface ControlApprovalItem {
+  id: string;
+  title: string;
+  detail: string;
+  status: ControlApprovalStatus;
+  sourceKey?: string;
+  createdAt: string;
+  updatedAt: string;
+  decidedAt?: string;
+  decisionReason?: string;
+}
+
+interface ControlBudgetPolicy {
+  dailyUsdLimit: number;
+  warnRatio: number;
+}
+
+interface ControlCenterState {
+  tasks: ControlTaskItem[];
+  projects: ControlProjectItem[];
+  queue: ControlQueueItem[];
+  audit: ControlAuditItem[];
+  approvals: ControlApprovalItem[];
+  budgetPolicy: ControlBudgetPolicy;
+  controlToken: string;
+}
+
+const CONTROL_CENTER_STATE_FILE = () => path.join(app.getPath('userData'), 'control-center-state.json');
+
+const defaultControlCenterState = (): ControlCenterState => ({
+  tasks: [],
+  projects: [],
+  queue: [],
+  audit: [],
+  approvals: [],
+  budgetPolicy: {
+    dailyUsdLimit: 20,
+    warnRatio: 0.8,
+  },
+  controlToken: '',
+});
+
+const nowIso = () => new Date().toISOString();
+const buildId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+async function readControlCenterState(): Promise<ControlCenterState> {
+  const filePath = CONTROL_CENTER_STATE_FILE();
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const parsed = JSON.parse(raw || '{}') as Partial<ControlCenterState>;
+    return {
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+      projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+      queue: Array.isArray(parsed.queue) ? parsed.queue : [],
+      audit: Array.isArray(parsed.audit) ? parsed.audit : [],
+      approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
+      budgetPolicy: {
+        dailyUsdLimit: Number.isFinite(Number((parsed as any)?.budgetPolicy?.dailyUsdLimit))
+          ? Math.max(1, Number((parsed as any).budgetPolicy.dailyUsdLimit))
+          : 20,
+        warnRatio: Number.isFinite(Number((parsed as any)?.budgetPolicy?.warnRatio))
+          ? Math.max(0.1, Math.min(0.95, Number((parsed as any).budgetPolicy.warnRatio)))
+          : 0.8,
+      },
+      controlToken: String((parsed as any)?.controlToken || '').trim(),
+    };
+  } catch {
+    const initial = defaultControlCenterState();
+    await fs.writeFile(filePath, JSON.stringify(initial, null, 2), 'utf-8');
+    return initial;
+  }
+}
+
+async function writeControlCenterState(state: ControlCenterState): Promise<void> {
+  await fs.writeFile(CONTROL_CENTER_STATE_FILE(), JSON.stringify(state, null, 2), 'utf-8');
+}
+
+async function appendControlAudit(
+  state: ControlCenterState,
+  action: string,
+  targetId: string,
+  ok: boolean,
+  message: string,
+): Promise<ControlCenterState> {
+  const entry: ControlAuditItem = {
+    id: buildId('audit'),
+    action,
+    targetId,
+    ok,
+    message,
+    createdAt: nowIso(),
+  };
+  const audit = [entry, ...state.audit].slice(0, 300);
+  const next = { ...state, audit };
+  await writeControlCenterState(next);
+  return next;
+}
+
+function buildControlOverview(state: ControlCenterState) {
+  const tasks = state.tasks;
+  const queue = state.queue;
+  const pendingQueue = queue.filter((item) => item.status === 'pending').length;
+  const blockedTasks = tasks.filter((item) => item.status === 'blocked').length;
+  const runningTasks = tasks.filter((item) => item.status === 'in_progress').length;
+  const doneTasks = tasks.filter((item) => item.status === 'done').length;
+  const healthScore = Math.max(0, 100 - blockedTasks * 15 - pendingQueue * 8);
+  const budget = buildControlBudgetStatus(state);
+  const pendingApprovals = state.approvals.filter((item) => item.status === 'pending').length;
+  return {
+    generatedAt: nowIso(),
+    healthScore,
+    pendingQueue,
+    blockedTasks,
+    runningTasks,
+    doneTasks,
+    taskCount: tasks.length,
+    projectCount: state.projects.length,
+    criticalQueue: queue.filter((item) => item.status === 'pending' && item.severity === 'critical').length,
+    pendingApprovals,
+    budget,
+  };
+}
+
+function buildControlBudgetStatus(state: ControlCenterState) {
+  const doneTasks = state.tasks.filter((item) => item.status === 'done').length;
+  const runningTasks = state.tasks.filter((item) => item.status === 'in_progress').length;
+  const estimatedTodayUsd = doneTasks * 0.12 + runningTasks * 0.05;
+  const limit = Math.max(1, Number(state.budgetPolicy.dailyUsdLimit || 20));
+  const warnRatio = Math.max(0.1, Math.min(0.95, Number(state.budgetPolicy.warnRatio || 0.8)));
+  const usedRatio = estimatedTodayUsd / limit;
+  const status: 'ok' | 'warn' | 'critical' = usedRatio >= 1 ? 'critical' : usedRatio >= warnRatio ? 'warn' : 'ok';
+  return {
+    estimatedTodayUsd: Number(estimatedTodayUsd.toFixed(2)),
+    dailyUsdLimit: limit,
+    warnRatio,
+    usedRatio: Number(usedRatio.toFixed(3)),
+    status,
+  };
+}
+
+function isControlMutationCommand(fullCommand: string): boolean {
+  const prefixes = [
+    'control:tasks:add ',
+    'control:tasks:update-status ',
+    'control:projects:add ',
+    'control:queue:add ',
+    'control:queue:ack ',
+    'control:approvals:add ',
+    'control:approvals:decide ',
+    'control:budget:set-policy ',
+  ];
+  return prefixes.some((prefix) => fullCommand.startsWith(prefix));
+}
+
+function parseControlPayload(fullCommand: string): any {
+  const spaceIdx = fullCommand.indexOf(' ');
+  if (spaceIdx < 0) return {};
+  const raw = fullCommand.slice(spaceIdx + 1).trim();
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+async function enforceControlMutationTokenGate(fullCommand: string): Promise<{ ok: boolean; message?: string }> {
+  if (!isControlMutationCommand(fullCommand)) {
+    return { ok: true };
+  }
+  const state = await readControlCenterState();
+  const requiredToken = String(state.controlToken || '').trim();
+  if (!requiredToken) {
+    return { ok: true };
+  }
+
+  let payload: any = {};
+  try {
+    payload = parseControlPayload(fullCommand);
+  } catch {
+    return { ok: false, message: 'invalid mutation payload' };
+  }
+
+  const providedToken = String(payload?.token || '').trim();
+  if (!providedToken) {
+    return { ok: false, message: 'missing control token for mutation' };
+  }
+  if (providedToken !== requiredToken) {
+    return { ok: false, message: 'invalid control token' };
+  }
+  return { ok: true };
+}
+
+function pushQueueIfMissing(state: ControlCenterState, item: Omit<ControlQueueItem, 'id' | 'createdAt' | 'status'> & { sourceKey?: string }) {
+  const sourceKey = String((item as any).sourceKey || '').trim();
+  if (sourceKey) {
+    const exists = state.queue.some((entry) => (entry as any).sourceKey === sourceKey && entry.status === 'pending');
+    if (exists) return state;
+  }
+  const nextItem: ControlQueueItem = {
+    id: buildId('queue'),
+    title: item.title,
+    detail: item.detail,
+    severity: item.severity,
+    status: 'pending',
+    createdAt: nowIso(),
+    ...(sourceKey ? { sourceKey } as any : {}),
+  };
+  return { ...state, queue: [nextItem, ...state.queue] };
+}
+
+function pushApprovalIfMissing(state: ControlCenterState, item: Omit<ControlApprovalItem, 'id' | 'createdAt' | 'updatedAt' | 'status'>) {
+  const sourceKey = String(item.sourceKey || '').trim();
+  if (sourceKey) {
+    const exists = state.approvals.some((entry) => entry.sourceKey === sourceKey && entry.status === 'pending');
+    if (exists) return state;
+  }
+  const now = nowIso();
+  const nextItem: ControlApprovalItem = {
+    id: buildId('approval'),
+    title: item.title,
+    detail: item.detail,
+    sourceKey: sourceKey || undefined,
+    status: 'pending',
+    createdAt: now,
+    updatedAt: now,
+  };
+  return { ...state, approvals: [nextItem, ...state.approvals] };
+}
+
+async function runControlAutoSync(): Promise<{ queueCreated: number; approvalsCreated: number }> {
+  let state = await readControlCenterState();
+  const beforeQueue = state.queue.length;
+  const beforeApprovals = state.approvals.length;
+  const now = Date.now();
+
+  for (const task of state.tasks) {
+    const updatedAtMs = new Date(task.updatedAt || task.createdAt || nowIso()).getTime();
+    const staleMs = now - (Number.isFinite(updatedAtMs) ? updatedAtMs : now);
+
+    if (task.status === 'blocked') {
+      state = pushQueueIfMissing(state, {
+        title: `Blocked: ${task.title}`,
+        detail: `Task ${task.id} is blocked and requires intervention`,
+        severity: task.priority >= 5 ? 'critical' : 'warn',
+        sourceKey: `task-blocked:${task.id}`,
+      });
+
+      if (task.priority >= 5) {
+        state = pushApprovalIfMissing(state, {
+          title: `Approval required: ${task.title}`,
+          detail: `High-priority blocked task requires operator decision`,
+          sourceKey: `task-approval:${task.id}`,
+        });
+      }
+    }
+
+    if (task.status === 'in_progress' && staleMs >= 2 * 60 * 60 * 1000) {
+      state = pushQueueIfMissing(state, {
+        title: `Stalled: ${task.title}`,
+        detail: `No updates for ${Math.floor(staleMs / 60000)} min`,
+        severity: staleMs >= 4 * 60 * 60 * 1000 ? 'critical' : 'warn',
+        sourceKey: `task-stalled:${task.id}`,
+      });
+    }
+  }
+
+  if (state.queue.length !== beforeQueue || state.approvals.length !== beforeApprovals) {
+    state = await appendControlAudit(
+      state,
+      'control.autoSync',
+      'runtime-signals',
+      true,
+      `queue+${state.queue.length - beforeQueue}, approvals+${state.approvals.length - beforeApprovals}`,
+    );
+  }
+
+  return {
+    queueCreated: Math.max(0, state.queue.length - beforeQueue),
+    approvalsCreated: Math.max(0, state.approvals.length - beforeApprovals),
+  };
+}
+
 
 app.whenReady().then(() => {
   createWindow().catch((err) => {
@@ -1863,6 +2217,343 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []) => {
   const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
 
+  if (fullCommand === 'control:auth:status') {
+    try {
+      const state = await readControlCenterState();
+      return {
+        code: 0,
+        stdout: JSON.stringify({ tokenRequired: !!String(state.controlToken || '').trim() }),
+        stderr: '',
+        exitCode: 0,
+      };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'control auth status failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:auth:set-token ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:auth:set-token ', '').trim() || '{}');
+      const newToken = String(payload?.newToken || '').trim();
+      const currentToken = String(payload?.currentToken || '').trim();
+      const state = await readControlCenterState();
+      const existing = String(state.controlToken || '').trim();
+
+      if (existing && existing !== currentToken) {
+        return { code: 1, stdout: '', stderr: 'current token mismatch', exitCode: 1 };
+      }
+
+      const next: ControlCenterState = { ...state, controlToken: newToken };
+      const audited = await appendControlAudit(next, 'control.auth.setToken', 'control-token', true, newToken ? 'token enabled' : 'token disabled');
+      return { code: 0, stdout: JSON.stringify({ tokenRequired: !!audited.controlToken }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'set control token failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'control:auto-sync') {
+    try {
+      const result = await runControlAutoSync();
+      return { code: 0, stdout: JSON.stringify(result), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'control auto sync failed', exitCode: 1 };
+    }
+  }
+
+  const gate = await enforceControlMutationTokenGate(fullCommand);
+  if (!gate.ok) {
+    return { code: 1, stdout: '', stderr: gate.message || 'control mutation blocked by token gate', exitCode: 1 };
+  }
+
+  if (fullCommand === 'control:overview') {
+    try {
+      const state = await readControlCenterState();
+      return { code: 0, stdout: JSON.stringify(buildControlOverview(state)), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'control overview failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'control:budget:get') {
+    try {
+      const state = await readControlCenterState();
+      return {
+        code: 0,
+        stdout: JSON.stringify({ policy: state.budgetPolicy, snapshot: buildControlBudgetStatus(state) }),
+        stderr: '',
+        exitCode: 0,
+      };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'get budget failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:budget:set-policy ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:budget:set-policy ', '').trim() || '{}');
+      const dailyUsdLimit = Number(payload?.dailyUsdLimit);
+      const warnRatio = Number(payload?.warnRatio);
+      if (!Number.isFinite(dailyUsdLimit) || dailyUsdLimit <= 0) {
+        return { code: 1, stdout: '', stderr: 'dailyUsdLimit invalid', exitCode: 1 };
+      }
+      if (!Number.isFinite(warnRatio) || warnRatio <= 0 || warnRatio >= 1) {
+        return { code: 1, stdout: '', stderr: 'warnRatio invalid', exitCode: 1 };
+      }
+      const state = await readControlCenterState();
+      const next: ControlCenterState = {
+        ...state,
+        budgetPolicy: {
+          dailyUsdLimit: Number(dailyUsdLimit.toFixed(2)),
+          warnRatio: Number(warnRatio.toFixed(3)),
+        },
+      };
+      const audited = await appendControlAudit(next, 'budget.setPolicy', 'budget-policy', true, `limit=${dailyUsdLimit}, warn=${warnRatio}`);
+      return { code: 0, stdout: JSON.stringify({ policy: audited.budgetPolicy, snapshot: buildControlBudgetStatus(audited) }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'set budget policy failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'control:approvals:list') {
+    try {
+      const state = await readControlCenterState();
+      return { code: 0, stdout: JSON.stringify({ items: state.approvals }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'list approvals failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:approvals:add ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:approvals:add ', '').trim() || '{}');
+      const title = String(payload?.title || '').trim();
+      if (!title) {
+        return { code: 1, stdout: '', stderr: 'approval title is required', exitCode: 1 };
+      }
+      const now = nowIso();
+      const item: ControlApprovalItem = {
+        id: buildId('approval'),
+        title,
+        detail: String(payload?.detail || '').trim(),
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+      };
+      const state = await readControlCenterState();
+      const next: ControlCenterState = { ...state, approvals: [item, ...state.approvals] };
+      const audited = await appendControlAudit(next, 'approval.add', item.id, true, `approval created: ${item.title}`);
+      return { code: 0, stdout: JSON.stringify({ item, total: audited.approvals.length }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'add approval failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:approvals:decide ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:approvals:decide ', '').trim() || '{}');
+      const approvalId = String(payload?.approvalId || '').trim();
+      const decision = String(payload?.decision || '').trim();
+      const reason = String(payload?.reason || '').trim();
+      const dryRun = payload?.dryRun !== false;
+
+      if (!approvalId || !['approved', 'rejected'].includes(decision)) {
+        return { code: 1, stdout: '', stderr: 'approvalId/decision invalid', exitCode: 1 };
+      }
+
+      const state = await readControlCenterState();
+      const target = state.approvals.find((item) => item.id === approvalId);
+      if (!target) {
+        return { code: 1, stdout: '', stderr: 'approval not found', exitCode: 1 };
+      }
+
+      if (dryRun) {
+        const audited = await appendControlAudit(state, 'approval.decide.dryRun', approvalId, true, `dry-run ${decision}`);
+        return { code: 0, stdout: JSON.stringify({ dryRun: true, item: target, auditSize: audited.audit.length }), stderr: '', exitCode: 0 };
+      }
+
+      const now = nowIso();
+      const approvals = state.approvals.map((item) => {
+        if (item.id !== approvalId) return item;
+        return {
+          ...item,
+          status: decision as ControlApprovalStatus,
+          decisionReason: reason,
+          updatedAt: now,
+          decidedAt: now,
+        };
+      });
+      const next: ControlCenterState = { ...state, approvals };
+      const audited = await appendControlAudit(next, 'approval.decide.live', approvalId, true, `live ${decision}`);
+      return { code: 0, stdout: JSON.stringify({ dryRun: false, items: audited.approvals }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'decide approval failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'control:tasks:list') {
+    try {
+      const state = await readControlCenterState();
+      return { code: 0, stdout: JSON.stringify({ items: state.tasks }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'list tasks failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:tasks:add ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:tasks:add ', '').trim() || '{}');
+      const title = String(payload?.title || '').trim();
+      if (!title) {
+        return { code: 1, stdout: '', stderr: 'task title is required', exitCode: 1 };
+      }
+      const state = await readControlCenterState();
+      const now = nowIso();
+      const task: ControlTaskItem = {
+        id: buildId('task'),
+        title,
+        status: ['todo', 'in_progress', 'blocked', 'done'].includes(String(payload?.status || ''))
+          ? payload.status
+          : 'todo',
+        projectId: String(payload?.projectId || '').trim(),
+        owner: String(payload?.owner || '').trim(),
+        priority: Number.isFinite(Number(payload?.priority)) ? Number(payload.priority) : 3,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const next: ControlCenterState = { ...state, tasks: [task, ...state.tasks] };
+      const audited = await appendControlAudit(next, 'task.add', task.id, true, `task created: ${task.title}`);
+      return { code: 0, stdout: JSON.stringify({ item: task, total: audited.tasks.length }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'add task failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:tasks:update-status ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:tasks:update-status ', '').trim() || '{}');
+      const taskId = String(payload?.taskId || '').trim();
+      const status = String(payload?.status || '').trim() as ControlTaskStatus;
+      if (!taskId || !['todo', 'in_progress', 'blocked', 'done'].includes(status)) {
+        return { code: 1, stdout: '', stderr: 'taskId/status invalid', exitCode: 1 };
+      }
+      const state = await readControlCenterState();
+      let found = false;
+      const tasks = state.tasks.map((item) => {
+        if (item.id !== taskId) return item;
+        found = true;
+        return { ...item, status, updatedAt: nowIso() };
+      });
+      if (!found) {
+        return { code: 1, stdout: '', stderr: 'task not found', exitCode: 1 };
+      }
+      const next: ControlCenterState = { ...state, tasks };
+      const audited = await appendControlAudit(next, 'task.updateStatus', taskId, true, `status -> ${status}`);
+      return { code: 0, stdout: JSON.stringify({ items: audited.tasks }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'update task status failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'control:projects:list') {
+    try {
+      const state = await readControlCenterState();
+      return { code: 0, stdout: JSON.stringify({ items: state.projects }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'list projects failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:projects:add ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:projects:add ', '').trim() || '{}');
+      const name = String(payload?.name || '').trim();
+      if (!name) {
+        return { code: 1, stdout: '', stderr: 'project name is required', exitCode: 1 };
+      }
+      const now = nowIso();
+      const project: ControlProjectItem = {
+        id: buildId('project'),
+        name,
+        status: ['active', 'paused', 'done'].includes(String(payload?.status || '')) ? payload.status : 'active',
+        createdAt: now,
+        updatedAt: now,
+      };
+      const state = await readControlCenterState();
+      const next = { ...state, projects: [project, ...state.projects] };
+      const audited = await appendControlAudit(next, 'project.add', project.id, true, `project created: ${project.name}`);
+      return { code: 0, stdout: JSON.stringify({ item: project, total: audited.projects.length }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'add project failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'control:queue:list') {
+    try {
+      const state = await readControlCenterState();
+      return { code: 0, stdout: JSON.stringify({ items: state.queue }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'list queue failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:queue:add ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:queue:add ', '').trim() || '{}');
+      const title = String(payload?.title || '').trim();
+      if (!title) {
+        return { code: 1, stdout: '', stderr: 'queue title is required', exitCode: 1 };
+      }
+      const queueItem: ControlQueueItem = {
+        id: buildId('queue'),
+        title,
+        detail: String(payload?.detail || '').trim(),
+        severity: ['info', 'warn', 'critical'].includes(String(payload?.severity || '')) ? payload.severity : 'warn',
+        status: 'pending',
+        createdAt: nowIso(),
+      };
+      const state = await readControlCenterState();
+      const next = { ...state, queue: [queueItem, ...state.queue] };
+      const audited = await appendControlAudit(next, 'queue.add', queueItem.id, true, `queue item created: ${queueItem.title}`);
+      return { code: 0, stdout: JSON.stringify({ item: queueItem, total: audited.queue.length }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'add queue failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:queue:ack ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:queue:ack ', '').trim() || '{}');
+      const itemId = String(payload?.itemId || '').trim();
+      if (!itemId) {
+        return { code: 1, stdout: '', stderr: 'itemId is required', exitCode: 1 };
+      }
+      const state = await readControlCenterState();
+      let found = false;
+      const queue = state.queue.map((item) => {
+        if (item.id !== itemId) return item;
+        found = true;
+        return { ...item, status: 'acked' as const, ackedAt: nowIso() };
+      });
+      if (!found) {
+        return { code: 1, stdout: '', stderr: 'queue item not found', exitCode: 1 };
+      }
+      const next = { ...state, queue };
+      const audited = await appendControlAudit(next, 'queue.ack', itemId, true, 'queue item acknowledged');
+      return { code: 0, stdout: JSON.stringify({ items: audited.queue }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'ack queue failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'control:audit:list') {
+    try {
+      const state = await readControlCenterState();
+      return { code: 0, stdout: JSON.stringify({ items: state.audit }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'list audit failed', exitCode: 1 };
+    }
+  }
+
   // gateway:http-watchdog-start-json { enabled, healthCheckCommand, restartCommand, intervalMs?, failThreshold?, maxRestarts? }
   if (fullCommand.startsWith('gateway:http-watchdog-start-json ')) {
     try {
@@ -1878,6 +2569,12 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   if (fullCommand === 'gateway:http-watchdog-stop') {
     stopGatewayHttpWatchdog('manual stop command');
     return { code: 0, stdout: 'gateway http watchdog stopped', exitCode: 0 };
+  }
+
+  if (fullCommand === 'gateway:watchdogs-stop') {
+    stopGatewayWatchdog('manual stop command');
+    stopGatewayHttpWatchdog('manual stop command');
+    return { code: 0, stdout: 'gateway watchdogs stopped', exitCode: 0 };
   }
 
   // gateway:start-bg-json { command, autoRestart, restartInForegroundTerminal, maxRestarts?, baseBackoffMs? }

@@ -12,11 +12,20 @@ export function useGatewayControl() {
   } | null>(null);
   const [killingGatewayPortHolder, setKillingGatewayPortHolder] = useState(false);
   const [gatewayConflictActionMessage, setGatewayConflictActionMessage] = useState('');
+  const [stopServiceModalOpen, setStopServiceModalOpen] = useState(false);
+  const [stoppingServiceWithCleanup, setStoppingServiceWithCleanup] = useState(false);
+  const [stopServiceActionMessage, setStopServiceActionMessage] = useState('');
 
   const closeGatewayConflictModal = () => {
     setGatewayConflictModal(null);
     setGatewayConflictActionMessage('');
     setKillingGatewayPortHolder(false);
+  };
+
+  const closeStopServiceModal = () => {
+    setStopServiceModalOpen(false);
+    setStoppingServiceWithCleanup(false);
+    setStopServiceActionMessage('');
   };
 
   return {
@@ -27,5 +36,12 @@ export function useGatewayControl() {
     gatewayConflictActionMessage,
     setGatewayConflictActionMessage,
     closeGatewayConflictModal,
+    stopServiceModalOpen,
+    setStopServiceModalOpen,
+    stoppingServiceWithCleanup,
+    setStoppingServiceWithCleanup,
+    stopServiceActionMessage,
+    setStopServiceActionMessage,
+    closeStopServiceModal,
   };
 }

@@ -9,6 +9,7 @@
     "version": "VER 2026.1.0",
     "tabs": {
       "monitor": "进程监控",
+      "controlCenter": "控制中心",
       "analytics": "数据看板",
       "skills": "技能管理",
       "settings": "配置编辑",
@@ -17,6 +18,7 @@
     },
     "headers": {
       "monitor": "核心进程哨兵",
+      "controlCenter": "运营控制中心",
       "analytics": "Token 消耗透视",
       "skills": "技能插件矩阵",
       "settings": "全局配置矩阵",
@@ -25,6 +27,79 @@
     },
     "logoutConfirm": "确定要重置并返回引导流程吗？目前的配置将被保留，但您需要重新完成设定步骤。",
     "logoutTooltip": "登出并重新设定"
+  },
+  "controlCenter": {
+    "kpi": {
+      "health": "健康分",
+      "tasks": "任务数",
+      "projects": "项目数",
+      "pendingQueue": "待介入",
+      "pendingApprovals": "待审批",
+      "budgetRisk": "预算风险"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "loading": "加载中...",
+      "add": "新增",
+      "addQueue": "新增介入项",
+      "ack": "确认",
+      "addApproval": "新增审批项",
+      "approve": "核准",
+      "reject": "驳回",
+      "savePolicy": "保存策略"
+    },
+    "tasks": {
+      "title": "任务中枢",
+      "newTaskPlaceholder": "输入新任务标题"
+    },
+    "projects": {
+      "title": "项目中枢",
+      "newProjectPlaceholder": "输入新项目名称"
+    },
+    "queue": {
+      "title": "介入队列",
+      "newQueueTitlePlaceholder": "需要介入的事项",
+      "newQueueDetailPlaceholder": "补充细节（选填）"
+    },
+    "approvals": {
+      "title": "审批中心",
+      "modeDryRun": "Dry-Run 模式",
+      "modeLive": "Live 模式",
+      "newApprovalTitlePlaceholder": "审批主题",
+      "newApprovalDetailPlaceholder": "审批细节（选填）"
+    },
+    "budget": {
+      "title": "预算策略",
+      "limitLabel": "每日预算上限（USD）",
+      "warnRatioLabel": "警戒比例（0~1）",
+      "estimatedToday": "今日预估花费",
+      "riskStatus": "风险状态"
+    },
+    "security": {
+      "title": "操作安全",
+      "currentMode": "当前模式",
+      "tokenRequired": "需要 Token 验证",
+      "tokenNotRequired": "无需 Token（开放）",
+      "currentTokenPlaceholder": "当前 Token（若已启用）",
+      "newTokenPlaceholder": "新 Token（留空表示关闭）",
+      "helper": "设置后，所有变更操作都需要在页面输入相同 Token。",
+      "saveToken": "保存 Token 设置"
+    },
+    "audit": {
+      "title": "操作审计"
+    },
+    "empty": {
+      "tasks": "当前没有任务",
+      "projects": "当前没有项目",
+      "queue": "当前没有待处理介入项",
+      "approvals": "当前没有审批项",
+      "audit": "当前没有审计记录"
+    },
+    "errors": {
+      "loadFailed": "控制中心数据加载失败",
+      "mutationFailed": "控制中心操作失败",
+      "tokenUpdateFailed": "Token 设置更新失败"
+    }
   },
   "chat": {
     "title": "核心对话",

@@ -9,6 +9,7 @@
     "version": "VER 2026.1.0",
     "tabs": {
       "monitor": "進程監控",
+      "controlCenter": "控制中心",
       "analytics": "數據看板",
       "skills": "技能管理",
       "settings": "配置編輯",
@@ -17,6 +18,7 @@
     },
     "headers": {
       "monitor": "核心進程哨兵",
+      "controlCenter": "營運控制中心",
       "analytics": "Token 消耗透視",
       "skills": "技能插件矩陣",
       "settings": "全局配置矩陣",
@@ -25,6 +27,79 @@
     },
     "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
     "logoutTooltip": "登出並重新設定"
+  },
+  "controlCenter": {
+    "kpi": {
+      "health": "健康分",
+      "tasks": "任務數",
+      "projects": "專案數",
+      "pendingQueue": "待介入",
+      "pendingApprovals": "待審批",
+      "budgetRisk": "預算風險"
+    },
+    "actions": {
+      "refresh": "重新整理",
+      "loading": "載入中...",
+      "add": "新增",
+      "addQueue": "新增介入項",
+      "ack": "確認",
+      "addApproval": "新增審批項",
+      "approve": "核准",
+      "reject": "駁回",
+      "savePolicy": "儲存政策"
+    },
+    "tasks": {
+      "title": "任務中樞",
+      "newTaskPlaceholder": "輸入新任務標題"
+    },
+    "projects": {
+      "title": "專案中樞",
+      "newProjectPlaceholder": "輸入新專案名稱"
+    },
+    "queue": {
+      "title": "介入佇列",
+      "newQueueTitlePlaceholder": "需要介入的事項",
+      "newQueueDetailPlaceholder": "補充細節（選填）"
+    },
+    "approvals": {
+      "title": "審批中心",
+      "modeDryRun": "Dry-Run 模式",
+      "modeLive": "Live 模式",
+      "newApprovalTitlePlaceholder": "審批主題",
+      "newApprovalDetailPlaceholder": "審批細節（選填）"
+    },
+    "budget": {
+      "title": "預算政策",
+      "limitLabel": "每日預算上限（USD）",
+      "warnRatioLabel": "警戒比例（0~1）",
+      "estimatedToday": "今日預估花費",
+      "riskStatus": "風險狀態"
+    },
+    "security": {
+      "title": "操作安全",
+      "currentMode": "目前模式",
+      "tokenRequired": "需要 Token 驗證",
+      "tokenNotRequired": "不需 Token（開放）",
+      "currentTokenPlaceholder": "目前 Token（若已啟用）",
+      "newTokenPlaceholder": "新 Token（留空表示關閉）",
+      "helper": "設定後，所有變更操作都需要在頁面輸入相同 Token。",
+      "saveToken": "儲存 Token 設定"
+    },
+    "audit": {
+      "title": "操作審計"
+    },
+    "empty": {
+      "tasks": "目前沒有任務",
+      "projects": "目前沒有專案",
+      "queue": "目前沒有待處理介入項",
+      "approvals": "目前沒有審批項",
+      "audit": "目前沒有審計記錄"
+    },
+    "errors": {
+      "loadFailed": "控制中心資料載入失敗",
+      "mutationFailed": "控制中心操作失敗",
+      "tokenUpdateFailed": "Token 設定更新失敗"
+    }
   },
   "chat": {
     "title": "核心對話",

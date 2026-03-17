@@ -9,6 +9,8 @@ export interface ExecOptions {
   title?: string;
 }
 
+const NT_CLAW_TERMINAL_MARKER_PREFIX = '__NT_CLAWLAUNCH_MANAGED__';
+
 function escapeAppleScriptString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
@@ -24,9 +26,10 @@ function shellSingleQuote(value: string): string {
  */
 export async function execInTerminal(command: string, options: ExecOptions = {}) {
   const { cwd, holdOpen = true, title = 'OpenClaw Action' } = options;
+  const marker = `${NT_CLAW_TERMINAL_MARKER_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
   
   // 1. Prepare the command string
-  let finalCmd = `clear; echo '🚀 ${title}...'; `;
+  let finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; `;
   
   if (cwd) {
     finalCmd += `cd "${cwd}"; `;
