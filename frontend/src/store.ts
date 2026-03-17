@@ -152,8 +152,8 @@ interface AppState {
   setRunning: (status: boolean) => void;
   logs: LogEntry[];
   addLog: (text: string, source?: 'stdout' | 'stderr' | 'system') => void;
-  envStatus: { node: string; git: string; pnpm: string };
-  setEnvStatus: (status: { node: string; git: string; pnpm: string }) => void;
+  envStatus: { node: 'loading' | 'ok' | 'error'; git: 'loading' | 'ok' | 'error'; pnpm: 'loading' | 'ok' | 'error' };
+  setEnvStatus: (status: { node: 'loading' | 'ok' | 'error'; git: 'loading' | 'ok' | 'error'; pnpm: 'loading' | 'ok' | 'error' }) => void;
   config: Config;
   detectedConfig: { 
     apiKey?: string; 

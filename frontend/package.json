@@ -5,6 +5,7 @@
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/cleanup-dev-port.mjs",
     "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
     "dev:electron": "npm run build:electron && cross-env NODE_ENV=development electron .",

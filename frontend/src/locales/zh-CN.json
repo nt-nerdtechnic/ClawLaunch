@@ -223,7 +223,10 @@
     "externalTerminalDesc": "启用后，启动/停止 Gateway 会强制打开外部 Terminal 窗口；关闭后改为后台执行。",
     "workspacePath": "工作区 (Workspace)",
     "workspacePathPlaceholder": "例如: ~/.openclaw",
-    "saveConfig": "保存配置变更"
+    "saveConfig": "保存配置变更",
+    "savingConfigButton": "保存中...",
+    "configSavedButton": "已保存",
+    "saveConfigFailedButton": "保存失败"
   },
   "logs": {
     "autoDetectSuccess": ">>> 自动侦测完成: 已连结至机甲核心",

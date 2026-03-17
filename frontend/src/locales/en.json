@@ -223,7 +223,10 @@
     "externalTerminalDesc": "When enabled, start/stop Gateway always opens an external Terminal window; when disabled, commands run in background.",
     "workspacePath": "Workspace Path",
     "workspacePathPlaceholder": "e.g., ~/.openclaw",
-    "saveConfig": "Save Configuration"
+    "saveConfig": "Save Configuration",
+    "savingConfigButton": "Saving...",
+    "configSavedButton": "Saved",
+    "saveConfigFailedButton": "Save Failed"
   },
   "logs": {
     "autoDetectSuccess": ">>> Auto detection complete: Connected to Mecha Core",
