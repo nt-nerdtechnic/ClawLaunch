@@ -11,13 +11,17 @@
       "monitor": "Process Monitor",
       "analytics": "Data Analytics",
       "skills": "Skill Manager",
-      "settings": "Configuration"
+      "settings": "Configuration",
+      "launcherSettings": "Launcher Config",
+      "runtimeSettings": "Runtime Config"
     },
     "headers": {
       "monitor": "Core Process Sentinel",
       "analytics": "Token Consumption",
       "skills": "Skill Plugin Matrix",
-      "settings": "Global Config Matrix"
+      "settings": "Global Config Matrix",
+      "launcherSettings": "Launcher Configuration",
+      "runtimeSettings": "openclaw.json Configuration"
     },
     "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
     "logoutTooltip": "Logout & Reconfigure"

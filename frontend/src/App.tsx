@@ -442,7 +442,7 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    if (activeTab !== 'settings') return;
+    if (activeTab !== 'runtimeSettings') return;
     const probeRuntimeConfig = async () => {
       const configDir = normalizeConfigDir(config.configPath);
       if (!configDir || !window.electronAPI) {
@@ -494,12 +494,12 @@ function App() {
   };
 
   useEffect(() => {
-    if (activeTab !== 'settings') return;
+    if (activeTab !== 'runtimeSettings') return;
     void loadAuthProfiles();
   }, [activeTab, resolvedConfigDir]);
 
   useEffect(() => {
-    if (activeTab !== 'settings') return;
+    if (activeTab !== 'runtimeSettings') return;
     setRuntimeDraftModel(effectiveRuntimeModel);
     setRuntimeDraftBotToken(effectiveRuntimeBotToken);
   }, [activeTab, effectiveRuntimeModel, effectiveRuntimeBotToken]);
@@ -543,7 +543,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (activeTab !== 'settings') return;
+    if (activeTab !== 'runtimeSettings') return;
     void loadDynamicModelOptions();
   }, [activeTab, resolvedConfigDir, config.corePath, effectiveAuthorizedProviders.join('|')]);
 
@@ -611,7 +611,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (activeTab !== 'settings') return;
+    if (activeTab !== 'runtimeSettings') return;
     void loadTelegramPairingRequests();
     const interval = window.setInterval(() => {
       void loadTelegramPairingRequests();
@@ -1145,6 +1145,35 @@ NODE`;
     setConfig({ [key]: selectedPath } as any);
   };
 
+  const handleSaveLauncherConfig = async () => {
+    if (!window.electronAPI) return;
+
+    const gatewayPortRaw = String(config.gatewayPort ?? '').trim();
+    if (!gatewayPortRaw || !/^\d+$/.test(gatewayPortRaw)) {
+      addLog('錯誤: Gateway Port 未填或格式不正確，儲存已中止。請先至設定頁填入有效的 Gateway Port（正整數）後再儲存。', 'stderr');
+      return;
+    }
+
+    addLog(t('logs.savingConfig'), 'system');
+    try {
+      const {
+        model: _model,
+        botToken: _botToken,
+        authChoice: _authChoice,
+        apiKey: _apiKey,
+        ...launcherConfig
+      } = config as any;
+      const res = await window.electronAPI.exec(`config:write ${JSON.stringify(launcherConfig)}`);
+      if (res.code === 0) {
+        addLog(t('logs.configSaved'), 'system');
+      } else {
+        addLog(t('logs.saveConfigFailed', { msg: res.stderr }), 'stderr');
+      }
+    } catch (e: any) {
+      addLog(t('logs.commFailed', { msg: e.message }), 'stderr');
+    }
+  };
+
   const handleSaveConfig = async () => {
     if (!window.electronAPI) return;
 
@@ -1200,19 +1229,7 @@ NODE`;
         }
       }
 
-      const {
-        model: _model,
-        botToken: _botToken,
-        authChoice: _authChoice,
-        apiKey: _apiKey,
-        ...launcherConfig
-      } = config as any;
-      const res = await window.electronAPI.exec(`config:write ${JSON.stringify(launcherConfig)}`);
-      if (res.code === 0) {
-        addLog(t('logs.configSaved'), 'system');
-      } else {
-        addLog(t('logs.saveConfigFailed', { msg: res.stderr }), 'stderr');
-      }
+      addLog('>>> Runtime 設定已寫入 openclaw.json。', 'system');
     } catch (e: any) {
       addLog(t('logs.commFailed', { msg: e.message }), 'stderr');
     }
@@ -1426,7 +1443,7 @@ NODE`;
           <NavItem icon={<Activity size={18}/>} label={t('app.tabs.monitor')} active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} />
           <NavItem icon={<BarChart3 size={18}/>} label={t('app.tabs.analytics')} active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
           <NavItem icon={<Boxes size={18}/>} label={t('app.tabs.skills')} active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
-          <NavItem icon={<Settings size={18}/>} label={t('app.tabs.settings')} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+          <NavItem icon={<Database size={18}/>} label={t('app.tabs.runtimeSettings')} active={activeTab === 'runtimeSettings'} onClick={() => setActiveTab('runtimeSettings')} />
         </nav>
 
         <div onClick={toggleViewMode} className="p-4 bg-blue-600/10 rounded-2xl border border-blue-500/20 cursor-pointer hover:bg-blue-600/20 transition-all flex items-center justify-between group">
@@ -1445,12 +1462,22 @@ NODE`;
         <header className="h-20 border-b border-slate-200 dark:border-slate-800/50 flex items-center px-10 justify-between relative backdrop-blur-md bg-white/20 dark:bg-slate-950/20">
           <div>
             <h2 className="font-bold text-xl text-slate-900 dark:text-slate-100 uppercase tracking-tight">
-                {activeTab === 'monitor' ? t('app.headers.monitor') : activeTab === 'analytics' ? t('app.headers.analytics') : activeTab === 'skills' ? t('app.headers.skills') : t('app.headers.settings')}
+                {activeTab === 'monitor' ? t('app.headers.monitor') : activeTab === 'analytics' ? t('app.headers.analytics') : activeTab === 'skills' ? t('app.headers.skills') : activeTab === 'launcherSettings' ? t('app.headers.launcherSettings') : t('app.headers.runtimeSettings')}
             </h2>
           </div>
           <div className="flex items-center space-x-4">
             <LanguageToggle />
             <ThemeToggle />
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('launcherSettings')}
+              className={`relative w-10 h-10 rounded-full border flex items-center justify-center cursor-pointer transition-colors overflow-hidden ${activeTab === 'launcherSettings' ? 'bg-blue-100 border-blue-300 text-blue-600 hover:bg-blue-200 dark:bg-blue-500/20 dark:border-blue-500/40 dark:text-blue-300 dark:hover:bg-blue-500/30' : 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}
+              title={t('app.tabs.launcherSettings')}
+              aria-label={t('app.tabs.launcherSettings')}
+            >
+              <Settings size={18} />
+            </button>
 
             <div 
                 onClick={() => setShowLogoutConfirm(true)}
@@ -1541,7 +1568,7 @@ NODE`;
 
                 <div className="flex gap-4 pt-2">
                   <button
-                    onClick={() => setActiveTab('settings')}
+                    onClick={() => setActiveTab('launcherSettings')}
                     className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
                   >
                     前往設定修改 Port
@@ -1649,7 +1676,149 @@ NODE`;
             </div>
           )}
 
-          {activeTab === 'settings' && (
+          {activeTab === 'launcherSettings' && (
+              <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in zoom-in-95">
+                  <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
+                      <div>
+                        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">Launcher Runtime Paths</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('settings.corePath')}</label>
+                              <div className="flex items-stretch gap-2">
+                                <input
+                                    type="text"
+                              value={config.corePath}
+                              onChange={(e) => setConfig({ corePath: e.target.value })}
+                              placeholder={t('settings.corePathPlaceholder')}
+                                    className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                                />
+                                <button
+                              onClick={() => handleBrowsePath('corePath')}
+                                    title="Browse folder"
+                                    className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
+                                >
+                                    <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
+                                </button>
+                              </div>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('settings.configPath')}</label>
+                              <div className="flex items-stretch gap-2">
+                                <input
+                                    type="text"
+                              value={config.configPath}
+                              onChange={(e) => setConfig({ configPath: e.target.value })}
+                              placeholder={t('settings.configPathPlaceholder')}
+                                    className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                                />
+                                <button
+                              onClick={() => handleBrowsePath('configPath')}
+                                    title="Browse folder"
+                                    className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
+                                >
+                                    <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
+                                </button>
+                              </div>
+                          </div>
+                          <div className="space-y-2">
+                              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('settings.workspacePath')}</label>
+                              <div className="flex items-stretch gap-2">
+                                <input
+                                    type="text"
+                                    value={config.workspacePath}
+                                    onChange={(e) => setConfig({ workspacePath: e.target.value })}
+                                    placeholder={t('settings.workspacePathPlaceholder')}
+                                    className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                                />
+                                <button
+                                    onClick={() => handleBrowsePath('workspacePath')}
+                                    title="Browse folder"
+                                    className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
+                                >
+                                    <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
+                                </button>
+                              </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">Launcher Start Behavior</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('settings.gatewayPort')}</label>
+                            <input
+                              type="text"
+                              value={config.gatewayPort}
+                              onChange={(e) => setConfig({ gatewayPort: e.target.value })}
+                              placeholder={t('settings.gatewayPortPlaceholder')}
+                              className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('settings.externalTerminalTitle')}</div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{t('settings.externalTerminalDesc')}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setConfig({ useExternalTerminal: !shouldUseExternalTerminal() })}
+                            className={`shrink-0 inline-flex h-7 w-12 items-center rounded-full border transition-all ${shouldUseExternalTerminal() ? 'bg-emerald-500 border-emerald-500 justify-end' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'}`}
+                            aria-pressed={shouldUseExternalTerminal()}
+                            aria-label={t('settings.externalTerminalTitle')}
+                            title={t('settings.externalTerminalTitle')}
+                          >
+                            <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
+                          </button>
+                        </div>
+
+                        <div className="mt-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">自動重啟 Gateway（崩潰時）</div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">僅套用於非 daemon 且背景啟動模式，異常退出時自動重啟。</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setConfig({ autoRestartGateway: !config.autoRestartGateway })}
+                            className={`shrink-0 inline-flex h-7 w-12 items-center rounded-full border transition-all ${config.autoRestartGateway ? 'bg-emerald-500 border-emerald-500 justify-end' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'}`}
+                            aria-pressed={config.autoRestartGateway}
+                            aria-label="自動重啟 Gateway"
+                            title="自動重啟 Gateway"
+                          >
+                            <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
+                          </button>
+                        </div>
+
+                        <div className="mt-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">自動重啟改用前台 Terminal</div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">啟用後，發生自動重啟時會以 macOS Terminal 前台視窗重新啟動，避免權限上下文遺失。</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setConfig({ restartInForegroundTerminal: !config.restartInForegroundTerminal })}
+                            className={`shrink-0 inline-flex h-7 w-12 items-center rounded-full border transition-all ${config.restartInForegroundTerminal ? 'bg-emerald-500 border-emerald-500 justify-end' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'}`}
+                            aria-pressed={config.restartInForegroundTerminal}
+                            aria-label="自動重啟改用前台 Terminal"
+                            title="自動重啟改用前台 Terminal"
+                          >
+                            <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
+                          </button>
+                        </div>
+                      </div>
+                  </div>
+                  <button
+                    onClick={handleSaveLauncherConfig}
+                    className="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] py-4 rounded-2xl font-black text-white shadow-xl shadow-blue-600/20 transition-all"
+                  >
+                    {t('settings.saveConfig')}
+                  </button>
+              </div>
+          )}
+
+          {activeTab === 'runtimeSettings' && (
               <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in zoom-in-95">
                   <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
                       <div>

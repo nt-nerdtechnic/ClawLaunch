@@ -11,13 +11,17 @@
       "monitor": "進程監控",
       "analytics": "數據看板",
       "skills": "技能管理",
-      "settings": "配置編輯"
+      "settings": "配置編輯",
+      "launcherSettings": "啟動器配置",
+      "runtimeSettings": "龍蝦配置"
     },
     "headers": {
       "monitor": "核心進程哨兵",
       "analytics": "Token 消耗透視",
       "skills": "技能插件矩陣",
-      "settings": "全局配置矩陣"
+      "settings": "全局配置矩陣",
+      "launcherSettings": "Launcher 配置",
+      "runtimeSettings": "openclaw.json 配置"
     },
     "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
     "logoutTooltip": "登出並重新設定"
