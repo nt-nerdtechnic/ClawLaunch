@@ -19,11 +19,15 @@ export function useAppBootstrap({
 
   const checkOnboardingStatus = useCallback((loadedConfig?: any, detected?: any) => {
     const persisted = loadedConfig || {};
+    const detectedTop = detected || {};
     const detectedExisting = detected?.existingConfig || {};
     const hasAnyConfiguredPath = Boolean(
       (persisted.corePath && String(persisted.corePath).trim()) ||
       (persisted.configPath && String(persisted.configPath).trim()) ||
       (persisted.workspacePath && String(persisted.workspacePath).trim()) ||
+      (detectedTop.corePath && String(detectedTop.corePath).trim()) ||
+      (detectedTop.configPath && String(detectedTop.configPath).trim()) ||
+      (detectedTop.workspacePath && String(detectedTop.workspacePath).trim()) ||
       (detectedExisting.corePath && String(detectedExisting.corePath).trim()) ||
       (detectedExisting.configPath && String(detectedExisting.configPath).trim()) ||
       (detectedExisting.workspacePath && String(detectedExisting.workspacePath).trim()),
@@ -82,9 +86,15 @@ export function useAppBootstrap({
           if (detected && detected.existingConfig) {
             setDetectedConfig({
               ...detected.existingConfig,
-              corePath: detected.existingConfig.corePath || '',
-              configPath: detected.existingConfig.configPath || '',
-              workspacePath: detected.existingConfig.workspacePath || detected.existingConfig.configPath || '',
+              corePath: detected.corePath || detected.existingConfig.corePath || '',
+              configPath: detected.configPath || detected.existingConfig.configPath || '',
+              workspacePath:
+                detected.workspacePath ||
+                detected.existingConfig.workspacePath ||
+                detected.existingConfig.workspace ||
+                detected.configPath ||
+                detected.existingConfig.configPath ||
+                '',
             });
           }
 

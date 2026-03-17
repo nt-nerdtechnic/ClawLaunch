@@ -49,7 +49,8 @@ const SetupStepWelcome = ({ onNext }) => {
       const nextPatch = {
         corePath: detectedConfig.corePath || '',
         configPath: detectedConfig.configPath || '',
-        workspacePath: detectedConfig.workspacePath || ''
+        workspacePath: detectedConfig.workspacePath || '',
+        authChoice: detectedConfig.authChoice || ''
       };
       setConfig(nextPatch);
       persistConfig(nextPatch);

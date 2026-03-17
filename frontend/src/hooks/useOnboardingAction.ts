@@ -473,7 +473,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       if (!corePath) throw new Error('缺少核心路徑 (Core Path missing)');
 
       const selectedAuthChoice = String(config.authChoice || '').trim();
-      if (step === 'model' && !SUPPORTED_AUTH_CHOICES.has(selectedAuthChoice)) {
+      if (step === 'model' && userType !== 'existing' && !SUPPORTED_AUTH_CHOICES.has(selectedAuthChoice)) {
         throw new Error(`不支援或不安全的授權類型: ${selectedAuthChoice || 'unknown'}`);
       }
 
@@ -526,6 +526,16 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             const channels = parsed?.channels;
             const hasAnyChannel = channels && typeof channels === 'object' && Object.keys(channels).length > 0;
             if (!hasAnyChannel) throw new Error('找不到可用的通訊頻道設定');
+            const selectedPlatform = String(config.platform || '').trim().toLowerCase();
+            if (selectedPlatform) {
+              const selectedChannel = (channels as any)?.[selectedPlatform];
+              const hasSelectedChannel =
+                !!selectedChannel &&
+                (typeof selectedChannel !== 'object' || Object.keys(selectedChannel).length > 0);
+              if (!hasSelectedChannel) {
+                throw new Error(`目前選擇的通訊頻道未配置: ${selectedPlatform}`);
+              }
+            }
             break;
           }
           case 'launch': {
@@ -597,42 +607,31 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             break;
           }
 
-          const authFlagMapping: Record<string, string> = {
-            'apiKey': '--anthropic-api-key',
-            'openai-api-key': '--openai-api-key',
-            'gemini-api-key': '--gemini-api-key',
-            'minimax-api': '--minimax-api-key',
-            'moonshot-api-key': '--moonshot-api-key',
-            'openrouter-api-key': '--openrouter-api-key',
-            'xai-api-key': '--xai-api-key'
-          };
-
-          let authFlags = '';
           const sanitizedSecret = sanitizeSecret(config.apiKey || '');
           const secretChanged = Boolean(config.apiKey) && sanitizedSecret !== String(config.apiKey || '');
           if (secretChanged) {
             addLocalLog('ℹ️ 偵測到授權字串包含空白，已自動移除空白字元再寫入。', 'system');
           }
 
-          if (selectedAuthChoice === 'token') {
-            if (!sanitizedSecret) {
-              throw new Error('缺少 Setup-Token，請先貼上由 claude setup-token 產生的 Token');
-            }
-            authFlags = `--token-provider anthropic --token ${shellQuote(sanitizedSecret)}`;
-          } else if (sanitizedSecret) {
-            const flag = authFlagMapping[selectedAuthChoice];
-            if (!flag) {
-              throw new Error(`不支援的授權參數映射: ${selectedAuthChoice || 'unknown'}`);
-            }
-            authFlags = `${flag} ${shellQuote(sanitizedSecret)}`;
+          if (selectedAuthChoice === 'token' && !sanitizedSecret) {
+            throw new Error('缺少 Setup-Token，請先貼上由 claude setup-token 產生的 Token');
           }
-          const onboardCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw onboard --auth-choice ${shellQuote(selectedAuthChoice)} ${authFlags} ${workspaceFlag} --no-install-daemon --skip-daemon --skip-health --non-interactive --accept-risk`;
 
-          const res = await (window as any).electronAPI.exec(onboardCmd);
-          if (!isCommandSuccess(res)) throw new Error(res.stderr || '核心授權失敗');
+          const addProfilePayload = {
+            corePath,
+            configPath,
+            workspacePath,
+            authChoice: selectedAuthChoice,
+            secret: sanitizedSecret,
+          };
+          const addProfileRes = await (window as any).electronAPI.exec(`auth:add-profile ${JSON.stringify(addProfilePayload)}`);
+          if (!isCommandSuccess(addProfileRes)) {
+            throw new Error(addProfileRes.stderr || '核心授權失敗');
+          }
 
           // 新版 OpenClaw 已移除 `openclaw auth set`。
-          // 由 `openclaw onboard --auth-choice ...` 寫入後，統一透過雙層檢查驗證 global + agent 是否一致。
+          // 非 OAuth 導引改為走 auth:add-profile，內部依 authChoice 映射 provider 參數，
+          // 最終仍透過雙層檢查驗證 global + agent 是否一致。
 
           if (!configPath) {
             throw new Error('缺少 Config Path，無法驗證授權寫入結果');
