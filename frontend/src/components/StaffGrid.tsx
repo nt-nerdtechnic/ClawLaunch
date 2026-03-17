@@ -23,37 +23,37 @@ const ANIMAL_ROLES: Record<string, RoleDef> = {
     icon: <Shield size={24} />,
     title: 'Lion Captain',
     color: 'from-orange-500 to-red-600',
-    desc: '主控中樞 / Lead Supervisor'
+    desc: 'monitor.staff.roles.main'
   },
   panda: {
     icon: <Target size={24} />,
     title: 'Panda Strategist',
     color: 'from-blue-400 to-indigo-600',
-    desc: '策略規劃 / Strategy'
+    desc: 'monitor.staff.roles.panda'
   },
   monkey: {
     icon: <Code size={24} />,
     title: 'Monkey Builder',
     color: 'from-amber-400 to-orange-500',
-    desc: '工程實作 / Builder'
+    desc: 'monitor.staff.roles.monkey'
   },
   owl: {
     icon: <Eye size={24} />,
     title: 'Owl Analyst',
     color: 'from-purple-500 to-indigo-700',
-    desc: '數據審計 / Auditor'
+    desc: 'monitor.staff.roles.owl'
   },
   fox: {
     icon: <Zap size={24} />,
     title: 'Fox Courier',
     color: 'from-orange-400 to-yellow-500',
-    desc: '快速響應 / Ops'
+    desc: 'monitor.staff.roles.fox'
   },
   fallback: {
     icon: <Bot size={24} />,
     title: 'Agent Operator',
     color: 'from-slate-400 to-slate-600',
-    desc: '執行單元 / Operator'
+    desc: 'monitor.staff.roles.fallback'
   }
 };
 
@@ -143,7 +143,7 @@ export function StaffGrid() {
     <div className="space-y-4">
       <div className="flex items-center justify-between px-2">
         <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-            {t('monitor.activeStaff', '活躍團隊成員')} ({agents.length})
+            {t('monitor.activeStaff')} ({agents.length})
         </h3>
       </div>
 
@@ -183,7 +183,7 @@ export function StaffGrid() {
             <div className="space-y-1">
               <h4 className="font-black text-lg text-slate-900 dark:text-slate-100 tracking-tight">{String(agent.title || 'Agent')}</h4>
               <p className="text-[10px] text-slate-500 dark:text-slate-600 font-bold uppercase tracking-widest border-t border-slate-200 dark:border-slate-800 pt-2 mt-2">
-                {String(agent.id || 'N/A')} · {String(agent.desc || 'Operator')}
+                {String(agent.id || 'N/A')} · {t(String(agent.desc || 'monitor.staff.roles.fallback'))}
               </p>
             </div>
 

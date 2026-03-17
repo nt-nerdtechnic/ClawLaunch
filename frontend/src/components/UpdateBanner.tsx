@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCcw, ArrowUpCircle, Loader2, CheckCircle } from 'lucide-react';
 import TerminalLog from './common/TerminalLog';
+import { useTranslation } from 'react-i18next';
 
 const UpdateBanner = () => {
+  const { t } = useTranslation();
   const [hasUpdate, setHasUpdate] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [complete, setComplete] = useState(false);
@@ -44,7 +46,7 @@ const UpdateBanner = () => {
 
   const handleUpdate = async () => {
     setUpdating(true);
-    setLocalLogs([{ text: '🚀 啟動系統更新程序...', source: 'system', time: new Date().toLocaleTimeString() }]);
+    setLocalLogs([{ text: t('updateBanner.logs.start'), source: 'system', time: new Date().toLocaleTimeString() }]);
     
     try {
       // 在專案根目錄執行更新
@@ -53,10 +55,10 @@ const UpdateBanner = () => {
       if (res.code === 0) {
           setComplete(true);
       } else {
-          alert("更新失敗，請檢查日誌輸出。");
+          alert(t('updateBanner.alerts.updateFailed'));
       }
     } catch (e) {
-      alert("更新系統異常。");
+      alert(t('updateBanner.alerts.systemError'));
     } finally {
       setUpdating(false);
     }
@@ -71,15 +73,15 @@ const UpdateBanner = () => {
                     <CheckCircle size={24} />
                 </div>
                 <div>
-                    <h4 className="text-lg font-black text-emerald-900 dark:text-emerald-100">系統更新成功！</h4>
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">版本已升級至 {String(versions.remote || '')}。請立即重啟以啟動新核心。</p>
+                  <h4 className="text-lg font-black text-emerald-900 dark:text-emerald-100">{t('updateBanner.success.title')}</h4>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">{t('updateBanner.success.desc', { version: String(versions.remote || '') })}</p>
                 </div>
             </div>
             <button 
                 onClick={() => window.location.reload()}
                 className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black rounded-xl transition-all shadow-lg active:scale-95"
             >
-                立即重啟
+              {t('updateBanner.success.restartNow')}
             </button>
         </div>
       </div>
@@ -98,9 +100,9 @@ const UpdateBanner = () => {
                 <ArrowUpCircle size={28} className="group-hover:scale-110 transition-transform" />
             </div>
             <div>
-                <h4 className="font-black text-blue-900 dark:text-blue-50 text-lg tracking-tight">發現龍蝦新演化 {String(versions.remote || '')}</h4>
+              <h4 className="font-black text-blue-900 dark:text-blue-50 text-lg tracking-tight">{t('updateBanner.title', { version: String(versions.remote || '') })}</h4>
                 <p className="text-xs text-blue-700 dark:text-blue-400 font-medium flex items-center gap-1.5 mt-1">
-                    <RefreshCcw size={12} /> 目前版本: {String(versions.local || '')} • 建議立即升級以同步最新底層協定
+                <RefreshCcw size={12} /> {t('updateBanner.subtitle', { version: String(versions.local || '') })}
                 </p>
             </div>
         </div>
@@ -108,7 +110,7 @@ const UpdateBanner = () => {
         <div className="flex items-center gap-4">
             {!updating && (
                 <button onClick={() => setHasUpdate(false)} className="px-4 py-2 text-blue-400 hover:text-blue-600 font-black text-xs uppercase tracking-widest transition-colors">
-                    先不要
+              {t('updateBanner.actions.later')}
                 </button>
             )}
             <button 
@@ -117,7 +119,7 @@ const UpdateBanner = () => {
                 className="px-8 py-4 bg-gray-900 hover:bg-black text-white text-xs font-black rounded-2xl transition-all shadow-xl shadow-blue-200/50 flex items-center gap-2 active:scale-95 disabled:bg-gray-400"
             >
                 {updating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
-                {updating ? '正在升級核心...' : '立即升級'}
+              {updating ? t('updateBanner.actions.updating') : t('updateBanner.actions.updateNow')}
             </button>
         </div>
       </div>
@@ -125,7 +127,7 @@ const UpdateBanner = () => {
       {/* 展開的日誌區域 */}
       {(updating || localLogs.length > 0) && !complete && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-              <TerminalLog logs={localLogs} height="h-44" title="System Update Core Logs" />
+            <TerminalLog logs={localLogs} height="h-44" title={t('updateBanner.logs.title')} />
           </div>
       )}
     </div>

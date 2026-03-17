@@ -4,6 +4,7 @@ import { MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, 
 import { useStore } from '../../store';
 import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
+import { useTranslation } from 'react-i18next';
 
 /**
  * NT-ClawLaunch Onboarding: Messaging Platform Setup Step
@@ -12,18 +13,19 @@ import { useOnboardingAction } from '../../hooks/useOnboardingAction';
  */
 
 const CHANNEL_OPTIONS = [
-  { id: 'telegram', name: 'Telegram', icon: <MessageSquare size={16} />, desc: 'Bot API， 最推薦的加密頻道', placeholder: '12345678:ABCDefgh...', keyLabel: 'Bot API Token' },
-  { id: 'whatsapp', name: 'WhatsApp', icon: <Phone size={16} />, desc: 'WhatsApp Web QR 連結模式', placeholder: '無須輸入，稍後掃描 QR Code', keyLabel: 'WhatsApp Account ID (可選留空)', reqKey: false },
-  { id: 'discord', name: 'Discord', icon: <Bot size={16} />, desc: '穩定支援的 Bot API', placeholder: 'Discord Bot Token...', keyLabel: 'Bot Token' },
-  { id: 'irc', name: 'IRC', icon: <Server size={16} />, desc: '連線至傳統 IRC 伺服器網域', placeholder: 'irc.libera.chat:6697...', keyLabel: 'IRC Server / Nick (稍後詳細設定)', reqKey: false },
-  { id: 'googlechat', name: 'Google Chat', icon: <Mails size={16} />, desc: 'Google Workspace Webhook', placeholder: 'Google Chat Webhook URL...', keyLabel: 'Webhook URL' },
-  { id: 'slack', name: 'Slack', icon: <Hash size={16} />, desc: '原生 Socket Mode 支援', placeholder: 'xoxb-xxxx-xxxx...', keyLabel: 'Bot Token' },
-  { id: 'signal', name: 'Signal', icon: <Shield size={16} />, desc: '透過 signal-cli 連接，高隱私', placeholder: 'Signal REST API URL 或留空', keyLabel: 'Signal Config (稍後詳細設定)', reqKey: false },
-  { id: 'imessage', name: 'iMessage', icon: <MessageCircle size={16} />, desc: '實驗性支援 (imsg)', placeholder: '稍後設定', keyLabel: 'iMessage ID (稍後詳細設定)', reqKey: false },
-  { id: 'line', name: 'LINE', icon: <Waves size={16} />, desc: 'LINE Messaging API Webhook', placeholder: 'LINE Channel Access Token...', keyLabel: 'Channel Access Token' }
+  { id: 'telegram', name: 'Telegram', icon: <MessageSquare size={16} />, descKey: 'setupMessaging.channels.telegram.desc', placeholderKey: 'setupMessaging.channels.telegram.placeholder', keyLabelKey: 'setupMessaging.channels.telegram.keyLabel' },
+  { id: 'whatsapp', name: 'WhatsApp', icon: <Phone size={16} />, descKey: 'setupMessaging.channels.whatsapp.desc', placeholderKey: 'setupMessaging.channels.whatsapp.placeholder', keyLabelKey: 'setupMessaging.channels.whatsapp.keyLabel', reqKey: false },
+  { id: 'discord', name: 'Discord', icon: <Bot size={16} />, descKey: 'setupMessaging.channels.discord.desc', placeholderKey: 'setupMessaging.channels.discord.placeholder', keyLabelKey: 'setupMessaging.channels.discord.keyLabel' },
+  { id: 'irc', name: 'IRC', icon: <Server size={16} />, descKey: 'setupMessaging.channels.irc.desc', placeholderKey: 'setupMessaging.channels.irc.placeholder', keyLabelKey: 'setupMessaging.channels.irc.keyLabel', reqKey: false },
+  { id: 'googlechat', name: 'Google Chat', icon: <Mails size={16} />, descKey: 'setupMessaging.channels.googlechat.desc', placeholderKey: 'setupMessaging.channels.googlechat.placeholder', keyLabelKey: 'setupMessaging.channels.googlechat.keyLabel' },
+  { id: 'slack', name: 'Slack', icon: <Hash size={16} />, descKey: 'setupMessaging.channels.slack.desc', placeholderKey: 'setupMessaging.channels.slack.placeholder', keyLabelKey: 'setupMessaging.channels.slack.keyLabel' },
+  { id: 'signal', name: 'Signal', icon: <Shield size={16} />, descKey: 'setupMessaging.channels.signal.desc', placeholderKey: 'setupMessaging.channels.signal.placeholder', keyLabelKey: 'setupMessaging.channels.signal.keyLabel', reqKey: false },
+  { id: 'imessage', name: 'iMessage', icon: <MessageCircle size={16} />, descKey: 'setupMessaging.channels.imessage.desc', placeholderKey: 'setupMessaging.channels.imessage.placeholder', keyLabelKey: 'setupMessaging.channels.imessage.keyLabel', reqKey: false },
+  { id: 'line', name: 'LINE', icon: <Waves size={16} />, descKey: 'setupMessaging.channels.line.desc', placeholderKey: 'setupMessaging.channels.line.placeholder', keyLabelKey: 'setupMessaging.channels.line.keyLabel' }
 ];
 
 const SetupStepMessaging = ({ onNext }) => {
+  const { t } = useTranslation();
   const { config, setConfig, detectedConfig, userType } = useStore();
   const onboardingAction = useOnboardingAction();
   const [showGuide, setShowGuide] = useState(false);
@@ -48,11 +50,11 @@ const SetupStepMessaging = ({ onNext }) => {
 
   const handleNext = async () => {
     const missing = [];
-    if (!config.corePath) missing.push('Core Path');
-    if (!config.configPath) missing.push('Config Path');
-    if (!config.workspacePath) missing.push('Workspace Path');
+    if (!config.corePath) missing.push(t('setupMessaging.pathNames.core'));
+    if (!config.configPath) missing.push(t('setupMessaging.pathNames.config'));
+    if (!config.workspacePath) missing.push(t('setupMessaging.pathNames.workspace'));
     if (missing.length > 0) {
-      setLocalError(`請先完成路徑設定：${missing.join(' / ')}`);
+      setLocalError(t('setupMessaging.errors.pathRequired', { paths: missing.join(' / ') }));
       return;
     }
 
@@ -72,12 +74,12 @@ const SetupStepMessaging = ({ onNext }) => {
           <MessageSquare size={24} />
         </div>
         <h2 className="text-2xl font-bold text-gray-800">
-            {(detectedConfig?.botToken || config.botToken) && userType !== 'new' ? '通訊頻率已鎖定' : '繫結您的通訊頻道 (Bonding Channel)'}
+            {(detectedConfig?.botToken || config.botToken) && userType !== 'new' ? t('setupMessaging.titleLocked') : t('setupMessaging.title')}
         </h2>
         <p className="text-gray-500 mt-2 text-sm italic">
             {(detectedConfig?.botToken || config.botToken) && userType !== 'new'
-              ? '「機甲通訊模組已就緒，等待最後指令...」' 
-              : 'OpenClaw 需要一個加密頻道與您建立心靈感應'}
+              ? t('setupMessaging.subtitleLocked') 
+              : t('setupMessaging.subtitle')}
         </p>
       </div>
 
@@ -94,19 +96,19 @@ const SetupStepMessaging = ({ onNext }) => {
             <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-4 animate-in fade-in zoom-in-95">
                 <div className="flex justify-between items-center">
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                        {(detectedConfig?.botToken && userType !== 'new') ? '偵測到的通訊配置' : '準備繫結的頻道'}
+                      {(detectedConfig?.botToken && userType !== 'new') ? t('setupMessaging.detectedConfig') : t('setupMessaging.readyChannel')}
                     </h4>
                     <button 
                         onClick={() => setShowFullSetup(true)}
                         className="text-[10px] font-black text-blue-600 hover:underline"
                     >
-                        重新選擇頻道
+                        {t('setupMessaging.reselectChannel')}
                     </button>
                 </div>
                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                     <div className="flex items-center justify-between mb-1">
-                        <p className="text-[9px] text-gray-400 uppercase font-black">{config.platform || 'Telegram'} Token</p>
-                        <div className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded uppercase">已同步</div>
+                    <p className="text-[9px] text-gray-400 uppercase font-black">{config.platform || t('setupMessaging.platformFallback')} {t('setupMessaging.tokenLabelSuffix')}</p>
+                        <div className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded uppercase">{t('setupMessaging.synced')}</div>
                     </div>
                     <p className="text-xs font-mono text-slate-700 break-all">
                         {config.botToken.slice(0, 10)}••••••••{config.botToken.slice(-4)}
@@ -117,7 +119,7 @@ const SetupStepMessaging = ({ onNext }) => {
                     <div className="space-y-2 animate-in fade-in duration-300">
                         <div className="flex items-center gap-2 text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1">
                             <Loader2 size={12} className="animate-spin" />
-                            頻道繫結中 (Real-time Logs)
+                            {t('setupMessaging.bindingLogs')}
                         </div>
                         <TerminalLog logs={onboardingAction.logs} height="h-32" />
                     </div>
@@ -136,11 +138,11 @@ const SetupStepMessaging = ({ onNext }) => {
                     className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-emerald-500/20 uppercase tracking-widest text-xs flex items-center justify-center gap-2"
                 >
                     {userType === 'existing' ? (
-                        <>確認通訊設定並繼續 <ArrowRight size={14} /></>
+                      <>{t('setupMessaging.actions.confirmContinue')} <ArrowRight size={14} /></>
                     ) : onboardingAction.executing ? (
-                        <><Loader2 size={16} className="animate-spin" /> 正在同步頻道頻率...</>
+                      <><Loader2 size={16} className="animate-spin" /> {t('setupMessaging.actions.syncing')}</>
                     ) : (
-                        <>授權並繫結頻道 (Authorize & Bond) <ArrowRight size={14} /></>
+                      <>{t('setupMessaging.actions.authorizeBond')} <ArrowRight size={14} /></>
                     )}
                 </button>
             </div>
@@ -154,7 +156,7 @@ const SetupStepMessaging = ({ onNext }) => {
                 <div className="space-y-3">
                      <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
                         <span className="w-5 h-5 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-[10px]">1</span>
-                        選擇對接頻道 (Channel)
+                      {t('setupMessaging.step1')}
                     </label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {CHANNEL_OPTIONS.map(channel => (
@@ -169,7 +171,7 @@ const SetupStepMessaging = ({ onNext }) => {
                                     {channel.icon}
                                 </div>
                                 <h3 className={`font-black text-[11px] ${config.platform === channel.id ? 'text-green-900' : 'text-gray-700'}`}>{channel.name}</h3>
-                                <p className="text-[9px] text-gray-400 font-medium truncate w-full">{channel.desc}</p>
+                                <p className="text-[9px] text-gray-400 font-medium truncate w-full">{t(channel.descKey)}</p>
                             </button>
                         ))}
                     </div>
@@ -180,14 +182,14 @@ const SetupStepMessaging = ({ onNext }) => {
                     <div className="flex justify-between items-center px-1">
                         <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2 mb-2">
                              <span className="w-5 h-5 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-[10px]">2</span>
-                            {selectedChannel.keyLabel}
+                            {t(selectedChannel.keyLabelKey)}
                         </label>
                         {config.platform === 'telegram' && (
                             <button 
                                 onClick={() => setShowGuide(true)}
                                 className="text-[10px] font-black text-blue-600 hover:text-blue-800 flex items-center gap-1 uppercase tracking-tighter"
                             >
-                                <HelpCircle size={12} /> 教學攻略
+                                <HelpCircle size={12} /> {t('setupMessaging.guideTitle')}
                             </button>
                         )}
                     </div>
@@ -195,7 +197,7 @@ const SetupStepMessaging = ({ onNext }) => {
                     <div className="relative">
                         <input 
                             type={selectedChannel.reqKey === false ? "text" : "password"}
-                            placeholder={selectedChannel.placeholder} 
+                            placeholder={t(selectedChannel.placeholderKey)} 
                             value={config.botToken}
                             onChange={(e) => {
                               setLocalError('');
@@ -209,7 +211,7 @@ const SetupStepMessaging = ({ onNext }) => {
                     {selectedChannel.reqKey === false && (
                         <div className="pt-2 px-1">
                             <p className="text-[11px] font-black text-emerald-600">
-                                ✓ 此頻道無須在此輸入 Token。在稍後的「核心發射」階段，CLI 將自動引導您完成互動式認證登入程序。
+                              {t('setupMessaging.noTokenNeeded')}
                             </p>
                         </div>
                     )}
@@ -221,7 +223,7 @@ const SetupStepMessaging = ({ onNext }) => {
                         <div className="space-y-2 animate-in fade-in duration-300">
                             <div className="flex items-center gap-2 text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1">
                                 <Loader2 size={12} className="animate-spin" />
-                                頻道繫結同步中 (Real-time Logs)
+                                {t('setupMessaging.bindingSyncLogs')}
                             </div>
                             <TerminalLog logs={onboardingAction.logs} height="h-32" />
                         </div>
@@ -240,13 +242,13 @@ const SetupStepMessaging = ({ onNext }) => {
                         className={`w-full flex items-center justify-center gap-2 ${onboardingAction.executing ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} disabled:bg-slate-100 disabled:text-slate-300 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs`}
                     >
                         {userType === 'existing' ? (
-                            <>確認通訊設定並繼續 <ArrowRight size={18} /></>
+                          <>{t('setupMessaging.actions.confirmContinue')} <ArrowRight size={18} /></>
                         ) : onboardingAction.executing ? (
                             <>
-                                <Loader2 size={18} className="animate-spin" /> 正在繫結通訊頻率...
+                            <Loader2 size={18} className="animate-spin" /> {t('setupMessaging.actions.binding')}
                             </>
                         ) : (
-                            <>授權並繫結頻道 (Authorize & Bond) <ArrowRight size={18} /></>
+                          <>{t('setupMessaging.actions.authorizeBond')} <ArrowRight size={18} /></>
                         )}
                     </button>
                 </div>
@@ -258,38 +260,38 @@ const SetupStepMessaging = ({ onNext }) => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-black text-slate-800">如何獲取 Telegram Token?</h3>
+                <h3 className="text-lg font-black text-slate-800">{t('setupMessaging.guide.howToGetTelegram')}</h3>
                 <button onClick={() => setShowGuide(false)} className="text-gray-400 hover:text-gray-600">✕</button>
               </div>
               <div className="space-y-6">
                 <div className="flex gap-4">
                   <div className="shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-sm font-black shadow-sm">1</div>
                   <p className="text-sm text-gray-600 leading-relaxed font-medium">
-                    在 Telegram 搜尋 <span className="font-black bg-gray-100 px-1.5 py-0.5 rounded text-blue-600 mx-1">@BotFather</span> 並點擊 Start。
+                    {t('setupMessaging.guide.step1Prefix')}<span className="font-black bg-gray-100 px-1.5 py-0.5 rounded text-blue-600 mx-1">@BotFather</span>{t('setupMessaging.guide.step1Suffix')}
                   </p>
                 </div>
                 <div className="flex gap-4">
                   <div className="shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-sm font-black shadow-sm">2</div>
                   <p className="text-sm text-gray-600 leading-relaxed font-medium">
-                    發送指令 <span className="font-black bg-gray-100 px-1.5 py-0.5 rounded mx-1">/newbot</span> 並依照指示為您的龍蝦命名（需以 _bot 結尾）。
+                    {t('setupMessaging.guide.step2Prefix')}<span className="font-black bg-gray-100 px-1.5 py-0.5 rounded mx-1">/newbot</span>{t('setupMessaging.guide.step2Suffix')}
                   </p>
                 </div>
                 <div className="flex gap-4">
                   <div className="shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-sm font-black shadow-sm">3</div>
                   <p className="text-sm text-gray-600 leading-relaxed font-medium">
-                    完成後，BotFather 會給您一串 API Token。**請務必妥善保管，切勿外流**。
+                    {t('setupMessaging.guide.step3')}
                   </p>
                 </div>
                 <div className="bg-emerald-50 p-4 rounded-2xl flex items-start gap-3 border border-emerald-100 mt-4 shadow-inner">
                   <CheckCircle2 size={16} className="text-emerald-500 mt-0.5" />
-                  <p className="text-[11px] text-emerald-800 font-bold leading-relaxed">小秘訣：這隻 Bot 將成為您與 OpenClaw 的專屬加密頻道，所有的分析回報都將在此進行。</p>
+                  <p className="text-[11px] text-emerald-800 font-bold leading-relaxed">{t('setupMessaging.guide.tip')}</p>
                 </div>
               </div>
               <button 
                 onClick={() => setShowGuide(false)}
                 className="w-full mt-8 py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 shadow-xl transition-all uppercase tracking-widest text-xs"
               >
-                我了解了，去填寫
+                {t('setupMessaging.guide.confirm')}
               </button>
             </div>
           </div>

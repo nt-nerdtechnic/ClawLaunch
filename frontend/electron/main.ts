@@ -1820,6 +1820,20 @@ async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
     return allSkills;
 }
 
+function uniqueNonEmptyPaths(paths: Array<string | undefined | null>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of paths) {
+    const p = String(raw || '').trim();
+    if (!p) continue;
+    const normalized = path.resolve(p);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
 
 app.whenReady().then(() => {
   createWindow().catch((err) => {
@@ -2153,11 +2167,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
     }
 
-    let workspaceSkills: any[] = [];
-    const effectiveWorkspacePath = workspacePath || possibleWorkspace;
-    if (effectiveWorkspacePath) {
-        workspaceSkills = await scanInstalledSkills(effectiveWorkspacePath);
-    }
+    const skillScanBases = uniqueNonEmptyPaths([
+      workspacePath,
+      configPath,
+      existingConfig?.workspace,
+      possibleWorkspace,
+    ]);
+    const workspaceSkills = await scanInstalledSkills(...skillScanBases);
 
     return { 
         code: 0, 
@@ -2275,7 +2291,11 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         if (finalConfigFilePath) {
             const content = await fs.readFile(finalConfigFilePath, 'utf-8');
             const configData = parseOpenClawConfig(content);
-            const workspaceSkills = await scanInstalledSkills(finalConfigDirPath, configData.corePath || '');
+            const skillScanBases = uniqueNonEmptyPaths([
+              configData.workspace,
+              finalConfigDirPath,
+            ]);
+            const workspaceSkills = await scanInstalledSkills(...skillScanBases);
             return {
                 code: 0,
                 stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath, workspaceSkills, coreSkills: CORE_SKILLS }),

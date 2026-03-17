@@ -8,16 +8,16 @@
     "standby": "STANDBY",
     "version": "VER 2026.1.0",
     "tabs": {
-        "monitor": "進程監控",
-        "analytics": "數據看板",
-        "skills": "技能管理",
-        "settings": "配置編輯"
+      "monitor": "進程監控",
+      "analytics": "數據看板",
+      "skills": "技能管理",
+      "settings": "配置編輯"
     },
     "headers": {
-        "monitor": "核心進程哨兵",
-        "analytics": "Token 消耗透視",
-        "skills": "技能插件矩陣",
-        "settings": "全局配置矩陣"
+      "monitor": "核心進程哨兵",
+      "analytics": "Token 消耗透視",
+      "skills": "技能插件矩陣",
+      "settings": "全局配置矩陣"
     },
     "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
     "logoutTooltip": "登出並重新設定"
@@ -93,7 +93,15 @@
         "standby": "待命",
         "blocked": "卡住"
       },
-      "queue": "排隊 {{count}}"
+      "queue": "排隊 {{count}}",
+      "roles": {
+        "main": "主控中樞 / Lead Supervisor",
+        "panda": "策略規劃 / Strategy",
+        "monkey": "工程實作 / Builder",
+        "owl": "數據審計 / Auditor",
+        "fox": "快速響應 / Ops",
+        "fallback": "執行單元 / Operator"
+      }
     },
     "taskSection": {
       "title": "任務分區",
@@ -123,11 +131,11 @@
       }
     },
     "status": {
-        "verified": "VERIFIED",
-        "analyzing": "ANALYZING...",
-        "node": "Node.js Engine",
-        "git": "Git Version Control",
-        "pnpm": "pnpm Manager"
+      "verified": "VERIFIED",
+      "analyzing": "ANALYZING...",
+      "node": "Node.js Engine",
+      "git": "Git Version Control",
+      "pnpm": "pnpm Manager"
     },
     "liveStream": "Live Stream",
     "decision": {
@@ -234,7 +242,11 @@
       "progress": "蝦窩佈置進度: {{current}} / {{total}}",
       "launch": "最後啟動階段"
     },
-    "backBtn": "← 返回上一步"
+    "backBtn": "← 返回上一步",
+    "brand": {
+      "mark": "L",
+      "name": "NT-ClawLaunch"
+    }
   },
   "welcome": {
     "title": "歡迎啟動 NT-Claw",
@@ -285,6 +297,29 @@
       "channel": "通訊頻道：{{platform}}",
       "apiKey": "API 密鑰：已加密保存 (****{{key}})",
       "enterBtn": "進入主儀表板"
+    },
+    "ui": {
+      "finalLaunchTitle": "最終啟動設定 (Final Launch)",
+      "finalLaunchDesc": "這是最後一步。背景服務安裝選項只會在這裡出現並生效。",
+      "startFinalCheck": "開始最終啟動檢查",
+      "errorDebugLog": "Error Debug Log",
+      "partialFailureTitle": "部分服務未就緒 (Partial Services Down)",
+      "partialFailureDesc": "檢查發現部分服務探測異常，您可以在 Dashboard 中手動啟動。",
+      "launchCheckLogs": "Launch Check Logs",
+      "partialFailureHint": "提示：您可以重試檢查，或直接進入 Dashboard。",
+      "retryCheck": "重試檢查 (Retry)",
+      "enterDashboard": "進入 Dashboard",
+      "verificationPulse": "驗證進度 (Verification Pulse)",
+      "openclawLaunchLogs": "OpenClaw Launch Logs",
+      "configSummary": "系統配置摘要 (Config Summary)",
+      "userProfile": "用戶定位",
+      "existingInstall": "已有安裝 (Existing)",
+      "newProject": "新建專案 (New)",
+      "soulCore": "靈魂核心",
+      "communicationTerminal": "通訊終端",
+      "installedSkills": "已安裝技能",
+      "skillModules": "{{count}} 項模組",
+      "unknown": "Unknown"
     }
   },
   "modelSetup": {
@@ -299,6 +334,8 @@
     },
     "env": {
       "title": "組建環境狀態",
+      "nodeLabel": "Node.js",
+      "gitLabel": "Git",
       "loading": "檢測中...",
       "notInstalled": "未安裝",
       "ready": "已就緒"
@@ -327,6 +364,7 @@
       "summaryTitleCurrent": "當前準備注入的靈魂",
       "summaryTitleDetected": "偵測到的核心配置",
       "changeModel": "更換其他模型",
+      "authChoiceLabel": "Auth Choice",
       "coreModel": "核心模型",
       "notSet": "未設定",
       "apiKey": "API 密鑰",
@@ -334,6 +372,7 @@
       "readyStartBtn": "準備就緒：快速對接並啟動",
       "readyInjectBtn": "準備就緒：注入靈魂核心",
       "step1Title": "選擇主理模型 (靈魂核心)",
+      "c35Desc": "最強混合推論，程式與邏輯推薦首選。",
       "c37Desc": "最強混合推論，程式與邏輯推薦首選。",
       "gpt4oDesc": "綜合平衡型，API 反應迅速，生態系成熟。",
       "deepseekDesc": "超高性價比，適合大規模自動化任務。",
@@ -344,7 +383,52 @@
       "getKey": "獲取密鑰",
       "keyPlaceholder": "sk-...",
       "keyHelper": "密鑰僅會加密儲存於您的本地電腦。若使用專屬模型或本地部署，此項可留空。",
-      "confirmBtn": "確認並綁定通訊軟體"
+      "confirmBtn": "確認並綁定通訊軟體",
+      "authHealthWarning": "偵測到授權風險：critical {{critical}} / warn {{warn}}。建議先到 Settings > 授權管理修復後再啟動。",
+      "pathRequiredError": "請先完成三區路徑設定（Core / Config / Workspace）後再進行模型授權。",
+      "tokenCommandRequired": "請先輸入要執行的指令",
+      "commandRunFailed": "指令執行失敗",
+      "commandRunError": "執行指令時發生錯誤",
+      "authSyncing": "授權同步中 (Real-time Logs)",
+      "aligning": "正在對齊頻率 (Aligning...)",
+      "authorizeSoulCore": "向靈魂核心授權 (Authorize Soul Core)",
+      "providerStepTitle": "選擇靈魂生態系 (Provider)",
+      "authChoiceStepTitle": "選擇授權模式 (Auth Choice)",
+      "inputApiKey": "輸入 API 密鑰",
+      "tokenCommandTitle": "CLI 指令（直接取得 Token）",
+      "tokenCommandPlaceholder": "claude setup-token",
+      "running": "執行中",
+      "runCommand": "執行指令",
+      "tokenCommandHint": "執行後請在彈出的終端機完成授權，取得 Token 後貼到上方 API 密鑰欄位。",
+      "noApiKeyNeeded": "✓ 此授權模式無須輸入 API 密鑰。按下授權後將會進行對應的驗證流程（如自動開啟瀏覽器或本地服務）。",
+      "confirmAuthContinue": "確認核心授權並繼續",
+      "aligningSoulFrequency": "對齊靈魂頻率中...",
+      "choiceDesc": {
+        "anthropicApiKey": "輸入您的 API 密鑰",
+        "setupTokenCli": "貼上由 CLI 產生的 Setup-Token",
+        "openaiApiKey": "輸入您的 sk- API 密鑰",
+        "openaiCodexOauth": "透過瀏覽器登入授權，無須輸入 Key",
+        "geminiApiKey": "輸入您的 AIzaSy... 密鑰",
+        "googleGeminiCliOauth": "非官方 OAuth 流程授權",
+        "minimaxApiKey": "官方 API Key 授權",
+        "minimaxOauth": "透過瀏覽器授權登入",
+        "ollamaLocal": "本地運行開源模型 (11434 端口)，隱私至上",
+        "vllmLocal": "自定義本地伺服器 / OpenAI 相容介面",
+        "chutesOauth": "透過 Chutes OAuth 登入",
+        "moonshotApiKey": "輸入 Kimi API Key",
+        "openrouterApiKey": "支援多種模型，包含 Llama 3",
+        "xaiApiKey": "輸入 Grok API Key"
+      },
+      "choiceHelp": {
+        "setupTokenCli": "可在下方直接執行「claude setup-token」來獲取授權 Token"
+      },
+      "providerDesc": {
+        "moonshot": "Kimi K2.5 / 長文本專家",
+        "openrouter": "統一 API 閘道"
+      },
+      "tokenFlowTitle": "Claude Token 授權流程",
+      "neuralLinking": "「神經連結建立中，請保持頻率一致...」",
+      "injectingSoul": "「正在將靈魂注入機甲核心...」"
     },
     "daemon": {
       "title": "背景 Gateway 服務",
@@ -378,7 +462,11 @@
       "deleting": "正在移除技能...",
       "importSuccess": "技能匯入成功！",
       "importError": "匯入失敗：{{msg}}",
-      "deleteConfirm": "確定要移除技能「{{name}}」嗎？這將會刪除工作區內的資料夾且無法還原。"
+      "deleteConfirm": "確定要移除技能「{{name}}」嗎？這將會刪除工作區內的資料夾且無法還原。",
+      "electronUnavailable": "electronAPI 不可用，請確認 Electron 環境正確啟動。",
+      "parseError": "技能資料解析失敗，請重試。",
+      "scanFailed": "掃描失敗，請重試。",
+      "unknownScanError": "掃描時發生未知錯誤。"
     },
     "actions": {
       "import": "匯入手邊技能",
@@ -477,10 +565,121 @@
       "riskOwnership": "風險歸屬"
     }
   },
+  "setupMessaging": {
+    "title": "繫結您的通訊頻道 (Bonding Channel)",
+    "titleLocked": "通訊頻率已鎖定",
+    "subtitle": "OpenClaw 需要一個加密頻道與您建立心靈感應",
+    "subtitleLocked": "「機甲通訊模組已就緒，等待最後指令...」",
+    "detectedConfig": "偵測到的通訊配置",
+    "readyChannel": "準備繫結的頻道",
+    "reselectChannel": "重新選擇頻道",
+    "tokenLabelSuffix": "Token",
+    "synced": "已同步",
+    "bindingLogs": "頻道繫結中 (Real-time Logs)",
+    "bindingSyncLogs": "頻道繫結同步中 (Real-time Logs)",
+    "step1": "選擇對接頻道 (Channel)",
+    "guideTitle": "教學攻略",
+    "noTokenNeeded": "✓ 此頻道無須在此輸入 Token。在稍後的「核心發射」階段，CLI 將自動引導您完成互動式認證登入程序。",
+    "pathNames": {
+      "core": "Core Path",
+      "config": "Config Path",
+      "workspace": "Workspace Path"
+    },
+    "errors": {
+      "pathRequired": "請先完成路徑設定：{{paths}}"
+    },
+    "platformFallback": "telegram",
+    "actions": {
+      "confirmContinue": "確認通訊設定並繼續",
+      "syncing": "正在同步頻道頻率...",
+      "binding": "正在繫結通訊頻率...",
+      "authorizeBond": "授權並繫結頻道 (Authorize & Bond)"
+    },
+    "channels": {
+      "telegram": {
+        "desc": "Bot API， 最推薦的加密頻道",
+        "placeholder": "12345678:ABCDefgh...",
+        "keyLabel": "Bot API Token"
+      },
+      "whatsapp": {
+        "desc": "WhatsApp Web QR 連結模式",
+        "placeholder": "無須輸入，稍後掃描 QR Code",
+        "keyLabel": "WhatsApp Account ID (可選留空)"
+      },
+      "discord": {
+        "desc": "穩定支援的 Bot API",
+        "placeholder": "Discord Bot Token...",
+        "keyLabel": "Bot Token"
+      },
+      "irc": {
+        "desc": "連線至傳統 IRC 伺服器網域",
+        "placeholder": "irc.libera.chat:6697...",
+        "keyLabel": "IRC Server / Nick (稍後詳細設定)"
+      },
+      "googlechat": {
+        "desc": "Google Workspace Webhook",
+        "placeholder": "Google Chat Webhook URL...",
+        "keyLabel": "Webhook URL"
+      },
+      "slack": {
+        "desc": "原生 Socket Mode 支援",
+        "placeholder": "xoxb-xxxx-xxxx...",
+        "keyLabel": "Bot Token"
+      },
+      "signal": {
+        "desc": "透過 signal-cli 連接，高隱私",
+        "placeholder": "Signal REST API URL 或留空",
+        "keyLabel": "Signal Config (稍後詳細設定)"
+      },
+      "imessage": {
+        "desc": "實驗性支援 (imsg)",
+        "placeholder": "稍後設定",
+        "keyLabel": "iMessage ID (稍後詳細設定)"
+      },
+      "line": {
+        "desc": "LINE Messaging API Webhook",
+        "placeholder": "LINE Channel Access Token...",
+        "keyLabel": "Channel Access Token"
+      }
+    },
+    "guide": {
+      "howToGetTelegram": "如何獲取 Telegram Token?",
+      "step1Prefix": "在 Telegram 搜尋 ",
+      "step1Suffix": " 並點擊 Start。",
+      "step2Prefix": "發送指令 ",
+      "step2Suffix": " 並依照指示為您的龍蝦命名（需以 _bot 結尾）。",
+      "step3": "完成後，BotFather 會給您一串 API Token。請務必妥善保管，切勿外流。",
+      "tip": "小秘訣：這隻 Bot 將成為您與 OpenClaw 的專屬加密頻道，所有的分析回報都將在此進行。",
+      "confirm": "我了解了，去填寫"
+    }
+  },
   "setupSkills": {
     "title": "擴展您的龍蝦超能力",
     "subtitle": "從 ClawHub 勾選您想安裝的額外技能{{detected}}。",
     "detectedSuffix": "（已為您偵測到 {{count}} 個已安裝技能）",
+    "manager": {
+      "title": "賦予您的龍蝦超級能力",
+      "subtitle": "這裡管理已安裝技能：可掃描、匯入、刪除；能力開關請在儀表板技能管理中調整。",
+      "import": "匯入技能",
+      "rescanTitle": "重新掃描技能",
+      "corePanelTitle": "核心系統狀態 (Stability Core)",
+      "coreSoul": "靈魂核心 (Soul Core)",
+      "coreCli": "終端電橋 (CLI Bridge)",
+      "removeTitle": "移除技能",
+      "removeConfirm": "確定要移除技能 {{name}} 嗎？",
+      "fallbackDesc": "工作區技能。",
+      "defaultCategory": "PLUGIN",
+      "installed": "已安裝",
+      "emptyTitle": "尚未偵測到工作區技能",
+      "emptyDesc": "請先匯入技能，或確認 skills 目錄已存在於 Workspace 或 Config 路徑後重新掃描。",
+      "next": "確認已安裝技能並繼續",
+      "syncing": "正在同步技能狀態...",
+      "errorParse": "技能資料解析失敗，請稍後再試。",
+      "errorScan": "掃描技能失敗。",
+      "errorImport": "匯入技能失敗。",
+      "errorRemove": "移除技能失敗。",
+      "errorMissingBaseDir": "尚未設定工作區或設定區路徑，請先完成初始化。"
+    },
     "coreLabel": "機甲核心 (已預設啟動)",
     "recommended": "推薦",
     "installed": "目前已安裝",
@@ -519,6 +718,8 @@
     "title": "建立您的專案基地",
     "subtitle": "請指定三個關鍵目錄來存放您的核心、配置與工作空間。",
     "selectVersion": "核心版本 (OpenClaw Branch / Tag)",
+    "versionSource": "GITHUB CLAW",
+    "latestSuffix": "(Latest)",
     "downloadMethod": "下載與部署方式 (推薦網路環境較弱時使用 ZIP)",
     "corePath": "主核心資料夾 (Core)",
     "configPath": "設定資料夾 (Config)",
@@ -537,6 +738,49 @@
     "success": "初始化完成！正在進入下一步...",
     "error": "初始化失敗：{{msg}}",
     "cancelBtn": "取消下載與初始化",
-    "cancelSuccess": ">>> 已取消下載進程並清理環境。"
+    "cancelSuccess": ">>> 已取消下載進程並清理環境。",
+    "configPathWarning": "⚠️ 此目錄已有 OpenClaw 設定（含授權資料）。新建專案建議改用全新目錄，避免繼承舊授權。",
+    "zipModeTitle": "ZIP 極速下載模式",
+    "zipModeDesc": "💡 已為您選擇最穩定的傳輸方案，避開 Git 卡頓，確保部署成功。",
+    "summaryTitle": "Initialization Summary",
+    "summaryNoNewFiles": "Success. No new files were created in this run; existing paths were reused.",
+    "resolvedPaths": "Resolved Paths",
+    "pathCoreLabel": "core",
+    "pathConfigLabel": "config",
+    "pathWorkspaceLabel": "workspace",
+    "alreadyExisted": "Already Existed",
+    "nextStepBtn": "點擊此處繼續下一步 (Next Step)",
+    "logTitle": "OpenClaw Initialization",
+    "footerLabel": "OpenClaw Infrastructure Provisioning System"
+  },
+  "language": {
+    "toggleTitle": "切換語言 / Switch Language",
+    "labels": {
+      "zhTW": "繁體中文",
+      "zhCN": "简体中文",
+      "en": "English"
+    }
+  },
+  "updateBanner": {
+    "title": "發現龍蝦新演化 {{version}}",
+    "subtitle": "目前版本: {{version}} • 建議立即升級以同步最新底層協定",
+    "actions": {
+      "later": "先不要",
+      "updating": "正在升級核心...",
+      "updateNow": "立即升級"
+    },
+    "success": {
+      "title": "系統更新成功！",
+      "desc": "版本已升級至 {{version}}。請立即重啟以啟動新核心。",
+      "restartNow": "立即重啟"
+    },
+    "alerts": {
+      "updateFailed": "更新失敗，請檢查日誌輸出。",
+      "systemError": "更新系統異常。"
+    },
+    "logs": {
+      "title": "System Update Core Logs",
+      "start": "🚀 啟動系統更新程序..."
+    }
   }
 }

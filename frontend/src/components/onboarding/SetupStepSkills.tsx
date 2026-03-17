@@ -16,8 +16,8 @@ const SetupStepSkills = ({ onNext }) => {
   const [errorMsg, setErrorMsg] = React.useState('');
 
   const coreSystems = [
-    { id: 'soul-core', name: '靈魂核心 (Soul Core)', icon: <Zap size={14} /> },
-    { id: 'cli-bridge', name: '終端電橋 (CLI Bridge)', icon: <Layout size={14} /> }
+    { id: 'soul-core', name: t('setupSkills.manager.coreSoul'), icon: <Zap size={14} /> },
+    { id: 'cli-bridge', name: t('setupSkills.manager.coreCli'), icon: <Layout size={14} /> }
   ];
 
   const detectedSkills = workspaceSkills || [];
@@ -38,13 +38,13 @@ const SetupStepSkills = ({ onNext }) => {
             setWorkspaceSkills([]);
           }
         } catch (e) {
-          setErrorMsg('技能資料解析失敗，請稍後再試。');
+          setErrorMsg(t('setupSkills.manager.errorParse'));
         }
       } else {
-        setErrorMsg(result?.stderr || '掃描技能失敗。');
+        setErrorMsg(result?.stderr || t('setupSkills.manager.errorScan'));
       }
     } catch (e) {
-      setErrorMsg(e?.message || '掃描技能失敗。');
+      setErrorMsg(e?.message || t('setupSkills.manager.errorScan'));
     }
     setScanning(false);
   };
@@ -66,17 +66,17 @@ const SetupStepSkills = ({ onNext }) => {
           await rescan();
         }
       } else {
-        setErrorMsg(result?.stderr || '匯入技能失敗。');
+        setErrorMsg(result?.stderr || t('setupSkills.manager.errorImport'));
       }
     } catch (e) {
-      setErrorMsg(e?.message || '匯入技能失敗。');
+      setErrorMsg(e?.message || t('setupSkills.manager.errorImport'));
     }
     setActing(false);
   };
 
   const handleRemove = async (skillId, skillName) => {
     if (!window.electronAPI || acting || scanning) return;
-    const confirmed = confirm(`確定要移除技能 ${skillName} 嗎？`);
+    const confirmed = confirm(t('setupSkills.manager.removeConfirm', { name: skillName }));
     if (!confirmed) return;
 
     setErrorMsg('');
@@ -84,17 +84,17 @@ const SetupStepSkills = ({ onNext }) => {
     try {
       const baseDir = config.workspacePath || config.configPath;
       if (!baseDir) {
-        setErrorMsg('尚未設定工作區或設定區路徑，請先完成初始化。');
+        setErrorMsg(t('setupSkills.manager.errorMissingBaseDir'));
         setActing(false);
         return;
       }
       const result = await window.electronAPI.exec(`skill:delete ${baseDir}/skills/${skillId}`);
       if (result?.exitCode !== 0) {
-        setErrorMsg(result?.stderr || '移除技能失敗。');
+        setErrorMsg(result?.stderr || t('setupSkills.manager.errorRemove'));
       }
       await rescan();
     } catch (e) {
-      setErrorMsg(e?.message || '移除技能失敗。');
+      setErrorMsg(e?.message || t('setupSkills.manager.errorRemove'));
     }
     setActing(false);
   };
@@ -116,11 +116,11 @@ const SetupStepSkills = ({ onNext }) => {
             <Package size={20} />
           </div>
           <h2 className="text-2xl font-bold text-gray-800">
-            賦予您的龍蝦超級能力
+            {t('setupSkills.manager.title')}
           </h2>
         </div>
         <p className="text-gray-500 italic">
-          「這裡管理已安裝技能：可掃描、匯入、刪除；能力開關請在儀表板技能管理中調整。」
+          {t('setupSkills.manager.subtitle')}
         </p>
       </div>
 
@@ -130,13 +130,13 @@ const SetupStepSkills = ({ onNext }) => {
           disabled={acting || scanning}
           className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-2xl text-xs font-black transition-all active:scale-95 disabled:opacity-50"
         >
-          <PackagePlus size={14} /> 匯入技能
+          <PackagePlus size={14} /> {t('setupSkills.manager.import')}
         </button>
         <button
           onClick={rescan}
           disabled={scanning || acting}
           className="p-2.5 rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all disabled:opacity-40"
-          title="重新掃描技能"
+          title={t('setupSkills.manager.rescanTitle')}
         >
           <RefreshCw size={16} className={scanning ? 'animate-spin' : ''} />
         </button>
@@ -148,7 +148,7 @@ const SetupStepSkills = ({ onNext }) => {
             <Zap size={80} className="text-blue-500" />
         </div>
         <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4 relative z-10">
-          核心系統狀態 (Stability Core)
+          {t('setupSkills.manager.corePanelTitle')}
         </div>
         <div className="flex flex-wrap gap-3 relative z-10">
           {coreSystems.map(skill => (
@@ -173,7 +173,7 @@ const SetupStepSkills = ({ onNext }) => {
                   onClick={() => handleRemove(skill.id, String(skill.name || skill.id))}
                   disabled={acting || scanning}
                   className="absolute top-4 right-4 p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-40"
-                  title="移除技能"
+                  title={t('setupSkills.manager.removeTitle')}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -183,14 +183,14 @@ const SetupStepSkills = ({ onNext }) => {
                 </div>
                 <h3 className="font-black text-gray-800 text-sm mb-1">{String(skill.name || skill.id)}</h3>
                 <p className="text-[11px] text-gray-400 leading-relaxed font-medium flex-grow">
-                  {String(skill.desc || '工作區技能。')}
+                  {String(skill.desc || t('setupSkills.manager.fallbackDesc'))}
                 </p>
 
                 <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                   <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
-                    {String(skill.category || 'PLUGIN')}
+                    {String(skill.category || t('setupSkills.manager.defaultCategory'))}
                   </span>
-                  <span className="text-[9px] font-black text-emerald-600 uppercase">已安裝</span>
+                  <span className="text-[9px] font-black text-emerald-600 uppercase">{t('setupSkills.manager.installed')}</span>
                 </div>
               </div>
             );
@@ -198,16 +198,16 @@ const SetupStepSkills = ({ onNext }) => {
         </div>
       ) : (
         <div className="mb-8 rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-8 text-center">
-          <p className="text-sm font-semibold text-slate-600">尚未偵測到工作區技能</p>
+          <p className="text-sm font-semibold text-slate-600">{t('setupSkills.manager.emptyTitle')}</p>
           <p className="mt-2 text-xs text-slate-400">
-            請先匯入技能，或確認 skills 目錄已存在於 Workspace 或 Config 路徑後重新掃描。
+            {t('setupSkills.manager.emptyDesc')}
           </p>
           <button
             onClick={handleImport}
             disabled={acting || scanning}
             className="mt-5 px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-blue-600 hover:bg-slate-50 transition-all disabled:opacity-50"
           >
-            匯入技能
+            {t('setupSkills.manager.import')}
           </button>
         </div>
       )}
@@ -227,13 +227,13 @@ const SetupStepSkills = ({ onNext }) => {
           className={`w-full flex items-center justify-center gap-3 ${(acting || scanning) ? 'bg-blue-400' : 'bg-slate-900 hover:bg-slate-800'} text-white font-black py-4 px-8 rounded-2xl transition-all shadow-2xl uppercase tracking-widest text-xs`}
         >
           {userType === 'existing' ? (
-              <>確認已安裝技能並繼續 <ArrowRight size={18} /></>
+              <>{t('setupSkills.manager.next')} <ArrowRight size={18} /></>
           ) : (acting || scanning) ? (
              <>
-                <RefreshCw size={18} className="animate-spin" /> 正在同步技能狀態...
+                <RefreshCw size={18} className="animate-spin" /> {t('setupSkills.manager.syncing')}
             </>
           ) : (
-            <>確認已安裝技能並繼續 <ArrowRight size={18} /></>
+            <>{t('setupSkills.manager.next')} <ArrowRight size={18} /></>
           )}
         </button>
       </div>

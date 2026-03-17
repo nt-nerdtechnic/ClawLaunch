@@ -148,8 +148,8 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
       <div className="mt-12 flex items-center gap-4">
         <LanguageToggle />
         <div className="flex items-center gap-2 opacity-20 grayscale">
-          <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white font-bold">L</div>
-          <span className="font-bold text-gray-900 tracking-tighter">NT-ClawLaunch</span>
+          <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white font-bold">{t('wizard.brand.mark')}</div>
+          <span className="font-bold text-gray-900 tracking-tighter">{t('wizard.brand.name')}</span>
         </div>
       </div>
       </div>{/* end my-auto wrapper */}

@@ -5,6 +5,15 @@ import { execInTerminal } from '../utils/terminal';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
+const DEFAULT_AGENT_ID = 'main';
+
+const resolveIsolatedAgentDir = (configPath: string, agentId: string = DEFAULT_AGENT_ID) => {
+  const normalizedConfigPath = String(configPath || '').trim().replace(/[\\/]+$/, '');
+  const normalizedAgentId = String(agentId || DEFAULT_AGENT_ID).trim() || DEFAULT_AGENT_ID;
+  if (!normalizedConfigPath) return '';
+  return `${normalizedConfigPath}/agents/${normalizedAgentId}/agent`;
+};
+
 const shortenText = (value: string, maxLen: number = 1200) => {
   const text = String(value || '').trim();
   if (!text) return '';
@@ -471,7 +480,10 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       const execCmd = await resolveExecCmd(corePath);
       const stateDirEnv = configPath ? `OPENCLAW_STATE_DIR=${shellQuote(configPath)} ` : '';
       const configPathEnv = configPath ? `OPENCLAW_CONFIG_PATH=${shellQuote(`${configPath}/openclaw.json`)} ` : '';
-      const envPrefix = `${stateDirEnv}${configPathEnv}`;
+      const isolatedAgentDir = configPath ? resolveIsolatedAgentDir(configPath) : '';
+      const agentDirEnv = isolatedAgentDir ? `OPENCLAW_AGENT_DIR=${shellQuote(isolatedAgentDir)} ` : '';
+      const legacyAgentDirEnv = isolatedAgentDir ? `PI_CODING_AGENT_DIR=${shellQuote(isolatedAgentDir)} ` : '';
+      const envPrefix = `${stateDirEnv}${configPathEnv}${agentDirEnv}${legacyAgentDirEnv}`;
       const cdCorePath = `cd ${shellQuote(corePath)}`;
       const oauthAuthChoices = new Set([
         'openai-codex',
@@ -489,6 +501,9 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         const migrateRes = await (window as any).electronAPI.exec(`config:migrate-openclaw ${JSON.stringify(migratePayload)}`);
         if (!isCommandSuccess(migrateRes)) {
           addLocalLog('⚠️ 設定檔修正失敗，將繼續嘗試執行。', 'stderr');
+        }
+        if (isolatedAgentDir) {
+          addLocalLog(`🔒 已啟用專案隔離 agent store：${isolatedAgentDir}`, 'system');
         }
       }
 

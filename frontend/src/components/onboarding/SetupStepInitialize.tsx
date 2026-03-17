@@ -122,7 +122,7 @@ const SetupStepInitialize = ({ onNext }) => {
                     let warnMsg = '';
                     if (key === 'configPath') {
                         // 特別提示：此目錄已有 OpenClaw 設定與授權資料，新建專案建議改用全新路徑
-                        warnMsg = '⚠️ 此目錄已有 OpenClaw 設定（含授權資料）。新建專案建議改用全新目錄，避免繼承舊授權。';
+                        warnMsg = t('setupInitialize.configPathWarning');
                     } else {
                         let subDir = '';
                         if (key === 'corePath') subDir = 'openclaw';
@@ -243,7 +243,7 @@ const SetupStepInitialize = ({ onNext }) => {
                             <span className="text-blue-500 opacity-60"><Package size={14} /></span>
                             {t('setupInitialize.selectVersion')}
                         </p>
-                        <span className="text-[9px] text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100/50">GITHUB CLAW</span>
+                        <span className="text-[9px] text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100/50">{t('setupInitialize.versionSource')}</span>
                     </div>
                     <div className="relative group">
                         <select 
@@ -252,7 +252,7 @@ const SetupStepInitialize = ({ onNext }) => {
                             className="w-full bg-slate-50 hover:bg-white border border-gray-100 hover:border-blue-500/30 transition-all appearance-none rounded-2xl p-3 text-[12px] font-mono text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/10"
                         >
                             {versions.map(v => (
-                                <option key={v} value={v}>{v === 'main' ? `${v} (Latest)` : v}</option>
+                                <option key={v} value={v}>{v === 'main' ? `${v} ${t('setupInitialize.latestSuffix')}` : v}</option>
                             ))}
                         </select>
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-blue-500 transition-colors">
@@ -272,9 +272,9 @@ const SetupStepInitialize = ({ onNext }) => {
                             <Database size={20} />
                         </div>
                         <div className="flex-1">
-                            <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-tight">ZIP 極速下載模式</h4>
+                            <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-tight">{t('setupInitialize.zipModeTitle')}</h4>
                             <p className="text-[9px] text-indigo-500 font-medium italic">
-                                💡 已為您選擇最穩定的傳輸方案，避開 Git 卡頓，確保部署成功。
+                                {t('setupInitialize.zipModeDesc')}
                             </p>
                         </div>
                     </div>
@@ -317,7 +317,7 @@ const SetupStepInitialize = ({ onNext }) => {
                     {initialized && (
                         <div className="w-full bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
                             <p className="text-[11px] font-black text-emerald-800 uppercase tracking-wider mb-3">
-                                Initialization Summary
+                                {t('setupInitialize.summaryTitle')}
                             </p>
                             <div className="space-y-3">
                                 {createdItems.length > 0 ? (
@@ -330,15 +330,15 @@ const SetupStepInitialize = ({ onNext }) => {
                                     </div>
                                 ) : (
                                     <p className="text-[11px] text-emerald-800 font-semibold">
-                                        Success. No new files were created in this run; existing paths were reused.
+                                        {t('setupInitialize.summaryNoNewFiles')}
                                     </p>
                                 )}
 
                                 <div className="space-y-1 pt-2 border-t border-emerald-200/70">
-                                    <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">Resolved Paths</p>
-                                    <p className="text-[11px] font-mono text-emerald-900 break-all">core: {config.corePath || '-'}</p>
-                                    <p className="text-[11px] font-mono text-emerald-900 break-all">config: {config.configPath || '-'}</p>
-                                    <p className="text-[11px] font-mono text-emerald-900 break-all">workspace: {config.workspacePath || '-'}</p>
+                                    <p className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">{t('setupInitialize.resolvedPaths')}</p>
+                                    <p className="text-[11px] font-mono text-emerald-900 break-all">{t('setupInitialize.pathCoreLabel')}: {config.corePath || '-'}</p>
+                                    <p className="text-[11px] font-mono text-emerald-900 break-all">{t('setupInitialize.pathConfigLabel')}: {config.configPath || '-'}</p>
+                                    <p className="text-[11px] font-mono text-emerald-900 break-all">{t('setupInitialize.pathWorkspaceLabel')}: {config.workspacePath || '-'}</p>
                                 </div>
                             </div>
                         </div>
@@ -347,7 +347,7 @@ const SetupStepInitialize = ({ onNext }) => {
                     {initialized && existingItems.length > 0 && (
                         <div className="w-full bg-amber-50 border border-amber-100 rounded-2xl p-4">
                             <p className="text-[11px] font-black text-amber-800 uppercase tracking-wider mb-3">
-                                Already Existed
+                                {t('setupInitialize.alreadyExisted')}
                             </p>
                             <div className="max-h-40 overflow-auto space-y-1">
                                 {existingItems.map((item) => (
@@ -370,7 +370,7 @@ const SetupStepInitialize = ({ onNext }) => {
                             }`}
                         >
                             {checking ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20} />}
-                            {initialized ? '點擊此處繼續下一步 (Next Step)' : t('setupInitialize.startBtnDownload')}
+                            {initialized ? t('setupInitialize.nextStepBtn') : t('setupInitialize.startBtnDownload')}
                         </button>
                     ) : (
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
@@ -399,7 +399,7 @@ const SetupStepInitialize = ({ onNext }) => {
                         <TerminalLog 
                             logs={logs} 
                             height="h-32" 
-                            title="OpenClaw Initialization" 
+                            title={t('setupInitialize.logTitle')} 
                         />
                     )}
                 </div>
@@ -407,7 +407,7 @@ const SetupStepInitialize = ({ onNext }) => {
 
             <div className="mt-8 text-center">
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">
-                    OpenClaw Infrastructure Provisioning System
+                    {t('setupInitialize.footerLabel')}
                 </p>
             </div>
         </div>

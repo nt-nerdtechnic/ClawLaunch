@@ -113,7 +113,7 @@ export function SkillManager() {
 
   const rescan = async () => {
     if (!window.electronAPI) {
-      setScanError('electronAPI 不可用，請確認 Electron 環境正確啟動。');
+      setScanError(t('skillManager.status.electronUnavailable'));
       return;
     }
     setScanError('');
@@ -128,13 +128,13 @@ export function SkillManager() {
             setWorkspaceSkills(data.existingConfig.workspaceSkills);
           }
         } catch (e) {
-          setScanError('技能資料解析失敗，請重試。');
+          setScanError(t('skillManager.status.parseError'));
         }
       } else {
-        setScanError(result?.stderr || '掃描失敗，請重試。');
+        setScanError(result?.stderr || t('skillManager.status.scanFailed'));
       }
     } catch (e: any) {
-      setScanError(e?.message || '掃描時發生未知錯誤。');
+      setScanError(e?.message || t('skillManager.status.unknownScanError'));
     }
     setScanning(false);
   };

@@ -50,8 +50,8 @@ const SetupStepLaunch = ({ onComplete }) => {
           <div className="w-20 h-20 bg-blue-100 rounded-[28px] flex items-center justify-center text-blue-600 mx-auto border border-blue-200/60">
             <Rocket size={34} />
           </div>
-          <h2 className="text-3xl font-black text-gray-900 tracking-tight">最終啟動設定 (Final Launch)</h2>
-          <p className="text-gray-500 font-medium">這是最後一步。背景服務安裝選項只會在這裡出現並生效。</p>
+          <h2 className="text-3xl font-black text-gray-900 tracking-tight">{t('launch.ui.finalLaunchTitle')}</h2>
+          <p className="text-gray-500 font-medium">{t('launch.ui.finalLaunchDesc')}</p>
         </div>
 
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start justify-between gap-4 mb-8">
@@ -84,7 +84,7 @@ const SetupStepLaunch = ({ onComplete }) => {
           onClick={runSetup}
           className="w-full flex items-center justify-center gap-3 bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl uppercase tracking-widest text-xs"
         >
-          開始最終啟動檢查 <ArrowRight size={18} />
+          {t('launch.ui.startFinalCheck')} <ArrowRight size={18} />
         </button>
       </div>
     );
@@ -100,7 +100,7 @@ const SetupStepLaunch = ({ onComplete }) => {
               <p className="text-red-500 mt-4 font-mono text-sm px-4 py-2 bg-red-50 rounded-xl inline-block">{onboardingAction.error}</p>
               
               <div className="mt-8">
-                  <TerminalLog logs={onboardingAction.logs} height="h-48" title="Error Debug Log" />
+                  <TerminalLog logs={onboardingAction.logs} height="h-48" title={t('launch.ui.errorDebugLog')} />
               </div>
 
               <button 
@@ -119,29 +119,29 @@ const SetupStepLaunch = ({ onComplete }) => {
               <div className="w-24 h-24 bg-amber-100 rounded-[32px] flex items-center justify-center text-amber-600 mx-auto mb-8 border border-amber-200/50">
                   <AlertCircle size={48} />
               </div>
-              <h2 className="text-2xl font-bold text-gray-800">部分服務未就緒 (Partial Services Down)</h2>
-              <p className="text-gray-500 mt-2 text-sm">檢查發現部分服務探測異常，您可以在 Dashboard 中手動啟動。</p>
+                <h2 className="text-2xl font-bold text-gray-800">{t('launch.ui.partialFailureTitle')}</h2>
+                <p className="text-gray-500 mt-2 text-sm">{t('launch.ui.partialFailureDesc')}</p>
 
               <div className="mt-6">
-                  <TerminalLog logs={onboardingAction.logs} height="h-40" title="Launch Check Logs" />
+                  <TerminalLog logs={onboardingAction.logs} height="h-40" title={t('launch.ui.launchCheckLogs')} />
               </div>
 
               <div className="mt-8 flex flex-col gap-3">
                   <p className="text-[11px] text-gray-400 font-medium">
-                      提示：您可以重試檢查，或直接進入 Dashboard。
+                    {t('launch.ui.partialFailureHint')}
                   </p>
                   <div className="flex gap-3">
                       <button
                           onClick={() => { setProgress(0); onboardingAction.reset(); runSetup(); }}
                           className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-4 rounded-2xl font-black transition-all active:scale-95 text-sm"
                       >
-                          重試檢查 (Retry)
+                            {t('launch.ui.retryCheck')}
                       </button>
                       <button
                           onClick={onComplete}
                           className="flex-1 bg-amber-500 hover:bg-amber-400 text-white px-6 py-4 rounded-2xl font-black transition-all shadow-lg active:scale-95 text-sm"
                       >
-                          進入 Dashboard
+                            {t('launch.ui.enterDashboard')}
                       </button>
                   </div>
               </div>
@@ -183,9 +183,9 @@ const SetupStepLaunch = ({ onComplete }) => {
           <div className="space-y-3">
              <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
                 <Loader2 size={12} className="animate-spin text-blue-500" />
-                驗證進度 (Verification Pulse)
+               {t('launch.ui.verificationPulse')}
              </div>
-             <TerminalLog logs={onboardingAction.logs} height="h-48" title="OpenClaw Launch Logs" />
+             <TerminalLog logs={onboardingAction.logs} height="h-48" title={t('launch.ui.openclawLaunchLogs')} />
           </div>
         </div>
       ) : (
@@ -205,12 +205,12 @@ const SetupStepLaunch = ({ onComplete }) => {
 
           <div className="bg-slate-50 rounded-3xl p-8 text-left border border-slate-100 space-y-6">
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <Terminal size={14} className="text-slate-500" />系統配置摘要 (Config Summary)
+              <Terminal size={14} className="text-slate-500" />{t('launch.ui.configSummary')}
             </h4>
             <ul className="space-y-4">
-              <SummaryItem label="用戶定位" value={userType === 'existing' ? '已有安裝 (Existing)' : '新建專案 (New)'} />
+              <SummaryItem label={t('launch.ui.userProfile')} value={userType === 'existing' ? t('launch.ui.existingInstall') : t('launch.ui.newProject')} />
               <SummaryItem 
-                label="靈魂核心" 
+                label={t('launch.ui.soulCore')} 
                 value={(() => {
                     const mapping = {
                         'apiKey': 'Anthropic API Key',
@@ -226,8 +226,8 @@ const SetupStepLaunch = ({ onComplete }) => {
                     return mapping[config.authChoice] || config.authChoice || 'Unknown';
                 })()} 
               />
-              <SummaryItem label="通訊終端" value={config.platform || 'Unknown'} />
-              <SummaryItem label="已安裝技能" value={`${workspaceSkills?.length || 0} 項模組`} />
+              <SummaryItem label={t('launch.ui.communicationTerminal')} value={config.platform || t('launch.ui.unknown')} />
+              <SummaryItem label={t('launch.ui.installedSkills')} value={t('launch.ui.skillModules', { count: workspaceSkills?.length || 0 })} />
             </ul>
           </div>
 

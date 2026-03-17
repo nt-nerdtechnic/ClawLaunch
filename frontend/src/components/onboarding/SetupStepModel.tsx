@@ -62,68 +62,68 @@ const SetupStepModel = ({ onNext }) => {
       id: 'anthropic', label: 'Anthropic', icon: <Brain size={16} />,
       desc: 'Claude 3.7 / 3.5 Sonnet',
       choices: [
-        { id: 'apiKey', name: 'Anthropic API Key', desc: '輸入您的 API 密鑰', reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: 'https://console.anthropic.com/' },
-                { id: 'token', name: 'Setup Token (CLI)', desc: '貼上由 CLI 產生的 Setup-Token', reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: null, helpText: '可在下方直接執行「claude setup-token」來獲取授權 Token' }
+        { id: 'apiKey', name: 'Anthropic API Key', desc: t('modelSetup.modelSelect.choiceDesc.anthropicApiKey'), reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: 'https://console.anthropic.com/' },
+            { id: 'token', name: 'Setup Token (CLI)', desc: t('modelSetup.modelSelect.choiceDesc.setupTokenCli'), reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: null, helpText: t('modelSetup.modelSelect.choiceHelp.setupTokenCli') }
       ]
     },
     {
       id: 'openai', label: 'OpenAI', icon: <Cpu size={16} />,
       desc: 'GPT-4o / Codex',
       choices: [
-        { id: 'openai-api-key', name: 'OpenAI API Key', desc: '輸入您的 sk- API 密鑰', reqKey: true, defaultModel: 'gpt-4o', link: 'https://platform.openai.com/' },
-        { id: 'openai-codex', name: 'OpenAI Codex (OAuth)', desc: '透過瀏覽器登入授權，無須輸入 Key', reqKey: false, defaultModel: 'gpt-4o', link: null }
+                { id: 'openai-api-key', name: 'OpenAI API Key', desc: t('modelSetup.modelSelect.choiceDesc.openaiApiKey'), reqKey: true, defaultModel: 'gpt-4o', link: 'https://platform.openai.com/' },
+                { id: 'openai-codex', name: 'OpenAI Codex (OAuth)', desc: t('modelSetup.modelSelect.choiceDesc.openaiCodexOauth'), reqKey: false, defaultModel: 'gpt-4o', link: null }
       ]
     },
     {
       id: 'google', label: 'Google', icon: <Globe size={16} />,
       desc: 'Gemini 2.0 Flash / Pro',
       choices: [
-        { id: 'gemini-api-key', name: 'Gemini API Key', desc: '輸入您的 AIzaSy... 密鑰', reqKey: true, defaultModel: 'gemini-2.0-flash', link: 'https://aistudio.google.com/app/apikey' },
-        { id: 'google-gemini-cli', name: 'Gemini CLI (OAuth)', desc: '非官方 OAuth 流程授權', reqKey: false, defaultModel: 'gemini-2.0-flash', link: null }
+                { id: 'gemini-api-key', name: 'Gemini API Key', desc: t('modelSetup.modelSelect.choiceDesc.geminiApiKey'), reqKey: true, defaultModel: 'gemini-2.0-flash', link: 'https://aistudio.google.com/app/apikey' },
+                { id: 'google-gemini-cli', name: 'Gemini CLI (OAuth)', desc: t('modelSetup.modelSelect.choiceDesc.googleGeminiCliOauth'), reqKey: false, defaultModel: 'gemini-2.0-flash', link: null }
       ]
     },
     {
       id: 'minimax', label: 'MiniMax', icon: <Zap size={16} />,
       desc: 'MiniMax M2.5',
       choices: [
-        { id: 'minimax-api', name: 'MiniMax M2.5 (API Key)', desc: '官方 API Key 授權', reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' },
-        { id: 'minimax-portal', name: 'MiniMax OAuth', desc: '透過瀏覽器授權登入', reqKey: false, defaultModel: 'MiniMax-M2.5', link: null }
+                { id: 'minimax-api', name: 'MiniMax M2.5 (API Key)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxApiKey'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' },
+                { id: 'minimax-portal', name: 'MiniMax OAuth', desc: t('modelSetup.modelSelect.choiceDesc.minimaxOauth'), reqKey: false, defaultModel: 'MiniMax-M2.5', link: null }
       ]
     },
     {
       id: 'local', label: 'Local / Custom', icon: <Database size={16} />,
       desc: 'Ollama, vLLM, DeepSeek Local',
       choices: [
-        { id: 'ollama', name: 'Ollama', desc: '本地運行開源模型 (11434 端口)，隱私至上', reqKey: false, defaultModel: 'ollama/llama3', link: null },
-        { id: 'vllm', name: 'vLLM', desc: '自定義本地伺服器 / OpenAI 相容介面', reqKey: false, defaultModel: 'vllm', link: null }
+                { id: 'ollama', name: 'Ollama', desc: t('modelSetup.modelSelect.choiceDesc.ollamaLocal'), reqKey: false, defaultModel: 'ollama/llama3', link: null },
+                { id: 'vllm', name: 'vLLM', desc: t('modelSetup.modelSelect.choiceDesc.vllmLocal'), reqKey: false, defaultModel: 'vllm', link: null }
       ]
     },
     {
       id: 'chutes', label: 'Chutes', icon: <Network size={16} />,
       desc: 'Decentralized AI platform',
       choices: [
-        { id: 'chutes', name: 'Chutes (OAuth)', desc: '透過 Chutes OAuth 登入', reqKey: false, defaultModel: 'chutes', link: null }
+                { id: 'chutes', name: 'Chutes (OAuth)', desc: t('modelSetup.modelSelect.choiceDesc.chutesOauth'), reqKey: false, defaultModel: 'chutes', link: null }
       ]
     },
     {
       id: 'moonshot', label: 'Moonshot', icon: <Zap size={16} />,
-      desc: 'Kimi K2.5 / 長文本專家',
+    desc: t('modelSetup.modelSelect.providerDesc.moonshot'),
       choices: [
-        { id: 'moonshot-api-key', name: 'Moonshot (Kimi K2.5)', desc: '輸入 Kimi API Key', reqKey: true, defaultModel: 'kimi-k2.5', link: 'https://platform.moonshot.cn/console/api-keys' }
+                { id: 'moonshot-api-key', name: 'Moonshot (Kimi K2.5)', desc: t('modelSetup.modelSelect.choiceDesc.moonshotApiKey'), reqKey: true, defaultModel: 'kimi-k2.5', link: 'https://platform.moonshot.cn/console/api-keys' }
       ]
     },
     {
       id: 'openrouter', label: 'OpenRouter', icon: <Globe size={16} />,
-      desc: '統一 API 閘道',
+    desc: t('modelSetup.modelSelect.providerDesc.openrouter'),
       choices: [
-        { id: 'openrouter-api-key', name: 'OpenRouter', desc: '支援多種模型，包含 Llama 3', reqKey: true, defaultModel: 'openrouter/auto', link: 'https://openrouter.ai/keys' }
+                { id: 'openrouter-api-key', name: 'OpenRouter', desc: t('modelSetup.modelSelect.choiceDesc.openrouterApiKey'), reqKey: true, defaultModel: 'openrouter/auto', link: 'https://openrouter.ai/keys' }
       ]
     },
     {
       id: 'xai', label: 'xAI', icon: <Cpu size={16} />,
       desc: 'Grok-1 / Grok-2',
       choices: [
-        { id: 'xai-api-key', name: 'xAI (Grok)', desc: '輸入 Grok API Key', reqKey: true, defaultModel: 'grok-4', link: 'https://console.x.ai/' }
+                { id: 'xai-api-key', name: 'xAI (Grok)', desc: t('modelSetup.modelSelect.choiceDesc.xaiApiKey'), reqKey: true, defaultModel: 'grok-4', link: 'https://console.x.ai/' }
       ]
     }
   ];
@@ -280,7 +280,7 @@ const SetupStepModel = ({ onNext }) => {
                 const parsed = JSON.parse(res.stdout || '{}');
                 const summary = parsed?.summary;
                 if (summary && (Number(summary.critical || 0) > 0 || Number(summary.warn || 0) > 0)) {
-                    setAuthHealthWarning(`偵測到授權風險：critical ${summary.critical || 0} / warn ${summary.warn || 0}。建議先到 Settings > 授權管理修復後再啟動。`);
+                    setAuthHealthWarning(t('modelSetup.modelSelect.authHealthWarning', { critical: summary.critical || 0, warn: summary.warn || 0 }));
                 } else {
                     setAuthHealthWarning('');
                 }
@@ -298,7 +298,7 @@ const SetupStepModel = ({ onNext }) => {
 
   const handleNext = async () => {
         if (!config.corePath || !config.configPath || !config.workspacePath) {
-                        setLocalError('請先完成三區路徑設定（Core / Config / Workspace）後再進行模型授權。');
+                        setLocalError(t('modelSetup.modelSelect.pathRequiredError'));
             setPathsConfirmed(false);
             return;
         }
@@ -315,7 +315,7 @@ const SetupStepModel = ({ onNext }) => {
     const handleRunTokenCommand = async () => {
         const command = (tokenCommand || '').trim();
         if (!command) {
-            setTokenCommandError('請先輸入要執行的指令');
+            setTokenCommandError(t('modelSetup.modelSelect.tokenCommandRequired'));
             return;
         }
 
@@ -324,16 +324,16 @@ const SetupStepModel = ({ onNext }) => {
 
         try {
             const res = await execInTerminal(command, {
-                title: 'Claude Token 授權流程',
+                title: t('modelSetup.modelSelect.tokenFlowTitle'),
                 holdOpen: true,
                 cwd: config.corePath || undefined
             });
             const code = res?.code ?? res?.exitCode;
             if (typeof code === 'number' && code !== 0) {
-                throw new Error(res?.stderr || '指令執行失敗');
+                throw new Error(res?.stderr || t('modelSetup.modelSelect.commandRunFailed'));
             }
         } catch (err) {
-            setTokenCommandError(err?.message || '執行指令時發生錯誤');
+            setTokenCommandError(err?.message || t('modelSetup.modelSelect.commandRunError'));
         } finally {
             setTokenCommandRunning(false);
         }
@@ -351,8 +351,8 @@ const SetupStepModel = ({ onNext }) => {
         </h2>
         <p className="text-gray-500 mt-2 italic text-sm">
             {(detectedConfig || config.model) 
-              ? (onboardingAction.executing ? "「神經連結建立中，請保持頻率一致...」" : t('modelSetup.subtitle.reconnectDesc'))
-              : (!pathsConfirmed ? t('modelSetup.subtitle.needAlign') : (onboardingAction.executing ? "「正在將靈魂注入機甲核心...」" : t('modelSetup.subtitle.aligned')))}
+              ? (onboardingAction.executing ? t('modelSetup.modelSelect.neuralLinking') : t('modelSetup.subtitle.reconnectDesc'))
+              : (!pathsConfirmed ? t('modelSetup.subtitle.needAlign') : (onboardingAction.executing ? t('modelSetup.modelSelect.injectingSoul') : t('modelSetup.subtitle.aligned')))}
         </p>
       </div>
 
@@ -382,13 +382,13 @@ const SetupStepModel = ({ onNext }) => {
               </div>
               <div className="flex gap-4">
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-gray-400 uppercase tracking-tighter">Node.js</span>
+                                    <span className="text-[10px] text-gray-400 uppercase tracking-tighter">{t('modelSetup.env.nodeLabel')}</span>
                   <span className={`text-[11px] font-bold ${envStatus.node === 'loading' ? 'text-gray-400' : envStatus.node === 'error' ? 'text-red-500' : 'text-blue-600'}`}>
                     {envStatus.node === 'loading' ? t('modelSetup.env.loading') : envStatus.node === 'error' ? t('modelSetup.env.notInstalled') : t('modelSetup.env.ready')}
                   </span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-gray-400 uppercase tracking-tighter">Git</span>
+                                    <span className="text-[10px] text-gray-400 uppercase tracking-tighter">{t('modelSetup.env.gitLabel')}</span>
                   <span className={`text-[11px] font-bold ${envStatus.git === 'loading' ? 'text-gray-400' : envStatus.git === 'error' ? 'text-red-500' : 'text-blue-600'}`}>
                     {envStatus.git === 'loading' ? t('modelSetup.env.loading') : envStatus.git === 'error' ? t('modelSetup.env.notInstalled') : t('modelSetup.env.ready')}
                   </span>
@@ -468,7 +468,7 @@ const SetupStepModel = ({ onNext }) => {
                                     disabled={!config.corePath || !config.configPath || !config.workspacePath}
                                     className="w-full bg-white hover:bg-slate-50 disabled:bg-gray-100 disabled:text-gray-300 text-slate-700 border border-slate-200 font-black py-4 rounded-2xl transition-all shadow-sm flex items-center justify-center gap-2 px-8 uppercase tracking-widest text-xs"
                                 >
-                                    手動設定核心 <ArrowRight size={16} />
+                                    {t('modelSetup.paths.confirmPathBtn')} <ArrowRight size={16} />
                                 </button>
                             )}
 
@@ -511,7 +511,7 @@ const SetupStepModel = ({ onNext }) => {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
-                            <p className="text-[9px] text-gray-400 uppercase font-black">Auth Choice</p>
+                            <p className="text-[9px] text-gray-400 uppercase font-black">{t('modelSetup.modelSelect.authChoiceLabel')}</p>
                             <p className="text-xs font-bold text-slate-700 truncate">{config.authChoice || t('modelSetup.modelSelect.notSet')}</p>
                         </div>
                         <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
@@ -526,7 +526,7 @@ const SetupStepModel = ({ onNext }) => {
                         <div className="space-y-2 animate-in fade-in duration-300">
                             <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
                                 <Loader2 size={12} className="animate-spin" />
-                                授權同步中 (Real-time Logs)
+                                {t('modelSetup.modelSelect.authSyncing')}
                             </div>
                             <TerminalLog logs={onboardingAction.logs} height="h-32" />
                         </div>
@@ -546,10 +546,10 @@ const SetupStepModel = ({ onNext }) => {
                     >
                         {onboardingAction.executing ? (
                             <>
-                                <Loader2 size={16} className="animate-spin" /> 正在對齊頻率 (Aligning...)
+                                <Loader2 size={16} className="animate-spin" /> {t('modelSetup.modelSelect.aligning')}
                             </>
                         ) : (
-                            (detectedConfig || config.model) ? '向靈魂核心授權 (Authorize Soul Core)' : t('modelSetup.modelSelect.readyInjectBtn')
+                            (detectedConfig || config.model) ? t('modelSetup.modelSelect.authorizeSoulCore') : t('modelSetup.modelSelect.readyInjectBtn')
                         )}
                     </button>
                 </div>
@@ -563,7 +563,7 @@ const SetupStepModel = ({ onNext }) => {
                     <div className="space-y-3">
                         <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
                             <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">1</span>
-                            選擇靈魂生態系 (Provider)
+                            {t('modelSetup.modelSelect.providerStepTitle')}
                         </label>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                             {providerGroups.map(group => (
@@ -588,7 +588,7 @@ const SetupStepModel = ({ onNext }) => {
                     <div className="space-y-3 bg-gray-50 p-4 rounded-3xl border border-gray-100">
                         <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2 mb-2">
                             <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">2</span>
-                            選擇授權模式 (Auth Choice)
+                            {t('modelSetup.modelSelect.authChoiceStepTitle')}
                         </label>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {currentProviderGroup.choices.map(choice => (
@@ -613,7 +613,7 @@ const SetupStepModel = ({ onNext }) => {
                             <div className="space-y-3 pt-4 border-t border-gray-200/60 mt-4">
                                 <div className="flex justify-between items-center px-1">
                                     <label className="text-[11px] font-black tracking-widest text-slate-500 uppercase">
-                                        輸入 API 密鑰
+                                        {t('modelSetup.modelSelect.inputApiKey')}
                                     </label>
                                     {currentChoice.link && (
                                         <a 
@@ -651,14 +651,14 @@ const SetupStepModel = ({ onNext }) => {
                                 {currentChoice?.id === 'token' && (
                                     <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-1">
                                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">
-                                            CLI 指令（直接取得 Token）
+                                            {t('modelSetup.modelSelect.tokenCommandTitle')}
                                         </label>
                                         <div className="flex flex-col sm:flex-row gap-2">
                                             <input
                                                 type="text"
                                                 value={tokenCommand}
                                                 onChange={(e) => setTokenCommand(e.target.value)}
-                                                placeholder="claude setup-token"
+                                                placeholder={t('modelSetup.modelSelect.tokenCommandPlaceholder')}
                                                 className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 outline-none transition-all"
                                             />
                                             <button
@@ -669,15 +669,15 @@ const SetupStepModel = ({ onNext }) => {
                                             >
                                                 {tokenCommandRunning ? (
                                                     <>
-                                                        <Loader2 size={12} className="animate-spin" /> 執行中
+                                                        <Loader2 size={12} className="animate-spin" /> {t('modelSetup.modelSelect.running')}
                                                     </>
                                                 ) : (
-                                                    '執行指令'
+                                                    t('modelSetup.modelSelect.runCommand')
                                                 )}
                                             </button>
                                         </div>
                                         <p className="text-[10px] text-slate-500">
-                                            執行後請在彈出的終端機完成授權，取得 Token 後貼到上方 API 密鑰欄位。
+                                            {t('modelSetup.modelSelect.tokenCommandHint')}
                                         </p>
                                         {tokenCommandError && (
                                             <p className="text-[10px] text-red-600 font-medium">{tokenCommandError}</p>
@@ -689,7 +689,7 @@ const SetupStepModel = ({ onNext }) => {
                         {!currentChoice?.reqKey && (
                             <div className="pt-4 border-t border-gray-200/60 mt-4 px-1">
                                 <p className="text-[11px] font-black text-emerald-600">
-                                    ✓ 此授權模式無須輸入 API 密鑰。按下授權後將會進行對應的驗證流程（如自動開啟瀏覽器或本地服務）。
+                                    {t('modelSetup.modelSelect.noApiKeyNeeded')}
                                 </p>
                             </div>
                         )}
@@ -701,7 +701,7 @@ const SetupStepModel = ({ onNext }) => {
                             <div className="space-y-2 animate-in fade-in duration-300">
                                 <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
                                     <Loader2 size={12} className="animate-spin" />
-                                    授權同步中 (Real-time Logs)
+                                    {t('modelSetup.modelSelect.authSyncing')}
                                 </div>
                                 <TerminalLog logs={onboardingAction.logs} height="h-32" />
                             </div>
@@ -720,13 +720,13 @@ const SetupStepModel = ({ onNext }) => {
                             className={`w-full flex items-center justify-center gap-3 ${onboardingAction.executing ? 'bg-blue-400' : 'bg-slate-900 hover:bg-slate-800'} disabled:bg-slate-100 disabled:text-slate-300 text-white font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-slate-900/10 uppercase tracking-widest text-xs`}
                         >
                             {userType === 'existing' ? (
-                                <>確認核心授權並繼續 <ArrowRight size={18} /></>
+                                <>{t('modelSetup.modelSelect.confirmAuthContinue')} <ArrowRight size={18} /></>
                             ) : onboardingAction.executing ? (
                                 <>
-                                    <Loader2 size={18} className="animate-spin" /> 對齊靈魂頻率中...
+                                    <Loader2 size={18} className="animate-spin" /> {t('modelSetup.modelSelect.aligningSoulFrequency')}
                                 </>
                             ) : (
-                                <>向靈魂核心授權 (Authorize Soul Core) <ArrowRight size={18} /></>
+                                <>{t('modelSetup.modelSelect.authorizeSoulCore')} <ArrowRight size={18} /></>
                             )}
                         </button>
                     </div>
