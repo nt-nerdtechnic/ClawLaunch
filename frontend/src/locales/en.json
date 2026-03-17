@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "NT-Claw",
+    "title": "Openclaw",
     "subtitle": "Launch Pad",
     "switchMiniMode": "Toggle Mini Mode",
     "online": "ONLINE",
@@ -331,7 +331,7 @@
     }
   },
   "welcome": {
-    "title": "Welcome to NT-Claw",
+    "title": "Welcome to Openclaw",
     "subtitle": "Before infusing a soul into the lobster, please tell us your situation:",
     "existingTitle": "Already Installed (Soul Link)",
     "existingDesc": "I already have a working OpenClaw environment, now passing it to a more advanced mecha wrapper.",

@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "NT-Claw",
+    "title": "Openclaw",
     "subtitle": "Launch Pad",
     "switchMiniMode": "切换小窗模式",
     "online": "ONLINE",
@@ -331,7 +331,7 @@
     }
   },
   "welcome": {
-    "title": "欢迎启动 NT-Claw",
+    "title": "欢迎启动 Openclaw",
     "subtitle": "在为龙虾注入灵魂之前，请告诉我们您的现状：",
     "existingTitle": "已有安装（灵魂对话）",
     "existingDesc": "我已经有正在运作的 OpenClaw 环境，现在需要一个更先进的机甲来承载它。",
