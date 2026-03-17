@@ -25,3 +25,12 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# Build outputs
+*.dmg
+*.app/
+*.asar
+*.exe
+release/
+dist-electron/
+
