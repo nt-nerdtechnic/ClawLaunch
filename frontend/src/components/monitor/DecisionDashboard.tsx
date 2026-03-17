@@ -105,6 +105,13 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         gatewayReachable = false;
       }
 
+      if (!gatewayReachable) {
+        if (!cancelled) {
+          setHeartbeat({ checked: 0, eligible: 0, executed: 0, updatedAt: '', state: 'degraded' });
+        }
+        return;
+      }
+
       const candidates = Array.from(
         new Set(
           [
