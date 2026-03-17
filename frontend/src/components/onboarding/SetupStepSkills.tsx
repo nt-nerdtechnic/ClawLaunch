@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from 'react';
-import { Package, ArrowRight, Zap, Layout, RefreshCw, PackagePlus, Trash2, AlertCircle } from 'lucide-react';
+import { Package, ArrowRight, Zap, ShieldCheck, RefreshCw, PackagePlus, Trash2, AlertCircle, Lock } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 
@@ -10,15 +10,10 @@ import { useTranslation } from 'react-i18next';
  */
 const SetupStepSkills = ({ onNext }) => {
   const { t } = useTranslation();
-  const { config, workspaceSkills, setCoreSkills, setWorkspaceSkills, userType } = useStore();
+  const { config, coreSkills, workspaceSkills, setCoreSkills, setWorkspaceSkills, userType } = useStore();
   const [scanning, setScanning] = React.useState(false);
   const [acting, setActing] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
-
-  const coreSystems = [
-    { id: 'soul-core', name: t('setupSkills.manager.coreSoul'), icon: <Zap size={14} /> },
-    { id: 'cli-bridge', name: t('setupSkills.manager.coreCli'), icon: <Layout size={14} /> }
-  ];
 
   const detectedSkills = workspaceSkills || [];
 
@@ -50,7 +45,8 @@ const SetupStepSkills = ({ onNext }) => {
   };
 
   React.useEffect(() => {
-    if (detectedSkills.length === 0) {
+    // 若 coreSkills 或 workspaceSkills 任一尚未填入，就執行一次掃描
+    if (detectedSkills.length === 0 || coreSkills.length === 0) {
       rescan();
     }
   }, []);
@@ -142,29 +138,56 @@ const SetupStepSkills = ({ onNext }) => {
         </button>
       </div>
 
-      {/* 核心穩定性面板 (不可改) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-8 relative overflow-hidden shadow-2xl">
-        <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 pointer-events-none">
-            <Zap size={80} className="text-blue-500" />
+      {/* ── 核心技能區（從 CORE_SKILLS 掃描，唯讀）── */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <ShieldCheck size={14} className="text-violet-500" />
+          <span className="text-[10px] font-black text-violet-500 uppercase tracking-[0.18em]">
+            {t('setupSkills.manager.corePanelTitle')}
+          </span>
+          <span className="ml-auto text-[9px] font-bold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
+            {scanning ? '…' : coreSkills.length}
+          </span>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4 relative z-10">
-          {t('setupSkills.manager.corePanelTitle')}
-        </div>
-        <div className="flex flex-wrap gap-3 relative z-10">
-          {coreSystems.map(skill => (
-            <div key={skill.id} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[11px] font-bold text-slate-300 shadow-sm backdrop-blur-md">
-              <span className="text-blue-400">{skill.icon}</span> {skill.name}
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full ml-1 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-            </div>
-          ))}
-        </div>
+        {coreSkills.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {coreSkills.map(skill => (
+              <div
+                key={skill.id}
+                className="flex items-center gap-2.5 px-3 py-2.5 bg-violet-50 border border-violet-100 rounded-2xl group"
+              >
+                <div className="shrink-0 w-7 h-7 rounded-xl bg-violet-100 flex items-center justify-center text-violet-500">
+                  <ShieldCheck size={13} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-black text-slate-800 truncate">{skill.name}</p>
+                  <p className="text-[9px] text-slate-400 truncate leading-tight">{skill.desc}</p>
+                </div>
+                <Lock size={10} className="shrink-0 text-violet-300" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-4 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            {scanning ? t('setupSkills.manager.syncing') : t('setupSkills.manager.coreEmpty')}
+          </div>
+        )}
       </div>
 
-      {/* 技能矩陣網格 */}
-      {detectedSkills.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          {detectedSkills.map((skill) => {
-            return (
+      {/* ── 工作區技能區（可匯入 / 刪除）── */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <Package size={14} className="text-blue-500" />
+          <span className="text-[10px] font-black text-blue-500 uppercase tracking-[0.18em]">
+            {t('setupSkills.manager.workspaceSectionTitle')}
+          </span>
+          <span className="ml-auto text-[9px] font-bold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
+            {scanning ? '…' : detectedSkills.length}
+          </span>
+        </div>
+        {detectedSkills.length > 0 ? (
+          <div className="grid grid-cols-2 gap-4">
+            {detectedSkills.map((skill) => (
               <div
                 key={skill.id}
                 className="p-5 rounded-[2rem] border-2 border-gray-100 hover:border-blue-200 bg-white transition-all relative group h-full flex flex-col"
@@ -177,7 +200,6 @@ const SetupStepSkills = ({ onNext }) => {
                 >
                   <Trash2 size={14} />
                 </button>
-
                 <div className="w-12 h-12 rounded-2xl mb-4 flex items-center justify-center transition-transform group-hover:scale-110 bg-slate-50 text-slate-400">
                   <Package size={20} />
                 </div>
@@ -185,7 +207,6 @@ const SetupStepSkills = ({ onNext }) => {
                 <p className="text-[11px] text-gray-400 leading-relaxed font-medium flex-grow">
                   {String(skill.desc || t('setupSkills.manager.fallbackDesc'))}
                 </p>
-
                 <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                   <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
                     {String(skill.category || t('setupSkills.manager.defaultCategory'))}
@@ -193,24 +214,22 @@ const SetupStepSkills = ({ onNext }) => {
                   <span className="text-[9px] font-black text-emerald-600 uppercase">{t('setupSkills.manager.installed')}</span>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="mb-8 rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-8 text-center">
-          <p className="text-sm font-semibold text-slate-600">{t('setupSkills.manager.emptyTitle')}</p>
-          <p className="mt-2 text-xs text-slate-400">
-            {t('setupSkills.manager.emptyDesc')}
-          </p>
-          <button
-            onClick={handleImport}
-            disabled={acting || scanning}
-            className="mt-5 px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-blue-600 hover:bg-slate-50 transition-all disabled:opacity-50"
-          >
-            {t('setupSkills.manager.import')}
-          </button>
-        </div>
-      )}
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-8 text-center">
+            <p className="text-sm font-semibold text-slate-600">{t('setupSkills.manager.emptyTitle')}</p>
+            <p className="mt-2 text-xs text-slate-400">{t('setupSkills.manager.emptyDesc')}</p>
+            <button
+              onClick={handleImport}
+              disabled={acting || scanning}
+              className="mt-5 px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-blue-600 hover:bg-slate-50 transition-all disabled:opacity-50"
+            >
+              {t('setupSkills.manager.import')}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* 下一步按鈕與錯誤 */}
       <div className="space-y-4">

@@ -2167,17 +2167,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
     }
 
-    const skillScanBases = uniqueNonEmptyPaths([
-      workspacePath,
-      configPath,
-      existingConfig?.workspace,
-      possibleWorkspace,
-    ]);
-    const workspaceSkills = await scanInstalledSkills(...skillScanBases);
+    // Core skills = 只掃 corePath/skills/，不掃 extensions/（避免 provider adapter 污染）
+    const coreSkills = corePath ? await scanSkillsInDir(path.join(corePath, 'skills')) : [];
+    // Workspace skills = 只掃使用者設定的 workspacePath，不加任何 fallback 雜路徑
+    const workspaceSkills = workspacePath ? await scanInstalledSkills(workspacePath) : [];
 
     return { 
         code: 0, 
-        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig: { ...existingConfig, workspaceSkills }, coreSkills: CORE_SKILLS }),
+        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig: { ...existingConfig, workspaceSkills }, coreSkills }),
         exitCode: 0
     };
   }
@@ -2291,14 +2288,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         if (finalConfigFilePath) {
             const content = await fs.readFile(finalConfigFilePath, 'utf-8');
             const configData = parseOpenClawConfig(content);
-            const skillScanBases = uniqueNonEmptyPaths([
-              configData.workspace,
-              finalConfigDirPath,
-            ]);
-            const workspaceSkills = await scanInstalledSkills(...skillScanBases);
+            // Core skills = 只掃 corePath/skills/，不掃 extensions/
+            const coreSkills = configData.corePath ? await scanSkillsInDir(path.join(configData.corePath, 'skills')) : [];
+            // Workspace skills = 只掃使用者設定的 workspacePath
+            const workspaceSkills = configData.workspace ? await scanInstalledSkills(configData.workspace) : [];
             return {
                 code: 0,
-                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath, workspaceSkills, coreSkills: CORE_SKILLS }),
+                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath, workspaceSkills, coreSkills }),
                 exitCode: 0
             };
         }
@@ -2765,11 +2761,23 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     trackOutcome(dirPath);
                   };
 
+                  // 在任何 CLI 執行之前，先對所有目標路徑拍快照（包含 bootstrap 檔案）；
+                  // openclaw setup 會建立其中部分檔案，若快照在其後才拍，這些檔案會被
+                  // 誤判為「你啟動初始化之前就已存在」，導致 Already Existed 顯示不正確。
                   await trackPreExisting(finalConfigPath);
                   await trackPreExisting(configFilePath);
                   await trackPreExisting(finalWorkspacePath);
                   await trackPreExisting(skillsDir);
                   await trackPreExisting(extensionsDir);
+
+                  // Bootstrap 檔案的快照也必須在 openclaw setup 之前完成
+                  const bootstrapFileNames = [
+                    'AGENTS.md', 'SOUL.md', 'TOOLS.md', 'IDENTITY.md',
+                    'USER.md', 'HEARTBEAT.md', 'BOOTSTRAP.md', 'MEMORY.md',
+                  ];
+                  for (const name of bootstrapFileNames) {
+                    await trackPreExisting(path.join(finalWorkspacePath, name));
+                  }
 
                   // 2. 安裝依賴（先安裝才有可用的 CLI，讓後續 openclaw setup 可以執行）
                   const installRes = await runCommandWithStreaming('pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
@@ -2834,10 +2842,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     'MEMORY.md': '# MEMORY\n\nPersistent project memory and verify decisions.\n',
                   };
 
-                  for (const name of Object.keys(bootstrapTemplates)) {
-                    await trackPreExisting(path.join(finalWorkspacePath, name));
-                  }
-
+                  // trackPreExisting 已在 openclaw setup 執行之前完成（見上方），此處直接寫入
                   for (const [name, content] of Object.entries(bootstrapTemplates)) {
                     const targetPath = path.join(finalWorkspacePath, name);
                     const wrote = await writeFileIfMissing(targetPath, content);
