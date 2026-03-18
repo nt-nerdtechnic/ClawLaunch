@@ -44,12 +44,20 @@ const SetupStepSkills = ({ onNext }) => {
     setScanning(false);
   };
 
+  // 自動跳過：existing user 已有技能設定，不需停留在此步驟
+  const autoAdvancedRef = React.useRef(false);
   React.useEffect(() => {
-    // 若 coreSkills 或 workspaceSkills 任一尚未填入，就執行一次掃描
+    if (autoAdvancedRef.current) return;
+    if (userType !== 'new') {
+      autoAdvancedRef.current = true;
+      onNext();
+      return;
+    }
+    // 新使用者才執行掃描
     if (detectedSkills.length === 0 || coreSkills.length === 0) {
       rescan();
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleImport = async () => {
     if (!window.electronAPI || acting || scanning) return;

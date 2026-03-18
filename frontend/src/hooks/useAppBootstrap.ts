@@ -137,8 +137,46 @@ export function useAppBootstrap({
       syncGatewayStatus(loadedConfig),
     ]);
 
+    // 若偵測到全三條路徑且 agent auth 已健康，直接完成 onboarding，不再顯示 wizard
+    const forceReset = localStorage.getItem(ONBOARDING_FORCE_RESET_KEY) === 'true';
+    if (!forceReset && !localStorage.getItem(ONBOARDING_FINISHED_KEY)) {
+      const detCorePath    = String(detected?.corePath    || '').trim();
+      const detConfigPath  = String(detected?.configPath  || '').trim();
+      const detWorkspace   = String(detected?.workspacePath || '').trim();
+      const detProviders: string[] = Array.isArray(detected?.existingConfig?.providers)
+        ? detected.existingConfig.providers
+        : [];
+      const detBotToken = String(
+        detected?.existingConfig?.botToken ||
+        loadedConfig?.botToken || ''
+      ).trim();
+      const hasAllPaths    = Boolean(detCorePath && detConfigPath && detWorkspace);
+      const hasHealthyAuth = detProviders.length > 0;
+      const hasMessaging   = Boolean(detBotToken);
+
+      if (hasAllPaths && hasHealthyAuth && hasMessaging) {
+        // 自動把偵測到的路徑寫入 launcher config（合併現有設定）
+        const { setConfig } = useStore.getState();
+        const patch = { corePath: detCorePath, configPath: detConfigPath, workspacePath: detWorkspace };
+        setConfig(patch);
+
+        if (window.electronAPI) {
+          const currentConfig = useStore.getState().config;
+          const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = currentConfig as any;
+          await window.electronAPI.exec(`config:write ${JSON.stringify(launcherPayload)}`).catch(() => {});
+        }
+
+        localStorage.setItem(ONBOARDING_FINISHED_KEY, 'true');
+        localStorage.removeItem(ONBOARDING_FORCE_RESET_KEY);
+        setOnboardingFinished(true);
+        setActiveTab('monitor');
+        await syncGatewayStatus({ corePath: detCorePath, configPath: detConfigPath, workspacePath: detWorkspace });
+        return;
+      }
+    }
+
     checkOnboardingStatus(loadedConfig, detected);
-  }, [checkEnvironment, checkOnboardingStatus, detectPaths, loadConfig, syncGatewayStatus]);
+  }, [checkEnvironment, checkOnboardingStatus, detectPaths, loadConfig, setOnboardingFinished, setActiveTab, syncGatewayStatus]);
 
   useEffect(() => {
     if (!initPromiseRef.current) {

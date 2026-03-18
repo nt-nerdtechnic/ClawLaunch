@@ -47,6 +47,36 @@ const SetupStepModel = ({ onNext }) => {
   } = useStore();
   const { t } = useTranslation();
   const onboardingAction = useOnboardingAction();
+    const authChoiceProviderAliases = {
+        apiKey: ['anthropic'],
+        token: ['anthropic'],
+        'openai-api-key': ['openai'],
+        'openai-codex': ['openai-codex', 'openai'],
+        'gemini-api-key': ['gemini', 'google'],
+        'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
+        'minimax-api': ['minimax'],
+        'minimax-coding-plan-global-token': ['minimax-portal', 'minimax'],
+        'minimax-coding-plan-cn-token': ['minimax-portal', 'minimax'],
+        'moonshot-api-key': ['moonshot'],
+        'openrouter-api-key': ['openrouter'],
+        'xai-api-key': ['xai'],
+        ollama: ['ollama'],
+        vllm: ['vllm'],
+        chutes: ['chutes'],
+        'qwen-portal': ['qwen-portal', 'qwen']
+    };
+
+    const profileMatchesSelectedChoice = (profile, authChoice) => {
+        const aliases = authChoiceProviderAliases[String(authChoice || '').trim()] || [];
+        // 若 authChoice 未知/空，不顯示警告（避免初始渲染誤包含殘留 profile）
+        if (!aliases.length) return false;
+        const provider = String(profile?.provider || '').toLowerCase();
+        const profileId = String(profile?.profileId || '').toLowerCase();
+        return aliases.some((alias) => {
+            const normalizedAlias = String(alias || '').toLowerCase();
+            return normalizedAlias && (provider === normalizedAlias || profileId.includes(normalizedAlias));
+        });
+    };
     const oauthAuthChoices = new Set([
         'openai-codex',
         'google-gemini-cli',
@@ -285,9 +315,14 @@ const SetupStepModel = ({ onNext }) => {
                     return;
                 }
                 const parsed = JSON.parse(res.stdout || '{}');
-                const summary = parsed?.summary;
-                if (summary && (Number(summary.critical || 0) > 0 || Number(summary.warn || 0) > 0)) {
-                    setAuthHealthWarning(t('modelSetup.modelSelect.authHealthWarning', { critical: summary.critical || 0, warn: summary.warn || 0 }));
+                const rows = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
+                // 優先用元件 state（selectedChoiceId），其次 config.authChoice，避免初始值為空字串時包含所有 profile
+                const effectiveAuthChoice = selectedChoiceId || config.authChoice || 'apiKey';
+                const relatedRows = rows.filter((profile) => profileMatchesSelectedChoice(profile, effectiveAuthChoice));
+                const relatedCritical = relatedRows.filter((profile) => String(profile?.severity || '').toLowerCase() === 'critical').length;
+                const relatedWarn = relatedRows.filter((profile) => String(profile?.severity || '').toLowerCase() === 'warn').length;
+                if (relatedCritical > 0 || relatedWarn > 0) {
+                    setAuthHealthWarning(t('modelSetup.modelSelect.authHealthWarning', { critical: relatedCritical, warn: relatedWarn }));
                 } else {
                     setAuthHealthWarning('');
                 }
@@ -297,7 +332,7 @@ const SetupStepModel = ({ onNext }) => {
         };
 
         loadAuthHealth();
-    }, [config.configPath]);
+    }, [config.configPath, config.authChoice, selectedChoiceId]);
 
 
 

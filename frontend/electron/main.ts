@@ -1397,6 +1397,29 @@ async function createWindow() {
 }
 
 /**
+ * 從 agent auth-profile 推斷對應的 UI authChoice
+ */
+function inferAuthChoiceFromProfile(profile: any): string {
+  const provider = String(profile?.provider || '').toLowerCase();
+  const mode = String(profile?.mode || profile?.type || '').toLowerCase();
+  if (provider === 'anthropic') return mode === 'token' ? 'token' : 'apiKey';
+  if (provider === 'openai-codex') return 'openai-codex';
+  if (provider === 'openai') return mode === 'oauth' ? 'openai-codex' : 'openai-api-key';
+  if (provider === 'google' || provider === 'gemini') return mode === 'oauth' ? 'google-gemini-cli' : 'gemini-api-key';
+  if (provider === 'google-gemini-cli') return 'google-gemini-cli';
+  if (provider === 'minimax-portal') return 'minimax-coding-plan-global-token';
+  if (provider === 'minimax') return 'minimax-api';
+  if (provider === 'moonshot') return 'moonshot-api-key';
+  if (provider === 'openrouter') return 'openrouter-api-key';
+  if (provider === 'xai') return 'xai-api-key';
+  if (provider === 'ollama') return 'ollama';
+  if (provider === 'vllm') return 'vllm';
+  if (provider === 'chutes') return 'chutes';
+  if (provider === 'qwen-portal' || provider === 'qwen') return 'qwen-portal';
+  return '';
+}
+
+/**
  * 深度解析 OpenClaw 配置檔
  * 支援從 agents.defaults.model.primary 提取模型，並從 auth.profiles 提取金鑰
  */
@@ -1646,11 +1669,31 @@ async function collectAuthProfiles(configDir: string) {
 
   const merged = new Map<string, any>();
 
+  const normalizeProfileMeta = (profileId: string, profile: any) => {
+    const provider = String((profile as any)?.provider || String(profileId).split(':')[0] || '').toLowerCase();
+    const mode = String((profile as any)?.mode || (profile as any)?.type || '').toLowerCase();
+    return { provider, mode };
+  };
+
+  const findFallbackGlobalKey = (provider: string, mode: string) => {
+    if (!provider) return '';
+    for (const [key, entry] of merged.entries()) {
+      const entryProvider = String(entry?.provider || '').toLowerCase();
+      const entryMode = String(entry?.mode || '').toLowerCase();
+      if (!entry?.globalPresent || entry?.agentPresent) continue;
+      if (!entryProvider || entryProvider !== provider) continue;
+      if (mode && entryMode && entryMode !== mode) continue;
+      return key;
+    }
+    return '';
+  };
+
   for (const [profileId, profile] of Object.entries(globalProfiles)) {
+    const meta = normalizeProfileMeta(String(profileId), profile);
     merged.set(String(profileId), {
       profileId: String(profileId),
-      provider: String((profile as any)?.provider || String(profileId).split(':')[0] || ''),
-      mode: String((profile as any)?.mode || (profile as any)?.type || ''),
+      provider: meta.provider,
+      mode: meta.mode,
       globalPresent: true,
       agentPresent: false,
       agentCount: 0,
@@ -1664,10 +1707,12 @@ async function collectAuthProfiles(configDir: string) {
     const profiles = parsed?.profiles || {};
     for (const [profileId, profile] of Object.entries(profiles)) {
       const profileKey = String(profileId);
-      const entry = merged.get(profileKey) || {
+      const meta = normalizeProfileMeta(profileKey, profile);
+      const resolvedKey = merged.has(profileKey) ? profileKey : findFallbackGlobalKey(meta.provider, meta.mode);
+      const entry = merged.get(resolvedKey || profileKey) || {
         profileId: profileKey,
-        provider: String((profile as any)?.provider || profileKey.split(':')[0] || ''),
-        mode: String((profile as any)?.mode || (profile as any)?.type || ''),
+        provider: meta.provider,
+        mode: meta.mode,
         globalPresent: false,
         agentPresent: false,
         agentCount: 0,
@@ -1681,12 +1726,12 @@ async function collectAuthProfiles(configDir: string) {
         entry.diagnostics.push('agent_credential_missing_or_invalid');
       }
       if (!entry.mode) {
-        entry.mode = String((profile as any)?.mode || (profile as any)?.type || '');
+        entry.mode = meta.mode;
       }
       if (!entry.provider) {
-        entry.provider = String((profile as any)?.provider || profileKey.split(':')[0] || '');
+        entry.provider = meta.provider;
       }
-      merged.set(profileKey, entry);
+      merged.set(resolvedKey || profileKey, entry);
     }
   }
 
@@ -2828,18 +2873,18 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           if (existingConfig.workspace) {
             workspacePath = existingConfig.workspace;
           }
+          // 補充掃描 agent auth-profiles，填補 global profiles 中只有 meta 而無憑證的情況
+          const agentAuth = await collectAuthProfiles(savedConfigPath);
+          const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
+          if (healthyAgentProfiles.length > 0) {
+            const agentProviders = healthyAgentProfiles.map((p: any) => String(p.provider || '').toLowerCase()).filter(Boolean);
+            existingConfig.providers = Array.from(new Set([...(existingConfig.providers || []), ...agentProviders]));
+            if (!existingConfig.authChoice) {
+              existingConfig.authChoice = inferAuthChoiceFromProfile(healthyAgentProfiles[0]);
+            }
+          }
         } catch {
           // Keep saved config path even if openclaw.json is not ready yet.
-        }
-      }
-
-      if (typeof launcherCfg.corePath === 'string' && launcherCfg.corePath.trim()) {
-        const savedCorePath = launcherCfg.corePath.trim();
-        try {
-          await fs.access(path.join(savedCorePath, 'package.json'));
-          corePath = savedCorePath;
-        } catch {
-          // Fall back to search scopes if saved core path is stale.
         }
       }
     } catch {
@@ -2861,6 +2906,16 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         const content = await fs.readFile(possibleConfigPath, 'utf-8');
         existingConfig = parseOpenClawConfig(content);
         if (existingConfig.workspace) workspacePath = existingConfig.workspace;
+        // 補充掃描 agent auth-profiles（fallback 路徑同樣適用）
+        const agentAuth = await collectAuthProfiles(possibleWorkspace);
+        const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
+        if (healthyAgentProfiles.length > 0) {
+          const agentProviders = healthyAgentProfiles.map((p: any) => String(p.provider || '').toLowerCase()).filter(Boolean);
+          existingConfig.providers = Array.from(new Set([...(existingConfig.providers || []), ...agentProviders]));
+          if (!existingConfig.authChoice) {
+            existingConfig.authChoice = inferAuthChoiceFromProfile(healthyAgentProfiles[0]);
+          }
+        }
       } catch(e) {}
     }
 
@@ -3007,6 +3062,21 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         if (finalConfigFilePath) {
             const content = await fs.readFile(finalConfigFilePath, 'utf-8');
             const configData = parseOpenClawConfig(content);
+
+            // 補充掃描 agent auth-profiles，填補 global profiles 中只有 meta 而無憑證的情況
+            const agentAuth = await collectAuthProfiles(finalConfigDirPath);
+            const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
+            if (healthyAgentProfiles.length > 0) {
+              // 合併 providers（包含只在 agent 層的 openai-codex 等）
+              const agentProviders = healthyAgentProfiles.map((p: any) => String(p.provider || '').toLowerCase()).filter(Boolean);
+              configData.providers = Array.from(new Set([...configData.providers, ...agentProviders]));
+              // 若 authChoice 未偵測到，從最優先的健康 agent profile 推斷
+              if (!configData.authChoice) {
+                const first = healthyAgentProfiles[0];
+                configData.authChoice = inferAuthChoiceFromProfile(first);
+              }
+            }
+
             // Core skills = 只掃 corePath/skills/，不掃 extensions/
             const coreSkills = configData.corePath ? await scanSkillsInDir(path.join(configData.corePath, 'skills')) : [];
             // Workspace skills = 只掃使用者設定的 workspacePath

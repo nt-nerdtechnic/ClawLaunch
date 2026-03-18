@@ -17,6 +17,7 @@ const SetupStepLaunch = ({ onComplete }) => {
   const [status, setStatus] = useState('preparing'); // preparing, success, partial_failure
   const [progress, setProgress] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
+  const autoStartedRef = React.useRef(false);
 
   const steps = {
     preparing: t('launch.steps.preparing'),
@@ -42,6 +43,22 @@ const SetupStepLaunch = ({ onComplete }) => {
       setStatus('partial_failure');
     }
   };
+
+  // existing user：掛載時自動執行啟動檢查，不顯示準備畫面
+  React.useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (userType !== 'new') {
+      autoStartedRef.current = true;
+      runSetup();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 成功後自動完成，不需使用者點按
+  React.useEffect(() => {
+    if (status === 'success') {
+      onComplete();
+    }
+  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!hasStarted) {
     return (
