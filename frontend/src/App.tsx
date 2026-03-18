@@ -233,7 +233,8 @@ function App() {
       id: 'minimax', label: 'MiniMax', icon: <Zap size={13} />,
       choices: [
         { id: 'minimax-api', name: 'API Key', desc: 'MiniMax 官方密鑰', reqKey: true },
-        { id: 'minimax-portal', name: 'OAuth', desc: '瀏覽器授權登入', reqKey: false, oauthFlow: true },
+        { id: 'minimax-global-oauth', name: 'OAuth (Global)', desc: '瀏覽器授權登入（api.minimax.io）', reqKey: false, oauthFlow: true },
+        { id: 'minimax-cn-oauth', name: 'OAuth (CN)', desc: '瀏覽器授權登入（api.minimaxi.com）', reqKey: false, oauthFlow: true },
       ],
     },
     {

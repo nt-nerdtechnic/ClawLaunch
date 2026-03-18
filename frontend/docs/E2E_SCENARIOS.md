@@ -5,6 +5,7 @@ This checklist validates three critical flows:
 1. No gateway available
 2. Missing/dirty snapshot data
 3. Cross-section navigation regression
+4. Onboarding OAuth provider routing
 
 ## Preconditions
 - Workspace: `frontend`
@@ -61,6 +62,33 @@ This checklist validates three critical flows:
 - No React error boundary fallback appears.
 - No console-level uncaught exception.
 - UI remains responsive and no auto-scroll page jumps.
+
+## Scenario D: Onboarding OAuth Smoke Checklist
+
+### Goal
+Verify each OAuth option in onboarding triggers `openclaw models auth login` with the expected provider and method.
+
+### Preconditions
+- Open onboarding wizard and navigate to the model selection step.
+- Enable terminal or command logging so the spawned OpenClaw command is visible.
+- Stop after the external auth flow is launched; full login completion is not required for this smoke pass.
+
+### Checklist
+
+| Done | UI option | Expected provider | Expected method | Expected command fragment |
+| --- | --- | --- | --- | --- |
+| [ ] | OpenAI Codex OAuth | `openai-codex` | `oauth` | `models auth login --provider openai-codex --method oauth` |
+| [ ] | Google Gemini CLI OAuth | `google-gemini-cli` | `oauth` | `models auth login --provider google-gemini-cli --method oauth` |
+| [ ] | Chutes OAuth | `chutes` | `oauth` | `models auth login --provider chutes --method oauth` |
+| [ ] | Qwen Portal OAuth | `qwen-portal` | `device` | `models auth login --provider qwen-portal --method device` |
+| [ ] | MiniMax OAuth (Global) | `minimax-portal` | `oauth` | `models auth login --provider minimax-portal --method oauth` |
+| [ ] | MiniMax OAuth (CN) | `minimax-portal` | `oauth-cn` | `models auth login --provider minimax-portal --method oauth-cn` |
+
+### Expected
+- Every OAuth click routes to `openclaw models auth login`, not `openclaw onboard --auth-choice`.
+- Provider and method match the table above.
+- Browser/device auth flow opens without immediate CLI argument error.
+- MiniMax Global and CN are distinguishable by method value (`oauth` vs `oauth-cn`).
 
 ## Final Verification Commands
 Run from `frontend`:

@@ -47,6 +47,14 @@ const SetupStepModel = ({ onNext }) => {
   } = useStore();
   const { t } = useTranslation();
   const onboardingAction = useOnboardingAction();
+    const oauthAuthChoices = new Set([
+        'openai-codex',
+        'google-gemini-cli',
+        'chutes',
+        'qwen-portal',
+        'minimax-global-oauth',
+        'minimax-cn-oauth'
+    ]);
 
   const [probingKey, setProbingKey] = useState(null);
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
@@ -87,7 +95,8 @@ const SetupStepModel = ({ onNext }) => {
       desc: 'MiniMax M2.5',
       choices: [
                 { id: 'minimax-api', name: 'MiniMax M2.5 (API Key)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxApiKey'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' },
-                { id: 'minimax-portal', name: 'MiniMax OAuth', desc: t('modelSetup.modelSelect.choiceDesc.minimaxOauth'), reqKey: false, defaultModel: 'MiniMax-M2.5', link: null }
+                                { id: 'minimax-global-oauth', name: 'MiniMax OAuth (Global)', desc: `${t('modelSetup.modelSelect.choiceDesc.minimaxOauth')} · api.minimax.io`, reqKey: false, defaultModel: 'MiniMax-M2.5', link: null },
+                                { id: 'minimax-cn-oauth', name: 'MiniMax OAuth (CN)', desc: `${t('modelSetup.modelSelect.choiceDesc.minimaxOauth')} · api.minimaxi.com`, reqKey: false, defaultModel: 'MiniMax-M2.5', link: null }
       ]
     },
     {
@@ -312,6 +321,15 @@ const SetupStepModel = ({ onNext }) => {
     }
   };
 
+    const handleRetryOAuthAuth = async () => {
+        onboardingAction.reset();
+        setLocalError('');
+        await onboardingAction.execute('model');
+    };
+
+    const activeAuthChoice = String(config.authChoice || currentChoice?.id || selectedChoiceId || '').trim();
+    const shouldShowRetryOAuth = !onboardingAction.executing && Boolean(onboardingAction.error) && oauthAuthChoices.has(activeAuthChoice);
+
     const handleRunTokenCommand = async () => {
         const command = (tokenCommand || '').trim();
         if (!command) {
@@ -533,9 +551,23 @@ const SetupStepModel = ({ onNext }) => {
                     )}
 
                     {!onboardingAction.executing && onboardingAction.error && (
-                        <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
-                            <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                            <p className="font-medium">{onboardingAction.error}</p>
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex flex-col gap-3 text-red-600 text-[11px] animate-in slide-in-from-top-1">
+                            <div className="flex items-start gap-2">
+                                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                <p className="font-medium">{onboardingAction.error}</p>
+                            </div>
+                            {shouldShowRetryOAuth && (
+                                <div className="space-y-2 pl-6">
+                                    <p className="text-[10px] text-red-500">{t('modelSetup.modelSelect.oauthRetryHint')}</p>
+                                    <button
+                                        type="button"
+                                        onClick={handleRetryOAuthAuth}
+                                        className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-red-600 text-white hover:bg-red-500 transition-all inline-flex items-center gap-2"
+                                    >
+                                        <ArrowRight size={12} /> {t('modelSetup.modelSelect.retryOAuthBtn')}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -708,9 +740,23 @@ const SetupStepModel = ({ onNext }) => {
                         )}
 
                         {onboardingAction.error && (
-                            <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">
-                                <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                                <p className="font-medium">{onboardingAction.error}</p>
+                            <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex flex-col gap-3 text-red-600 text-[11px] animate-in slide-in-from-top-1">
+                                <div className="flex items-start gap-2">
+                                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                    <p className="font-medium">{onboardingAction.error}</p>
+                                </div>
+                                {shouldShowRetryOAuth && (
+                                    <div className="space-y-2 pl-6">
+                                        <p className="text-[10px] text-red-500">{t('modelSetup.modelSelect.oauthRetryHint')}</p>
+                                        <button
+                                            type="button"
+                                            onClick={handleRetryOAuthAuth}
+                                            className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-red-600 text-white hover:bg-red-500 transition-all inline-flex items-center gap-2"
+                                        >
+                                            <ArrowRight size={12} /> {t('modelSetup.modelSelect.retryOAuthBtn')}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 

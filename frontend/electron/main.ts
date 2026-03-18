@@ -1483,7 +1483,8 @@ const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
   'gemini-api-key': ['gemini', 'google'],
   'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
   'minimax-api': ['minimax'],
-  'minimax-portal': ['minimax-portal', 'minimax'],
+  'minimax-global-oauth': ['minimax-portal', 'minimax'],
+  'minimax-cn-oauth': ['minimax-portal', 'minimax'],
   'moonshot-api-key': ['moonshot'],
   'openrouter-api-key': ['openrouter'],
   'xai-api-key': ['xai'],
@@ -1495,7 +1496,14 @@ const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
 
 const SUPPORTED_AUTH_CHOICES = new Set(Object.keys(AUTH_CHOICE_PROVIDER_ALIASES));
 const CREDENTIALLESS_AUTH_CHOICES = new Set(['ollama', 'vllm']);
-const OAUTH_AUTH_CHOICES = new Set(['openai-codex', 'google-gemini-cli', 'chutes', 'qwen-portal', 'minimax-portal']);
+const OAUTH_AUTH_CHOICES = new Set([
+  'openai-codex',
+  'google-gemini-cli',
+  'chutes',
+  'qwen-portal',
+  'minimax-global-oauth',
+  'minimax-cn-oauth',
+]);
 
 const sanitizeSecret = (value: string) => String(value || '').replace(/\s+/g, '');
 
@@ -3477,9 +3485,31 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                   }
 
                   // 2. 安裝依賴（先安裝才有可用的 CLI，讓後續 openclaw setup 可以執行）
+                  const pnpmCheckRes = await runCommandWithStreaming('pnpm --version', 'Checking pnpm availability...');
+                  if (pnpmCheckRes.code !== 0) {
+                    const detail = [
+                      String(pnpmCheckRes.stderr || '').trim(),
+                      String(pnpmCheckRes.stdout || '').trim(),
+                    ].filter(Boolean).join('\n');
+                    resolve({
+                      code: 1,
+                      stderr: detail || 'pnpm is unavailable. Please install pnpm and ensure it is available in PATH for GUI apps.',
+                      exitCode: 1,
+                    });
+                    return;
+                  }
+
                   const installRes = await runCommandWithStreaming('pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
                   if (installRes.code !== 0) {
-                    resolve({ code: 1, stderr: installRes.stderr || 'Dependency installation failed.', exitCode: 1 });
+                    const detail = [
+                      String(installRes.stderr || '').trim(),
+                      String(installRes.stdout || '').trim(),
+                    ].filter(Boolean).join('\n');
+                    resolve({
+                      code: 1,
+                      stderr: detail || `Dependency installation failed (exit code ${installRes.code}).`,
+                      exitCode: 1,
+                    });
                     return;
                   }
 

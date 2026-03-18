@@ -483,6 +483,8 @@
       "runCommand": "執行指令",
       "tokenCommandHint": "執行後請在彈出的終端機完成授權，取得 Token 後貼到上方 API 密鑰欄位。",
       "noApiKeyNeeded": "✓ 此授權模式無須輸入 API 密鑰。按下授權後將會進行對應的驗證流程（如自動開啟瀏覽器或本地服務）。",
+      "oauthRetryHint": "OAuth 流程若中途取消或失敗，可點擊下方按鈕重新開啟授權流程。",
+      "retryOAuthBtn": "重新授權",
       "confirmAuthContinue": "確認核心授權並繼續",
       "aligningSoulFrequency": "對齊靈魂頻率中...",
       "choiceDesc": {

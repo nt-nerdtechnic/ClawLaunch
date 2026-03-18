@@ -29,7 +29,8 @@ const SUPPORTED_AUTH_CHOICES = new Set([
   'gemini-api-key',
   'google-gemini-cli',
   'minimax-api',
-  'minimax-portal',
+  'minimax-global-oauth',
+  'minimax-cn-oauth',
   'moonshot-api-key',
   'openrouter-api-key',
   'xai-api-key',
@@ -47,7 +48,8 @@ const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
   'gemini-api-key': ['gemini', 'google'],
   'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
   'minimax-api': ['minimax'],
-  'minimax-portal': ['minimax-portal', 'minimax'],
+  'minimax-global-oauth': ['minimax-portal', 'minimax'],
+  'minimax-cn-oauth': ['minimax-portal', 'minimax'],
   'moonshot-api-key': ['moonshot'],
   'openrouter-api-key': ['openrouter'],
   'xai-api-key': ['xai'],
@@ -85,7 +87,8 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       'google-gemini-cli': ['google-gemini-cli', 'google-gemini'],
       'chutes': ['chutes'],
       'qwen-portal': ['qwen-portal', 'qwen'],
-      'minimax-portal': ['minimax-portal', 'minimax']
+      'minimax-global-oauth': ['minimax-portal', 'minimax'],
+      'minimax-cn-oauth': ['minimax-portal', 'minimax']
     };
 
     const aliases = providerAliases[authChoice] || [authChoice];
@@ -490,7 +493,8 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         'google-gemini-cli',
         'chutes',
         'qwen-portal',
-        'minimax-portal'
+        'minimax-global-oauth',
+        'minimax-cn-oauth'
       ]);
 
       if (configPath) {
@@ -569,23 +573,43 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       switch (step) {
         case 'model': {
           addLocalLog(`🧠 正在對齊靈魂頻率 (${selectedAuthChoice})...`, 'system');
-          const workspaceFlag = workspacePath ? `--workspace ${shellQuote(workspacePath)}` : '';
 
           if (oauthAuthChoices.has(selectedAuthChoice)) {
             addLocalLog('🔐 OAuth 授權需要互動式模式，將開啟終端機與瀏覽器流程。', 'system');
-            const interactiveCmd = `${envPrefix}${execCmd} openclaw onboard --auth-choice ${shellQuote(selectedAuthChoice)} ${workspaceFlag} --no-install-daemon --skip-daemon --skip-health --accept-risk`;
+            const oauthProviderMap: Record<string, { provider: string; method?: string }> = {
+              'openai-codex': { provider: 'openai-codex', method: 'oauth' },
+              'google-gemini-cli': { provider: 'google-gemini-cli', method: 'oauth' },
+              chutes: { provider: 'chutes', method: 'oauth' },
+              'qwen-portal': { provider: 'qwen-portal', method: 'device' },
+              'minimax-global-oauth': { provider: 'minimax-portal', method: 'oauth' },
+              'minimax-cn-oauth': { provider: 'minimax-portal', method: 'oauth-cn' },
+            };
+            const oauthTarget = oauthProviderMap[selectedAuthChoice];
+            if (!oauthTarget) {
+              throw new Error(`不支援的 OAuth 授權類型: ${selectedAuthChoice}`);
+            }
+
+            if (!configPath) {
+              throw new Error('找不到 Config Path，無法驗證 OAuth 授權狀態');
+            }
+
+            if (selectedAuthChoice === 'openai-codex') {
+              addLocalLog('🧹 啟動前清理殘留 OAuth 流程與 callback 埠 (127.0.0.1:1455)...', 'system');
+              await (window as any).electronAPI.exec(`pkill -f ${shellQuote('openclaw models auth login --provider openai-codex')} || true`);
+              await (window as any).electronAPI.exec(`lsof -nP -iTCP:1455 -sTCP:LISTEN -t | xargs -I{} kill -TERM {} 2>/dev/null || true`);
+            }
+
+            const providerFlag = `--provider ${shellQuote(oauthTarget.provider)}`;
+            const methodFlag = oauthTarget.method ? ` --method ${shellQuote(oauthTarget.method)}` : '';
+            const interactiveCmd = `${envPrefix}${execCmd} openclaw models auth login ${providerFlag}${methodFlag}`;
             const resRaw: any = await execInTerminal(interactiveCmd, {
-              title: 'OpenClaw OAuth 授權流程',
+              title: 'OpenClaw OAuth 授權流程 (models auth login)',
               holdOpen: true,
               cwd: corePath
             });
             const code = resRaw.code ?? resRaw.exitCode;
             if (typeof code === 'number' && code !== 0) {
               throw new Error(resRaw.stderr || 'OAuth 授權失敗');
-            }
-
-            if (!configPath) {
-              throw new Error('找不到 Config Path，無法驗證 OAuth 授權狀態');
             }
 
             addLocalLog('🌐 已啟動 OAuth 流程，等待授權完成...', 'system');
