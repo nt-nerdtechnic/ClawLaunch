@@ -305,13 +305,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   {authAdding ? '新增中...' : '新增授權'}
                 </button>
 
-                <button
-                  onClick={onHandleLaunchFullOnboarding}
-                  disabled={!isUnrestrictedMode}
-                  className="w-full py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
-                >
-                  或啟動完整導引
-                </button>
+
               </div>
             </div>
           </div>
