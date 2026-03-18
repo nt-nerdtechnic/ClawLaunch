@@ -72,6 +72,15 @@ const SetupStepInitialize = ({ onNext }) => {
         addLog(message, 'system');
     };
 
+    const resolveInitializedPath = (key, rawPath) => {
+        const normalized = String(rawPath || '').trim().replace(/[\\/]+$/, '');
+        if (!normalized) return '';
+        if (key === 'corePath') return `${normalized}/openclaw`;
+        if (key === 'configPath') return `${normalized}/.openclaw`;
+        if (key === 'workspacePath') return `${normalized}/openclaw-workspace`;
+        return normalized;
+    };
+
     useEffect(() => {
         const fetchVersions = async () => {
             const res = await window.electronAPI.exec('project:get-versions');
@@ -120,14 +129,15 @@ const SetupStepInitialize = ({ onNext }) => {
                 const data = JSON.parse(res.stdout);
                 if (!data.isEmpty && !data.notExist) {
                     let warnMsg = '';
+                    const resolvedPath = resolveInitializedPath(key, path);
                     if (key === 'configPath') {
                         // 特別提示：此目錄已有 OpenClaw 設定與授權資料，新建專案建議改用全新路徑
-                        warnMsg = t('setupInitialize.configPathWarning');
+                        warnMsg = `${t('setupInitialize.configPathWarning')} 實際初始化將使用：${resolvedPath}`;
                     } else {
                         let subDir = '';
                         if (key === 'corePath') subDir = 'openclaw';
                         if (key === 'workspacePath') subDir = 'openclaw-workspace';
-                        warnMsg = t('setupInitialize.pathWarning', { name: subDir });
+                        warnMsg = `${t('setupInitialize.pathWarning', { name: subDir })} 實際初始化將使用：${resolvedPath}`;
                     }
                     setWarnings(prev => ({ ...prev, [key]: warnMsg }));
                     setErrors(prev => ({ ...prev, [key]: '' }));

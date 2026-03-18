@@ -196,13 +196,17 @@ const SetupStepMessaging = ({ onNext }) => {
                     
                     <div className="relative">
                         <input 
-                            type={selectedChannel.reqKey === false ? "text" : "password"}
+                              type={selectedChannel.reqKey === false || config.platform === 'telegram' ? "text" : "password"}
                             placeholder={t(selectedChannel.placeholderKey)} 
                             value={config.botToken}
                             onChange={(e) => {
                               setLocalError('');
                               setConfig({ botToken: e.target.value });
                             }}
+                              autoComplete="off"
+                              autoCorrect="off"
+                              autoCapitalize="none"
+                              spellCheck={false}
                             disabled={selectedChannel.reqKey === false}
                             className="w-full p-4 bg-white border border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500/50 outline-none transition-all shadow-sm text-sm font-mono disabled:bg-gray-100 disabled:text-gray-400"
                         />

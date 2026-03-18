@@ -113,6 +113,7 @@ function App() {
   const {
     runtimeProfile,
     setRuntimeProfile,
+    runtimeProfileError,
     runtimeDraftModel,
     setRuntimeDraftModel,
     runtimeDraftBotToken,
@@ -120,7 +121,7 @@ function App() {
     dynamicModelOptions,
     dynamicModelLoading,
     loadDynamicModelOptions,
-  } = useRuntimeConfig(resolvedConfigDir, activeTab, detectedConfig);
+  } = useRuntimeConfig(resolvedConfigDir, activeTab, detectedConfig, config.corePath, config.workspacePath);
   const effectiveRuntimeModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
   const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
   const {
@@ -233,8 +234,8 @@ function App() {
       id: 'minimax', label: 'MiniMax', icon: <Zap size={13} />,
       choices: [
         { id: 'minimax-api', name: 'API Key', desc: 'MiniMax 官方密鑰', reqKey: true },
-        { id: 'minimax-global-oauth', name: 'OAuth (Global)', desc: '瀏覽器授權登入（api.minimax.io）', reqKey: false, oauthFlow: true },
-        { id: 'minimax-cn-oauth', name: 'OAuth (CN)', desc: '瀏覽器授權登入（api.minimaxi.com）', reqKey: false, oauthFlow: true },
+        { id: 'minimax-coding-plan-global-token', name: 'Coding Plan Token (Global)', desc: '貼上平台 Token，無需 OAuth 瀏覽器流程', reqKey: true },
+        { id: 'minimax-coding-plan-cn-token', name: 'Coding Plan Token (CN)', desc: '貼上中國區平台 Token，無需 OAuth 瀏覽器流程', reqKey: true },
       ],
     },
     {
@@ -580,8 +581,8 @@ function App() {
         
         <nav className="flex-1 space-y-1">
           <NavItem icon={<Activity size={18}/>} label={t('app.tabs.monitor')} active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} />
-          <NavItem icon={<Radar size={18}/>} label={t('app.tabs.controlCenter')} active={activeTab === 'controlCenter'} onClick={() => setActiveTab('controlCenter')} />
           <NavItem icon={<BarChart3 size={18}/>} label={t('app.tabs.analytics')} active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
+          <NavItem icon={<Radar size={18}/>} label={t('app.tabs.controlCenter')} active={activeTab === 'controlCenter'} onClick={() => setActiveTab('controlCenter')} />
           <NavItem icon={<Boxes size={18}/>} label={t('app.tabs.skills')} active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
           <NavItem icon={<Database size={18}/>} label={t('app.tabs.runtimeSettings')} active={activeTab === 'runtimeSettings'} onClick={() => setActiveTab('runtimeSettings')} />
         </nav>
@@ -776,6 +777,49 @@ function App() {
 
         <div className="flex-1 p-10 overflow-y-auto relative">
           {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
+          {activeTab !== 'onboarding' && onboardingFinished && (() => {
+            const missing: string[] = [];
+            if (!config.corePath?.trim()) missing.push('Core Path');
+            if (!config.configPath?.trim()) missing.push('Config Path');
+            if (!config.workspacePath?.trim()) missing.push('Workspace Path');
+            const hasPathError = runtimeProfileError && runtimeProfileError.length > 0;
+            if (missing.length === 0 && !hasPathError) return null;
+            return (
+              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 dark:border-amber-700/60 dark:bg-amber-950/20">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-widest">
+                    工作空間設定異常
+                  </div>
+                  <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                    {missing.length > 0 && (
+                      <span>以下路徑尚未設定：<span className="font-bold">{missing.join('、')}</span>。</span>
+                    )}
+                    {hasPathError && (
+                      <span className={missing.length > 0 ? ' ' : ''}>{runtimeProfileError}</span>
+                    )}
+                    {' '}若路徑已填入仍出現此提示，請重新執行設定或返回引導流程。
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('launcherSettings')}
+                    className="rounded-xl border border-amber-400 bg-amber-100 px-3 py-1.5 text-[11px] font-black text-amber-800 hover:bg-amber-200 transition-colors dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50"
+                  >
+                    進行設定
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLogoutConfirm(true)}
+                    className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-700 hover:bg-rose-100 transition-colors dark:border-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
+                  >
+                    重新登出
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
           {activeTab === 'controlCenter' && <ControlCenterPage />}
           {activeTab === 'skills' && <SkillsPage />}
 
@@ -854,6 +898,7 @@ function App() {
               onHandleAddAuthProfile={handleAddAuthProfile}
               onHandleRunAuthTokenCommand={handleRunAuthTokenCommand}
               onHandleLaunchFullOnboarding={handleLaunchFullOnboarding}
+              runtimeProfileError={runtimeProfileError}
               telegramPairingRequests={telegramPairingRequests}
               telegramAuthorizedUsers={telegramAuthorizedUsers}
               telegramPairingLoading={telegramPairingLoading}
@@ -866,7 +911,6 @@ function App() {
               onHandleClearTelegramPairingRequests={clearTelegramPairingRequests}
               onSave={handleSaveConfig}
               saveState={runtimeSaveState}
-              onBrowsePath={handleBrowsePath}
             />
           )}
         </div>

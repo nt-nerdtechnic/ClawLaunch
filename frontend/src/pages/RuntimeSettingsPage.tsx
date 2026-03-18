@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderOpen, Key, Loader2, ShieldCheck, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Key, Loader2, ShieldCheck, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface AuthProfileRow {
@@ -69,6 +69,7 @@ interface RuntimeSettingsPageProps {
   onHandleAddAuthProfile: () => Promise<void>;
   onHandleRunAuthTokenCommand: () => Promise<void>;
   onHandleLaunchFullOnboarding: () => Promise<void>;
+  runtimeProfileError?: string;
 
   // Telegram
   telegramPairingRequests: TelegramPairingRequest[];
@@ -85,7 +86,6 @@ interface RuntimeSettingsPageProps {
   // Handlers
   onSave: () => Promise<void>;
   saveState?: 'idle' | 'saving' | 'saved' | 'error';
-  onBrowsePath: (key: 'corePath' | 'configPath' | 'workspacePath') => void;
 }
 
 export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
@@ -125,6 +125,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   onHandleAddAuthProfile,
   onHandleRunAuthTokenCommand: _onHandleRunAuthTokenCommand,
   onHandleLaunchFullOnboarding,
+  runtimeProfileError,
   telegramPairingRequests,
   telegramAuthorizedUsers,
   telegramPairingLoading,
@@ -137,10 +138,10 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   onHandleClearTelegramPairingRequests,
   onSave,
   saveState = 'idle',
-  onBrowsePath,
 }) => {
   const { t } = useTranslation();
   const dynamicModelSource = dynamicModelOptions.length > 0 ? '動態' : '靜態';
+  const isUnrestrictedMode = config?.unrestrictedMode === true;
 
   const saveButtonLabel =
     saveState === 'saving'
@@ -151,111 +152,173 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           ? t('settings.saveConfigFailedButton')
           : t('settings.saveConfig');
 
-  const shouldUseExternalTerminal = (cfg?: any) =>
-    (cfg?.useExternalTerminal ?? config?.useExternalTerminal) !== false;
-
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in zoom-in-95">
-      {/* Runtime Paths Section */}
+      {/* Gateway & Model Section */}
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">
-            Runtime Paths
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+              Gateway & Model
+            </div>
+            <button
+              type="button"
+              onClick={() => setConfig({ unrestrictedMode: !isUnrestrictedMode })}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                isUnrestrictedMode
+                  ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 dark:border-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50'
+                  : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50'
+              }`}
+            >
+              {isUnrestrictedMode ? '🔓 無限制模式' : '🔒 受限模式'}
+            </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Core Path */}
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {t('settings.corePath')}
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="text"
-                  value={config.corePath || ''}
-                  onChange={(e) => setConfig({ corePath: e.target.value })}
-                  placeholder={t('settings.corePathPlaceholder')}
-                  className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-                />
+          {runtimeProfileError && (
+            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-800/60 dark:bg-rose-950/20">
+              <AlertCircle size={15} className="mt-0.5 shrink-0 text-rose-500 dark:text-rose-400" />
+              <div className="text-xs text-rose-700 dark:text-rose-300 font-mono leading-relaxed">
+                {runtimeProfileError}
+              </div>
+            </div>
+          )}
+
+          <div className="mb-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 space-y-4">
+            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+              認證管理
+            </div>
+
+            {authProfilesLoading && (
+              <div className="flex items-center gap-2 text-slate-500">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-sm">加載授權清單...</span>
+              </div>
+            )}
+
+            {authProfilesError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
+                {authProfilesError}
+              </div>
+            )}
+
+            {!authProfilesLoading && authProfiles.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-xs text-slate-600 dark:text-slate-300">
+                  已配置 {authProfiles.length} 個授權，其中 {authProfiles.filter((p) => p.credentialHealthy).length} 個健康
+                </div>
+                <div className="grid gap-3">
+                  {authProfiles.map((profile) => (
+                    <div
+                      key={profile.profileId}
+                      className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 flex items-center justify-between"
+                    >
+                      <div className="flex-1">
+                        <div className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                          {profile.profileId}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-slate-600 dark:text-slate-400">
+                          <span className="px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
+                            {profile.provider}
+                          </span>
+                          {profile.credentialHealthy && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                              <ShieldCheck size={11} />
+                              Healthy
+                            </span>
+                          )}
+                          {!profile.credentialHealthy && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                              <AlertCircle size={11} />
+                              需要修復
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onHandleRemoveAuthProfile(profile.profileId)}
+                        disabled={authRemovingId === profile.profileId || !isUnrestrictedMode}
+                        className="ml-4 p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
+                        title="移除授權"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-4">新增授權</div>
+              {authAddError && (
+                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
+                  {authAddError}
+                </div>
+              )}
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Provider</label>
+                    <select
+                      value={authAddProvider}
+                      onChange={(e) => setAuthAddProvider(e.target.value)}
+                      disabled={!isUnrestrictedMode}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                    >
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="google">Google</option>
+                      <option value="openrouter">OpenRouter</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Choice</label>
+                    <select
+                      value={authAddChoice}
+                      onChange={(e) => setAuthAddChoice(e.target.value)}
+                      disabled={!isUnrestrictedMode}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:border-blue-400"
+                    >
+                      <option value="apiKey">API Key</option>
+                      <option value="token">Setup Token</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">憑證</label>
+                  <input
+                    type="password"
+                    value={authAddSecret}
+                    onChange={(e) => setAuthAddSecret(e.target.value)}
+                    placeholder="輸入 API Key 或 Token"
+                    disabled={!isUnrestrictedMode}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-black/40 px-4 py-3 text-slate-700 dark:text-slate-300 text-xs outline-none focus:border-blue-400"
+                  />
+                </div>
+
                 <button
-                  onClick={() => onBrowsePath('corePath')}
-                  title="Browse folder"
-                  className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
+                  onClick={onHandleAddAuthProfile}
+                  disabled={authAdding || !isUnrestrictedMode}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-colors disabled:opacity-60"
                 >
-                  <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
+                  <Plus size={16} />
+                  {authAdding ? '新增中...' : '新增授權'}
+                </button>
+
+                <button
+                  onClick={onHandleLaunchFullOnboarding}
+                  disabled={!isUnrestrictedMode}
+                  className="w-full py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
+                >
+                  或啟動完整導引
                 </button>
               </div>
             </div>
-
-            {/* Config Path */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {t('settings.configPath')}
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="text"
-                  value={config.configPath || ''}
-                  onChange={(e) => setConfig({ configPath: e.target.value })}
-                  placeholder={t('settings.configPathPlaceholder')}
-                  className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-                />
-                <button
-                  onClick={() => onBrowsePath('configPath')}
-                  title="Browse folder"
-                  className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
-                >
-                  <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
-                </button>
-              </div>
-            </div>
-
-            {/* Workspace Path */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {t('settings.workspacePath')}
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="text"
-                  value={config.workspacePath || ''}
-                  onChange={(e) => setConfig({ workspacePath: e.target.value })}
-                  placeholder={t('settings.workspacePathPlaceholder')}
-                  className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-                />
-                <button
-                  onClick={() => onBrowsePath('workspacePath')}
-                  title="Browse folder"
-                  className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
-                >
-                  <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
-                </button>
-              </div>
-            </div>
           </div>
-        </div>
 
-        {/* Gateway & Model Section */}
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">
-            Gateway & Model
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Gateway Port */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {t('settings.gatewayPort')}
-              </label>
-              <input
-                type="text"
-                value={config.gatewayPort || ''}
-                onChange={(e) => setConfig({ gatewayPort: e.target.value })}
-                placeholder={t('settings.gatewayPortPlaceholder')}
-                className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-              />
-            </div>
-
+          <div className="grid grid-cols-1 gap-5">
             {/* Model Selection */}
-            <div className="space-y-2 md:col-span-2">
+            <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
                   {t('settings.inferenceEngine')}
@@ -360,176 +423,6 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             </div>
           </div>
 
-          {/* Bot Token */}
-          <div className="mt-5 space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-              Telegram Bot Token
-            </label>
-            <input
-              type="password"
-              value={runtimeDraftBotToken}
-              onChange={(e) => setRuntimeDraftBotToken(e.target.value)}
-              placeholder="可選：輸入 Telegram Bot Token"
-              className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-            />
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
-            <div>
-              <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                {t('settings.externalTerminalTitle')}
-              </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                {t('settings.externalTerminalDesc')}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setConfig({ useExternalTerminal: !shouldUseExternalTerminal() })}
-              className={`shrink-0 inline-flex h-7 w-12 items-center rounded-full border transition-all ${
-                shouldUseExternalTerminal()
-                  ? 'bg-emerald-500 border-emerald-500 justify-end'
-                  : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'
-              }`}
-              aria-pressed={shouldUseExternalTerminal()}
-            >
-              <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Auth Profiles Section */}
-      <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">
-            認證管理
-          </div>
-
-          {authProfilesLoading && (
-            <div className="flex items-center gap-2 text-slate-500">
-              <Loader2 size={16} className="animate-spin" />
-              <span className="text-sm">加載授權清單...</span>
-            </div>
-          )}
-
-          {authProfilesError && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
-              {authProfilesError}
-            </div>
-          )}
-
-          {!authProfilesLoading && authProfiles.length > 0 && (
-            <div className="space-y-3">
-              <div className="text-xs text-slate-600 dark:text-slate-300">
-                已配置 {authProfiles.length} 個授權，其中 {authProfiles.filter((p) => p.credentialHealthy).length} 個健康
-              </div>
-              <div className="grid gap-3">
-                {authProfiles.map((profile) => (
-                  <div
-                    key={profile.profileId}
-                    className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 flex items-center justify-between"
-                  >
-                    <div className="flex-1">
-                      <div className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                        {profile.profileId}
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-slate-600 dark:text-slate-400">
-                        <span className="px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
-                          {profile.provider}
-                        </span>
-                        {profile.credentialHealthy && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-                            <ShieldCheck size={11} />
-                            Healthy
-                          </span>
-                        )}
-                        {!profile.credentialHealthy && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                            <AlertCircle size={11} />
-                            需要修復
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => onHandleRemoveAuthProfile(profile.profileId)}
-                      disabled={authRemovingId === profile.profileId}
-                      className="ml-4 p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
-                      title="移除授權"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Add Auth Profile */}
-        <div>
-          <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-4">新增授權</div>
-          {authAddError && (
-            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
-              {authAddError}
-            </div>
-          )}
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">Provider</label>
-                <select
-                  value={authAddProvider}
-                  onChange={(e) => setAuthAddProvider(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:border-blue-400"
-                >
-                  <option value="anthropic">Anthropic</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="google">Google</option>
-                  <option value="openrouter">OpenRouter</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">Choice</label>
-                <select
-                  value={authAddChoice}
-                  onChange={(e) => setAuthAddChoice(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:border-blue-400"
-                >
-                  <option value="apiKey">API Key</option>
-                  <option value="token">Setup Token</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">憑證</label>
-              <input
-                type="password"
-                value={authAddSecret}
-                onChange={(e) => setAuthAddSecret(e.target.value)}
-                placeholder="輸入 API Key 或 Token"
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-black/40 px-4 py-3 text-slate-700 dark:text-slate-300 text-xs outline-none focus:border-blue-400"
-              />
-            </div>
-
-            <button
-              onClick={onHandleAddAuthProfile}
-              disabled={authAdding}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-colors disabled:opacity-60"
-            >
-              <Plus size={16} />
-              {authAdding ? '新增中...' : '新增授權'}
-            </button>
-
-            <button
-              onClick={onHandleLaunchFullOnboarding}
-              className="w-full py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
-            >
-              或啟動完整導引
-            </button>
-          </div>
         </div>
       </div>
 
@@ -547,7 +440,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           <button
             type="button"
             onClick={onHandleClearTelegramPairingRequests}
-            disabled={telegramPairingClearing || telegramPairingLoading || telegramPairingRequests.length === 0}
+            disabled={telegramPairingClearing || telegramPairingLoading || telegramPairingRequests.length === 0 || !isUnrestrictedMode}
             className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {telegramPairingClearing ? '清空中...' : '清空待配對'}
@@ -559,6 +452,26 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             {telegramPairingError}
           </div>
         )}
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 space-y-2">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+            Telegram Bot Token
+          </label>
+          <input
+            type="text"
+            value={runtimeDraftBotToken}
+            onChange={(e) => setRuntimeDraftBotToken(e.target.value)}
+            placeholder="可選：輸入 Telegram Bot Token"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+          />
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            建議先更新 Bot Token，再進行配對審核與授權管理。
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <div className="space-y-3">
@@ -588,7 +501,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                       <button
                         type="button"
                         onClick={() => onHandleApproveTelegramPairing(request)}
-                        disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
+                        disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code || !isUnrestrictedMode}
                         className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-60"
                       >
                         {telegramPairingApprovingCode === request.code ? '核准中...' : '核准'}
@@ -596,7 +509,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                       <button
                         type="button"
                         onClick={() => onHandleRejectTelegramPairing(request)}
-                        disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
+                        disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code || !isUnrestrictedMode}
                         className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-rose-500 disabled:opacity-60"
                       >
                         {telegramPairingRejectingCode === request.code ? '拒絕中...' : '拒絕'}

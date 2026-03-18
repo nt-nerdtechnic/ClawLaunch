@@ -78,6 +78,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   const [runtimeSaveState, setRuntimeSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const launcherResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runtimeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isUnrestrictedMode = config?.unrestrictedMode === true;
 
   useEffect(() => {
     return () => {
@@ -131,6 +132,14 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       scheduleSaveStateReset(launcherResetTimerRef, setLauncherSaveState);
       addLog('錯誤: Gateway Port 未填或格式不正確，儲存已中止。請先至設定頁填入有效的 Gateway Port（正整數）後再儲存。', 'stderr');
       return;
+    }
+
+    const workspacePathRaw = String(config.workspacePath ?? '').trim();
+    if (workspacePathRaw) {
+      const checkWs = await window.electronAPI.exec(`test -d ${shellQuote(workspacePathRaw)}`);
+      if ((checkWs.code ?? checkWs.exitCode) !== 0) {
+        addLog(`警告: Workspace Path 目錄不存在：${workspacePathRaw}。儲存將繼續，但請確認路徑正確，否則 Agent 可能無法存取工作區。`, 'stderr');
+      }
     }
 
     setLauncherSaveState('saving');
@@ -223,6 +232,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const handleLaunchFullOnboarding = async () => {
+    if (!isUnrestrictedMode) {
+      const msg = '目前為受限模式，已禁止完整導引操作。請先啟用「無限制模式」。';
+      setAuthAddError(msg);
+      addLog(msg, 'stderr');
+      return;
+    }
+
     if (!config.corePath?.trim()) {
       setAuthAddError('缺少 Core Path，無法啟動完整導引。');
       return;
@@ -250,6 +266,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const handleRemoveAuthProfile = async (profileId: string) => {
+    if (!isUnrestrictedMode) {
+      const msg = '目前為受限模式，已禁止移除授權。請先啟用「無限制模式」。';
+      setAuthAddError(msg);
+      addLog(msg, 'stderr');
+      return;
+    }
+
     if (!window.electronAPI || !resolvedConfigDir || !profileId) return;
     setAuthRemovingId(profileId);
     setAuthAddError('');
@@ -274,6 +297,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const handleAddAuthProfile = async () => {
+    if (!isUnrestrictedMode) {
+      const msg = '目前為受限模式，已禁止新增授權。請先啟用「無限制模式」。';
+      setAuthAddError(msg);
+      addLog(msg, 'stderr');
+      return;
+    }
+
     if (!window.electronAPI) return;
     setAuthAddError('');
 
@@ -329,6 +359,11 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const handleRunAuthTokenCommand = async () => {
+    if (!isUnrestrictedMode) {
+      setAuthAddTokenError('目前為受限模式，已禁止執行授權指令。請先啟用「無限制模式」。');
+      return;
+    }
+
     const command = (authAddTokenCommand || '').trim();
     if (!command) {
       setAuthAddTokenError('請先輸入要執行的指令');
@@ -354,6 +389,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const approveTelegramPairing = async (request: TelegramPairingRequest) => {
+    if (!isUnrestrictedMode) {
+      const msg = '目前為受限模式，已禁止核准配對。請先啟用「無限制模式」。';
+      setTelegramPairingError(msg);
+      addLog(msg, 'stderr');
+      return;
+    }
+
     if (!window.electronAPI) {
       addLog(t('logs.commFailed', { msg: 'Electron API not available' }), 'stderr');
       return;
@@ -386,6 +428,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const rejectTelegramPairing = async (request: TelegramPairingRequest) => {
+    if (!isUnrestrictedMode) {
+      const msg = '目前為受限模式，已禁止拒絕配對。請先啟用「無限制模式」。';
+      setTelegramPairingError(msg);
+      addLog(msg, 'stderr');
+      return;
+    }
+
     if (!window.electronAPI || !resolvedConfigDir) {
       setTelegramPairingError(t('monitor.telegramPairing.missingConfig'));
       return;
@@ -413,6 +462,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const clearTelegramPairingRequests = async () => {
+    if (!isUnrestrictedMode) {
+      const msg = '目前為受限模式，已禁止清空待配對清單。請先啟用「無限制模式」。';
+      setTelegramPairingError(msg);
+      addLog(msg, 'stderr');
+      return;
+    }
+
     if (!window.electronAPI || !resolvedConfigDir) {
       setTelegramPairingError(t('monitor.telegramPairing.missingConfig'));
       return;

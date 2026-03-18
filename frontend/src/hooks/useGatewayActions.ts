@@ -156,6 +156,10 @@ export function useGatewayActions({
       return;
     }
 
+    if (!config.configPath || !config.configPath.trim()) {
+      addLog('警告: 未設定 Config Path，Gateway 將使用預設 ~/.openclaw 設定。若同時執行多個 OpenClaw 實例，可能導致設定衝突。建議在「Launcher 設定」中明確指定 Config Path。', 'stderr');
+    }
+
     if (running) {
       await stopGateway();
       return;

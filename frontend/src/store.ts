@@ -48,6 +48,7 @@ interface Config {
   useExternalTerminal: boolean;
   autoRestartGateway: boolean;
   restartInForegroundTerminal: boolean;
+  unrestrictedMode: boolean;
   enabledSkills: string[];
   corePath: string;    // 主核心區
   configPath: string;  // 設定區
@@ -241,6 +242,7 @@ export const useStore = create<AppState>((set) => ({
     useExternalTerminal: true,
     autoRestartGateway: false,
     restartInForegroundTerminal: false,
+    unrestrictedMode: false,
     enabledSkills: [], // 初始擴展技能為空，核心技能已預設啟動
     corePath: '',
     configPath: '',

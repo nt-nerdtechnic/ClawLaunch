@@ -51,9 +51,7 @@ const SetupStepModel = ({ onNext }) => {
         'openai-codex',
         'google-gemini-cli',
         'chutes',
-        'qwen-portal',
-        'minimax-global-oauth',
-        'minimax-cn-oauth'
+                'qwen-portal'
     ]);
 
   const [probingKey, setProbingKey] = useState(null);
@@ -94,9 +92,9 @@ const SetupStepModel = ({ onNext }) => {
       id: 'minimax', label: 'MiniMax', icon: <Zap size={16} />,
       desc: 'MiniMax M2.5',
       choices: [
-                { id: 'minimax-api', name: 'MiniMax M2.5 (API Key)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxApiKey'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' },
-                                { id: 'minimax-global-oauth', name: 'MiniMax OAuth (Global)', desc: `${t('modelSetup.modelSelect.choiceDesc.minimaxOauth')} · api.minimax.io`, reqKey: false, defaultModel: 'MiniMax-M2.5', link: null },
-                                { id: 'minimax-cn-oauth', name: 'MiniMax OAuth (CN)', desc: `${t('modelSetup.modelSelect.choiceDesc.minimaxOauth')} · api.minimaxi.com`, reqKey: false, defaultModel: 'MiniMax-M2.5', link: null }
+                                { id: 'minimax-api', name: 'MiniMax M2.5 (API Key)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxApiKey'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' },
+                                { id: 'minimax-coding-plan-global-token', name: 'MiniMax Coding Plan Token (Global)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxCodingPlanTokenGlobal'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimax.io/' },
+                                { id: 'minimax-coding-plan-cn-token', name: 'MiniMax Coding Plan Token (CN)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxCodingPlanTokenCn'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' }
       ]
     },
     {
@@ -663,7 +661,11 @@ const SetupStepModel = ({ onNext }) => {
                                     </div>
                                     <input 
                                         type="password" 
-                                        placeholder={t('modelSetup.modelSelect.keyPlaceholder')} 
+                                        placeholder={
+                                            currentChoice?.id === 'minimax-coding-plan-global-token' || currentChoice?.id === 'minimax-coding-plan-cn-token'
+                                                ? 'MINIMAX_OAUTH_TOKEN'
+                                                : t('modelSetup.modelSelect.keyPlaceholder')
+                                        } 
                                         value={config.apiKey} 
                                         onChange={(e) => setConfig({ apiKey: e.target.value })} 
                                         className="w-full pl-11 pr-4 py-4 bg-white border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 outline-none transition-all text-sm font-mono shadow-sm" 

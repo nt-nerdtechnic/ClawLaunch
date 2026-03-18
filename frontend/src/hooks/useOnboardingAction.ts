@@ -29,8 +29,8 @@ const SUPPORTED_AUTH_CHOICES = new Set([
   'gemini-api-key',
   'google-gemini-cli',
   'minimax-api',
-  'minimax-global-oauth',
-  'minimax-cn-oauth',
+  'minimax-coding-plan-global-token',
+  'minimax-coding-plan-cn-token',
   'moonshot-api-key',
   'openrouter-api-key',
   'xai-api-key',
@@ -48,8 +48,8 @@ const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
   'gemini-api-key': ['gemini', 'google'],
   'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
   'minimax-api': ['minimax'],
-  'minimax-global-oauth': ['minimax-portal', 'minimax'],
-  'minimax-cn-oauth': ['minimax-portal', 'minimax'],
+  'minimax-coding-plan-global-token': ['minimax-portal', 'minimax'],
+  'minimax-coding-plan-cn-token': ['minimax-portal', 'minimax'],
   'moonshot-api-key': ['moonshot'],
   'openrouter-api-key': ['openrouter'],
   'xai-api-key': ['xai'],
@@ -60,6 +60,10 @@ const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
 };
 
 const CREDENTIALLESS_AUTH_CHOICES = new Set(['ollama', 'vllm']);
+const DIRECT_MINIMAX_TOKEN_CHOICES = new Set([
+  'minimax-coding-plan-global-token',
+  'minimax-coding-plan-cn-token',
+]);
 
 export type OnboardingStep = 'model' | 'messaging' | 'skills' | 'launch';
 
@@ -86,9 +90,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       'openai-codex': ['openai-codex'],
       'google-gemini-cli': ['google-gemini-cli', 'google-gemini'],
       'chutes': ['chutes'],
-      'qwen-portal': ['qwen-portal', 'qwen'],
-      'minimax-global-oauth': ['minimax-portal', 'minimax'],
-      'minimax-cn-oauth': ['minimax-portal', 'minimax']
+      'qwen-portal': ['qwen-portal', 'qwen']
     };
 
     const aliases = providerAliases[authChoice] || [authChoice];
@@ -246,6 +248,33 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     params.addLocalLog('✅ 已確認現有授權符合雙層可驗證（global + agent）。', 'system');
   };
 
+  const verifyMiniMaxPortalTokenConfig = async (params: {
+    authChoice: string;
+    configPath: string;
+    addLocalLog: (text: string, source?: string) => void;
+  }) => {
+    const parsed = await readOpenClawConfig(params.configPath);
+    const provider = parsed?.models?.providers?.['minimax-portal'] || {};
+    const apiKey = String(provider?.apiKey || '').trim();
+    const baseUrl = String(provider?.baseUrl || '').trim();
+    if (!apiKey) {
+      throw new Error('MiniMax Coding Plan 設定失敗：models.providers.minimax-portal.apiKey 為空。');
+    }
+
+    const expectedBaseUrl =
+      params.authChoice === 'minimax-coding-plan-cn-token'
+        ? 'https://api.minimaxi.com/anthropic'
+        : 'https://api.minimax.io/anthropic';
+
+    if (!baseUrl || baseUrl !== expectedBaseUrl) {
+      throw new Error(
+        `MiniMax Coding Plan 設定失敗：minimax-portal.baseUrl 應為 ${expectedBaseUrl}，目前為 ${baseUrl || '(empty)'}`,
+      );
+    }
+
+    params.addLocalLog(`✅ 已確認 MiniMax Coding Plan Token 設定 (${expectedBaseUrl})。`, 'system');
+  };
+
   const resolveExecCmd = async (corePath: string): Promise<string> => {
     const hasPnpmLock = await (window as any).electronAPI.exec(`test -f ${shellQuote(`${corePath}/pnpm-lock.yaml`)}`);
     if (isCommandSuccess(hasPnpmLock)) return 'pnpm';
@@ -262,6 +291,8 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       configPath: (config.configPath || '').trim(),
       workspacePath: (config.workspacePath || '').trim(),
     };
+    const hasAnyInlinePath = Boolean(runtimePaths.corePath || runtimePaths.configPath || runtimePaths.workspacePath);
+    const allowPersistedRecovery = userType === 'existing' || !hasAnyInlinePath;
 
     const fillMissing = (incoming: { corePath?: string; configPath?: string; workspacePath?: string }) => {
       if (!runtimePaths.corePath && incoming.corePath) runtimePaths.corePath = String(incoming.corePath).trim();
@@ -269,7 +300,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       if (!runtimePaths.workspacePath && incoming.workspacePath) runtimePaths.workspacePath = String(incoming.workspacePath).trim();
     };
 
-    if (!runtimePaths.corePath || !runtimePaths.configPath || !runtimePaths.workspacePath) {
+    if (allowPersistedRecovery && (!runtimePaths.corePath || !runtimePaths.configPath || !runtimePaths.workspacePath)) {
       const readRes = await (window as any).electronAPI.exec('config:read');
       if (isCommandSuccess(readRes) && readRes.stdout) {
         try {
@@ -281,16 +312,20 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       }
     }
 
-    if (!runtimePaths.corePath || !runtimePaths.configPath || !runtimePaths.workspacePath) {
+    if (
+      allowPersistedRecovery
+      && (!runtimePaths.corePath || !runtimePaths.configPath || !runtimePaths.workspacePath)
+    ) {
       const detectRes = await (window as any).electronAPI.exec('detect:paths');
       if (isCommandSuccess(detectRes) && detectRes.stdout) {
         try {
           const detected = JSON.parse(detectRes.stdout);
-          const existing = detected?.existingConfig || {};
+          // 直接使用頂層的 detected 值，已經由 electron 正確計算過
+          // 避免從 existingConfig 挖欄位導致欄位名稱不匹配 (workspace 而非 workspacePath)
           fillMissing({
-            corePath: existing.corePath,
-            configPath: existing.configPath,
-            workspacePath: existing.workspacePath,
+            corePath: detected.corePath,
+            configPath: detected.configPath,
+            workspacePath: detected.workspacePath,
           });
         } catch {
           // Ignore malformed detect output.
@@ -492,9 +527,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         'openai-codex',
         'google-gemini-cli',
         'chutes',
-        'qwen-portal',
-        'minimax-global-oauth',
-        'minimax-cn-oauth'
+        'qwen-portal'
       ]);
 
       if (configPath) {
@@ -581,8 +614,6 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               'google-gemini-cli': { provider: 'google-gemini-cli', method: 'oauth' },
               chutes: { provider: 'chutes', method: 'oauth' },
               'qwen-portal': { provider: 'qwen-portal', method: 'device' },
-              'minimax-global-oauth': { provider: 'minimax-portal', method: 'oauth' },
-              'minimax-cn-oauth': { provider: 'minimax-portal', method: 'oauth-cn' },
             };
             const oauthTarget = oauthProviderMap[selectedAuthChoice];
             if (!oauthTarget) {
@@ -593,9 +624,13 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               throw new Error('找不到 Config Path，無法驗證 OAuth 授權狀態');
             }
 
+            addLocalLog(`🧹 啟動前清理殘留 OAuth 流程 (${oauthTarget.provider}/${oauthTarget.method || 'default'})...`, 'system');
+            await (window as any).electronAPI.exec(
+              `pkill -f ${shellQuote(`openclaw models auth login --provider ${oauthTarget.provider}`)} || true`,
+            );
+
             if (selectedAuthChoice === 'openai-codex') {
-              addLocalLog('🧹 啟動前清理殘留 OAuth 流程與 callback 埠 (127.0.0.1:1455)...', 'system');
-              await (window as any).electronAPI.exec(`pkill -f ${shellQuote('openclaw models auth login --provider openai-codex')} || true`);
+              addLocalLog('🧹 額外清理 OpenAI callback 埠 (127.0.0.1:1455)...', 'system');
               await (window as any).electronAPI.exec(`lsof -nP -iTCP:1455 -sTCP:LISTEN -t | xargs -I{} kill -TERM {} 2>/dev/null || true`);
             }
 
@@ -660,6 +695,16 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           if (!configPath) {
             throw new Error('缺少 Config Path，無法驗證授權寫入結果');
           }
+
+          if (DIRECT_MINIMAX_TOKEN_CHOICES.has(selectedAuthChoice)) {
+            await verifyMiniMaxPortalTokenConfig({
+              authChoice: selectedAuthChoice,
+              configPath,
+              addLocalLog,
+            });
+            break;
+          }
+
           await verifyDualLayerAuthPersistence({
             authChoice: selectedAuthChoice,
             configPath,

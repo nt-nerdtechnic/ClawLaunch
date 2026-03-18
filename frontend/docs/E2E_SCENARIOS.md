@@ -81,14 +81,87 @@ Verify each OAuth option in onboarding triggers `openclaw models auth login` wit
 | [ ] | Google Gemini CLI OAuth | `google-gemini-cli` | `oauth` | `models auth login --provider google-gemini-cli --method oauth` |
 | [ ] | Chutes OAuth | `chutes` | `oauth` | `models auth login --provider chutes --method oauth` |
 | [ ] | Qwen Portal OAuth | `qwen-portal` | `device` | `models auth login --provider qwen-portal --method device` |
-| [ ] | MiniMax OAuth (Global) | `minimax-portal` | `oauth` | `models auth login --provider minimax-portal --method oauth` |
-| [ ] | MiniMax OAuth (CN) | `minimax-portal` | `oauth-cn` | `models auth login --provider minimax-portal --method oauth-cn` |
 
 ### Expected
 - Every OAuth click routes to `openclaw models auth login`, not `openclaw onboard --auth-choice`.
 - Provider and method match the table above.
 - Browser/device auth flow opens without immediate CLI argument error.
-- MiniMax Global and CN are distinguishable by method value (`oauth` vs `oauth-cn`).
+
+## Scenario E: Existing Onboarding End-to-End Checklist
+
+### Goal
+Validate the full `existing` onboarding path from Welcome -> Model -> Messaging -> Launch, including path hydration, auth validation, platform-specific channel validation, and launch readiness behavior.
+
+### Preconditions
+- Prepare one existing OpenClaw config directory with a valid `openclaw.json`.
+- Ensure app can detect paths through `detect:paths`.
+- Open onboarding wizard and choose the `existing` path.
+- Keep onboarding logs visible in UI so each step result can be verified.
+
+### Test Data Matrix (recommended)
+
+| Case | Config condition | Expected outcome |
+| --- | --- | --- |
+| E1 | `openclaw.json` has valid auth profiles and selected platform channel | Full flow passes to completion |
+| E2 | `openclaw.json` has channels, but missing currently selected `platform` channel | Fails at Messaging with explicit platform error |
+| E3 | Missing/empty `configPath` | Fails at Model/Messaging with missing config path error |
+| E4 | Existing flow without explicit `authChoice` in launcher config | Model step is not blocked by unsupported auth choice guard |
+
+### Step-by-step Checklist
+
+#### Step 1: Welcome (Choose Existing)
+- [ ] Click `existing` in Welcome.
+- [ ] Verify `corePath`, `configPath`, `workspacePath` are prefilled from detected config.
+- [ ] Verify `authChoice` is also hydrated from detected config when available.
+- [ ] Verify the wizard can continue to Model (no immediate reset or path wipe).
+
+Acceptance points:
+- Prefilled paths match detected values from `detect:paths`.
+- No unexpected overwrite to empty string for `configPath`/`workspacePath`.
+
+#### Step 2: Model (Existing Validation)
+- [ ] Click next on Model step without changing settings.
+- [ ] Verify existing-user validation path is used (no forced new-project onboarding command path).
+- [ ] For credentialless modes (`ollama` / `vllm`), verify dual-layer credential check is skipped.
+- [ ] For credential modes, verify dual-layer auth persistence validation runs.
+
+Acceptance points:
+- Existing flow is not blocked by `unsupported auth choice` guard.
+- Log shows model validation success path and proceeds to next step.
+
+Failure signals:
+- Error: `不支援或不安全的授權類型: unknown` appears for existing flow.
+
+#### Step 3: Messaging (Platform-specific Validation)
+- [ ] Keep `platform` as currently selected value (for example: `telegram`).
+- [ ] Click next on Messaging step.
+- [ ] Verify onboarding checks not only "any channel exists" but the selected platform channel exists.
+
+Acceptance points:
+- If selected platform channel exists: step passes.
+- If selected platform channel is missing: step fails with clear message `目前選擇的通訊頻道未配置: <platform>`.
+
+#### Step 4: Launch (Existing Final Verification)
+- [ ] Continue to Launch step.
+- [ ] Test with `installDaemon = true`: verify launch readiness checks execute.
+- [ ] Test with `installDaemon = false`: verify only CLI availability check (`openclaw --version`) is required.
+- [ ] Verify step finishes and onboarding completes without runtime crash.
+
+Acceptance points:
+- Existing flow completes and returns to normal app state.
+- No React error boundary, no onboarding dead-end.
+
+### Regression Guard Checklist (Existing Flow)
+- [ ] Existing + empty launcher `authChoice` does not block Model step.
+- [ ] Existing selection does not clear detected paths unexpectedly.
+- [ ] Messaging fails fast when selected platform channel is absent.
+- [ ] Launch behavior differs correctly by `installDaemon` setting.
+
+### Optional Evidence to Capture
+- [ ] Screenshot: Welcome with prefilled detected paths.
+- [ ] Screenshot: Messaging platform mismatch error (negative case E2).
+- [ ] Screenshot: Launch success state for both daemon modes.
+- [ ] Export/attach onboarding logs for each case (E1~E4).
 
 ## Final Verification Commands
 Run from `frontend`:

@@ -7,9 +7,12 @@ import { useState, useEffect } from 'react';
 export function useRuntimeConfig(
   resolvedConfigDir: string,
   activeTab: string,
-  detectedConfig: any
+  detectedConfig: any,
+  fallbackCorePath?: string,
+  fallbackWorkspacePath?: string
 ) {
   const [runtimeProfile, setRuntimeProfile] = useState<any>(null);
+  const [runtimeProfileError, setRuntimeProfileError] = useState('');
   const [runtimeDraftModel, setRuntimeDraftModel] = useState('');
   const [runtimeDraftBotToken, setRuntimeDraftBotToken] = useState('');
   const [dynamicModelOptions, setDynamicModelOptions] = useState<any[]>([]);
@@ -18,30 +21,48 @@ export function useRuntimeConfig(
 
   const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
-  // 探測運行時配置
+  // 探測運行時配置（全域，不限 tab，應用程式載入即執行）
+  // 依序嘗試：設定區 → 工作區 → 核心區，三區輪詢確保能找到 openclaw.json
   useEffect(() => {
-    if (activeTab !== 'runtimeSettings') return;
-
     const probeRuntimeConfig = async () => {
-      if (!resolvedConfigDir || !window.electronAPI) {
+      if (!window.electronAPI) return;
+
+      if (!resolvedConfigDir) {
         setRuntimeProfile(null);
+        setRuntimeProfileError('尚未設定 Config Path，無法讀取 openclaw.json。');
         return;
       }
 
-      try {
-        const res = await window.electronAPI.exec(`config:probe ${shellQuote(resolvedConfigDir)}`);
-        if (res.code === 0 && res.stdout) {
-          setRuntimeProfile(JSON.parse(res.stdout));
-        } else {
-          setRuntimeProfile(null);
-        }
-      } catch {
-        setRuntimeProfile(null);
+      // 建立三區候選路徑（設定區優先，去重）
+      const candidates: string[] = [resolvedConfigDir];
+      if (fallbackWorkspacePath?.trim() && fallbackWorkspacePath.trim() !== resolvedConfigDir) {
+        candidates.push(fallbackWorkspacePath.trim());
       }
+      if (fallbackCorePath?.trim() && fallbackCorePath.trim() !== resolvedConfigDir) {
+        candidates.push(fallbackCorePath.trim());
+      }
+
+      for (const candidate of candidates) {
+        try {
+          const res = await window.electronAPI.exec(`config:probe ${shellQuote(candidate)}`);
+          if (res.code === 0 && res.stdout) {
+            setRuntimeProfile(JSON.parse(res.stdout));
+            setRuntimeProfileError('');
+            return;
+          }
+        } catch {
+          // 繼續嘗試下一個候選路徑
+        }
+      }
+
+      // 三區均未找到
+      setRuntimeProfile(null);
+      const checkedPaths = candidates.map(p => `${p}/openclaw.json`).join('、');
+      setRuntimeProfileError(`找不到 openclaw.json：已搜尋 ${checkedPaths}，均不存在或無法讀取。`);
     };
 
     probeRuntimeConfig();
-  }, [activeTab, resolvedConfigDir]);
+  }, [resolvedConfigDir, fallbackCorePath, fallbackWorkspacePath]);
 
   // 同步有效的運行時模型和 token
   useEffect(() => {
@@ -98,6 +119,7 @@ export function useRuntimeConfig(
   return {
     runtimeProfile,
     setRuntimeProfile,
+    runtimeProfileError,
     runtimeDraftModel,
     setRuntimeDraftModel,
     runtimeDraftBotToken,

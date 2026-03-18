@@ -5,6 +5,12 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 
+// Suppress EPIPE errors that occur when concurrently/piped launchers close
+// the parent stdout/stderr pipe while Electron tries to write to console.
+process.stdout?.on('error', (err: NodeJS.ErrnoException) => { if (err.code === 'EPIPE') return; });
+process.stderr?.on('error', (err: NodeJS.ErrnoException) => { if (err.code === 'EPIPE') return; });
+process.on('uncaughtException', (err: NodeJS.ErrnoException) => { if (err.code === 'EPIPE') return; throw err; });
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
@@ -976,6 +982,7 @@ const runShellCommand = (command: string) => new Promise<{ code: number; stdout:
   activeProcesses.add(child);
   let stdout = '';
   let stderr = '';
+  let settled = false;
 
   child.stdout.on('data', (data: any) => {
     stdout += data.toString();
@@ -984,8 +991,17 @@ const runShellCommand = (command: string) => new Promise<{ code: number; stdout:
     stderr += data.toString();
   });
 
+  child.on('error', (error: any) => {
+    activeProcesses.delete(child);
+    if (settled) return;
+    settled = true;
+    resolve({ code: 1, stdout, stderr: stderr || String(error?.message || error) });
+  });
+
   child.on('close', (code: number) => {
     activeProcesses.delete(child);
+    if (settled) return;
+    settled = true;
     resolve({ code: code ?? 1, stdout, stderr });
   });
 });
@@ -1483,8 +1499,8 @@ const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
   'gemini-api-key': ['gemini', 'google'],
   'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
   'minimax-api': ['minimax'],
-  'minimax-global-oauth': ['minimax-portal', 'minimax'],
-  'minimax-cn-oauth': ['minimax-portal', 'minimax'],
+  'minimax-coding-plan-global-token': ['minimax-portal', 'minimax'],
+  'minimax-coding-plan-cn-token': ['minimax-portal', 'minimax'],
   'moonshot-api-key': ['moonshot'],
   'openrouter-api-key': ['openrouter'],
   'xai-api-key': ['xai'],
@@ -1501,8 +1517,6 @@ const OAUTH_AUTH_CHOICES = new Set([
   'google-gemini-cli',
   'chutes',
   'qwen-portal',
-  'minimax-global-oauth',
-  'minimax-cn-oauth',
 ]);
 
 const sanitizeSecret = (value: string) => String(value || '').replace(/\s+/g, '');
@@ -2997,9 +3011,20 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             const coreSkills = configData.corePath ? await scanSkillsInDir(path.join(configData.corePath, 'skills')) : [];
             // Workspace skills = 只掃使用者設定的 workspacePath
             const workspaceSkills = configData.workspace ? await scanInstalledSkills(configData.workspace) : [];
+            const existingConfig = {
+                ...configData,
+                workspaceSkills,
+            };
             return {
                 code: 0,
-                stdout: JSON.stringify({ ...configData, configPath: finalConfigDirPath, workspaceSkills, coreSkills }),
+                stdout: JSON.stringify({ 
+                    ...configData,
+                    corePath: configData.corePath,
+                    configPath: finalConfigDirPath, 
+                    workspacePath: configData.workspace,
+                    coreSkills, 
+                    existingConfig,
+                }),
                 exitCode: 0
             };
         }
@@ -3094,6 +3119,43 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
 
       const configFilePath = path.join(configDir, 'openclaw.json');
+
+      if (authChoice === 'minimax-coding-plan-global-token' || authChoice === 'minimax-coding-plan-cn-token') {
+        const configJson = (await loadJsonFile(configFilePath)) || {};
+        const providers = configJson?.models?.providers && typeof configJson.models.providers === 'object'
+          ? configJson.models.providers
+          : {};
+        const portalProvider = providers['minimax-portal'] && typeof providers['minimax-portal'] === 'object'
+          ? providers['minimax-portal']
+          : {};
+        const baseUrl = authChoice === 'minimax-coding-plan-cn-token'
+          ? 'https://api.minimaxi.com/anthropic'
+          : 'https://api.minimax.io/anthropic';
+
+        const nextJson = {
+          ...configJson,
+          models: {
+            ...(configJson.models || {}),
+            providers: {
+              ...providers,
+              'minimax-portal': {
+                ...portalProvider,
+                baseUrl,
+                apiKey: secret,
+              },
+            },
+          },
+        };
+
+        await saveJsonFile(configFilePath, nextJson);
+        return {
+          code: 0,
+          stdout: JSON.stringify({ authChoice, provider: 'minimax-portal', mode: 'token', baseUrl }),
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+
       const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} `;
       const workspaceFlag = String(payload?.workspacePath || '').trim() ? ` --workspace ${shellQuote(String(payload.workspacePath).trim())}` : '';
 
@@ -3485,7 +3547,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                   }
 
                   // 2. 安裝依賴（先安裝才有可用的 CLI，讓後續 openclaw setup 可以執行）
-                  const pnpmCheckRes = await runCommandWithStreaming('pnpm --version', 'Checking pnpm availability...');
+                  // 使用 zsh -ilc 讓 GUI 環境也能讀取 .zshrc / nvm / volta PATH
+                  const pnpmCheckRes = await runCommandWithStreaming('zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version', 'Checking pnpm availability...');
                   if (pnpmCheckRes.code !== 0) {
                     const detail = [
                       String(pnpmCheckRes.stderr || '').trim(),
@@ -3493,13 +3556,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     ].filter(Boolean).join('\n');
                     resolve({
                       code: 1,
-                      stderr: detail || 'pnpm is unavailable. Please install pnpm and ensure it is available in PATH for GUI apps.',
+                      stderr: detail || 'pnpm is unavailable. Please install pnpm (https://pnpm.io/) and ensure it is in your PATH.',
                       exitCode: 1,
                     });
                     return;
                   }
 
-                  const installRes = await runCommandWithStreaming('pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
+                  const installRes = await runCommandWithStreaming('zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
                   if (installRes.code !== 0) {
                     const detail = [
                       String(installRes.stderr || '').trim(),
@@ -3514,7 +3577,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                   }
 
                   // 3. 預熱 CLI 執行環境 (會在 dist 過舊時自動建置 TypeScript)
-                  const warmupRes = await runCommandWithStreaming('pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
+                  const warmupRes = await runCommandWithStreaming('zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
                   if (warmupRes.code !== 0) {
                     resolve({ code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 });
                     return;
@@ -3527,7 +3590,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
                   const setupEnv = `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_STATE_DIR=${shellQuote(finalConfigPath)}`;
                   const setupRes = await runCommandWithStreaming(
-                    `${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}`,
+                    `zsh -ilc "${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}" 2>&1 || ${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}`,
                     'Initializing OpenClaw config...'
                   );
 
@@ -3614,6 +3677,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     activeProcesses.add(child);
     let stdout = '';
     let stderr = '';
+    let settled = false;
     child.stdout.on('data', (data) => {
       const chunk = data.toString();
       stdout += chunk;
@@ -3624,8 +3688,16 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       stderr += chunk;
       emitShellStdout(chunk, 'stderr');
     });
+    child.on('error', (error: any) => {
+      activeProcesses.delete(child);
+      if (settled) return;
+      settled = true;
+      resolve({ code: 1, stdout, stderr: stderr || String(error?.message || error), exitCode: 1 });
+    });
     child.on('close', (code) => {
       activeProcesses.delete(child);
+      if (settled) return;
+      settled = true;
       resolve({ code: code ?? 0, stdout, stderr, exitCode: code ?? 0 });
     });
   });
