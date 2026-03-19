@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { XCircle, Clock, CalendarClock, Link2 } from 'lucide-react';
+import { XCircle, Clock, Link2 } from 'lucide-react';
 import { useStore } from '../store';
-import type { EventQueueItem, ReadModelApproval, ReadModelTask } from '../store';
+import type { EventQueueItem, ReadModelApproval } from '../store';
 import { useTranslation } from 'react-i18next';
 
 const toEpoch = (value: unknown) => {
@@ -23,10 +23,6 @@ export function ActionCenter() {
 
   const allApprovals: ReadModelApproval[] = useMemo(
     () => (Array.isArray(snapshot?.approvals) ? snapshot.approvals : []),
-    [snapshot],
-  );
-  const tasks: ReadModelTask[] = useMemo(
-    () => (Array.isArray(snapshot?.tasks) ? snapshot.tasks : []),
     [snapshot],
   );
   const statuses = useMemo(
@@ -75,51 +71,6 @@ export function ActionCenter() {
     });
   }, [eventQueue]);
 
-  const normalizedTasks = useMemo(() => {
-    const rank = (status: string) => {
-      if (status.includes('blocked') || status.includes('error') || status.includes('failed')) return 0;
-      if (status.includes('running') || status.includes('doing') || status.includes('active')) return 1;
-      if (status.includes('queued') || status.includes('pending') || status.includes('waiting') || status.includes('todo')) return 2;
-      return 3;
-    };
-
-    return tasks
-      .map((task) => {
-        const status = String(task.status || '').toLowerCase();
-        return {
-          ...task,
-          status,
-          rank: rank(status),
-          updatedEpoch: toEpoch(task.updatedAt),
-        };
-      })
-      .sort((a, b) => {
-        if (a.rank !== b.rank) return a.rank - b.rank;
-        return b.updatedEpoch - a.updatedEpoch;
-      });
-  }, [tasks]);
-
-  const scheduleBuckets = useMemo(() => {
-    const now = Date.now();
-    const oneHour = 60 * 60 * 1000;
-    const oneDay = 24 * oneHour;
-
-    const out = {
-      immediate: 0,
-      today: 0,
-      backlog: 0,
-    };
-
-    for (const task of normalizedTasks) {
-      const age = now - task.updatedEpoch;
-      if (age <= oneHour) out.immediate += 1;
-      else if (age <= oneDay) out.today += 1;
-      else out.backlog += 1;
-    }
-
-    return out;
-  }, [normalizedTasks]);
-
   const executionEvidence = useMemo(() => {
     const evidenceFromStatus = statuses.slice(0, 6).map((item) => ({
       id: `status-${item.sessionKey}`,
@@ -141,6 +92,9 @@ export function ActionCenter() {
       .sort((a, b) => toEpoch(b.createdAt) - toEpoch(a.createdAt))
       .slice(0, 8);
   }, [sortedEvents, snapshot?.generatedAt, statuses]);
+
+  const hasActionCenterContent =
+    pendingApprovals.length > 0 || executionEvidence.length > 0 || sortedEvents.length > 0 || ackedEvents.length > 0;
 
   const ackEvent = async (eventId: string, ttlMs: number) => {
     if (!window.electronAPI?.ackEvent) return;
@@ -200,49 +154,16 @@ export function ActionCenter() {
     }
   };
 
+  if (!hasActionCenterContent) {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between px-2">
         <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
-          {t('monitor.taskSection.title')} ({normalizedTasks.length + pendingApprovals.length + sortedEvents.length})
+          {t('monitor.taskSection.title')} ({pendingApprovals.length + sortedEvents.length})
         </h3>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 px-1">
-            {t('monitor.taskSection.taskBoard')}
-          </div>
-          {normalizedTasks.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 px-4 py-4 text-sm text-slate-500 mt-3">
-              {t('monitor.taskSection.emptyTasks')}
-            </div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {normalizedTasks.slice(0, 8).map((task) => (
-                <div key={task.id} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-900/40">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate pr-2">{task.title || task.id}</div>
-                    <span className="text-[10px] uppercase font-black tracking-wide text-slate-500">{task.status || 'unknown'}</span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-500">{task.scope || '-'} · {task.updatedAt || '-'}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 px-1">
-            <CalendarClock size={14} />
-            {t('monitor.taskSection.schedule')}
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <MetricChip label={t('monitor.taskSection.scheduleImmediate')} value={scheduleBuckets.immediate} />
-            <MetricChip label={t('monitor.taskSection.scheduleToday')} value={scheduleBuckets.today} />
-            <MetricChip label={t('monitor.taskSection.scheduleBacklog')} value={scheduleBuckets.backlog} />
-          </div>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -382,15 +303,6 @@ export function ActionCenter() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function MetricChip({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-3 py-3 text-center">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-black">{label}</div>
-      <div className="mt-1 text-lg font-black text-slate-900 dark:text-slate-100">{value}</div>
     </div>
   );
 }
