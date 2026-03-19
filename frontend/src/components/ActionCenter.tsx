@@ -9,17 +9,10 @@ const toEpoch = (value: unknown) => {
   return Number.isFinite(ts) ? ts : 0;
 };
 
-const getErrorMessage = (error: unknown) => {
-  if (error instanceof Error) return error.message;
-  return String(error || 'unknown error');
-};
-
 export function ActionCenter() {
   const { t } = useTranslation();
-  const { config, snapshot, eventQueue, ackedEvents, ackEventLocal, addLog } = useStore();
+  const { snapshot, eventQueue, ackedEvents } = useStore();
   const [optimisticResolvedIds, setOptimisticResolvedIds] = useState<Record<string, 'allow-once' | 'deny'>>({});
-  const [pendingIds, setPendingIds] = useState<Record<string, boolean>>({});
-  const [ackingIds, setAckingIds] = useState<Record<string, boolean>>({});
 
   const allApprovals: ReadModelApproval[] = useMemo(
     () => (Array.isArray(snapshot?.approvals) ? snapshot.approvals : []),
@@ -36,13 +29,6 @@ export function ActionCenter() {
       const next: Record<string, 'allow-once' | 'deny'> = {};
       for (const [id, decision] of Object.entries(prev)) {
         if (currentIds.has(id)) next[id] = decision;
-      }
-      return next;
-    });
-    setPendingIds((prev) => {
-      const next: Record<string, boolean> = {};
-      for (const [id, value] of Object.entries(prev)) {
-        if (currentIds.has(id)) next[id] = value;
       }
       return next;
     });
@@ -96,64 +82,6 @@ export function ActionCenter() {
   const hasActionCenterContent =
     pendingApprovals.length > 0 || executionEvidence.length > 0 || sortedEvents.length > 0 || ackedEvents.length > 0;
 
-  const ackEvent = async (eventId: string, ttlMs: number) => {
-    if (!window.electronAPI?.ackEvent) return;
-    setAckingIds((prev) => ({ ...prev, [eventId]: true }));
-    ackEventLocal(eventId, ttlMs);
-    try {
-      const res = await window.electronAPI.ackEvent({
-        eventId,
-        ttlMs,
-        configPath: config.configPath,
-        workspacePath: config.workspacePath,
-        corePath: config.corePath,
-      });
-      if (!res?.success) throw new Error(res?.error || 'Ack failed');
-      addLog(t('monitor.taskSection.logs.eventAcked', { eventId, ttlSec: Math.floor(ttlMs / 1000) }), 'system');
-    } catch (error: unknown) {
-      addLog(t('monitor.taskSection.logs.eventAckFailed', { eventId, message: getErrorMessage(error) }), 'stderr');
-    } finally {
-      setAckingIds((prev) => {
-        const next = { ...prev };
-        delete next[eventId];
-        return next;
-      });
-    }
-  };
-
-  const handleAction = async (id: string, decision: 'allow-once' | 'deny') => {
-    if (!window.electronAPI) return;
-
-    setPendingIds((prev) => ({ ...prev, [id]: true }));
-    setOptimisticResolvedIds((prev) => ({ ...prev, [id]: decision }));
-
-    try {
-      const paramsJson = JSON.stringify({ id, decision });
-      const escapedParams = paramsJson.replace(/"/g, '\\"');
-      const cmd = config.corePath
-        ? `cd "${config.corePath}" && pnpm openclaw gateway call exec.approval.resolve --params "${escapedParams}"`
-        : `pnpm openclaw gateway call exec.approval.resolve --params "${escapedParams}"`;
-
-      const res = await window.electronAPI.exec(cmd);
-      const code = res.code ?? res.exitCode;
-      if (code !== 0) throw new Error(res.stderr || res.stdout || `exit ${code}`);
-      addLog(t('monitor.taskSection.logs.approvalSent', { id, decision }), 'system');
-    } catch {
-      setOptimisticResolvedIds((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      addLog(t('monitor.taskSection.logs.approvalRollback', { id }), 'stderr');
-    } finally {
-      setPendingIds((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-    }
-  };
-
   if (!hasActionCenterContent) {
     return null;
   }
@@ -192,23 +120,6 @@ export function ActionCenter() {
                     <div className="px-2 py-1 bg-amber-500/10 text-amber-500 text-[10px] font-black rounded-lg uppercase tracking-widest">
                       {t('monitor.taskSection.pending')}
                     </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => handleAction(action.id, 'allow-once')}
-                      disabled={Boolean(pendingIds[action.id])}
-                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-xl text-xs font-bold transition-all"
-                    >
-                      {pendingIds[action.id] ? t('monitor.processing') : t('monitor.approve')}
-                    </button>
-                    <button
-                      onClick={() => handleAction(action.id, 'deny')}
-                      disabled={Boolean(pendingIds[action.id])}
-                      className="px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 py-2 rounded-xl text-xs font-bold transition-all"
-                    >
-                      <XCircle size={16} />
-                    </button>
                   </div>
                 </div>
               ))}
@@ -272,24 +183,7 @@ export function ActionCenter() {
                       <div className="mt-2 text-sm font-bold text-slate-900 dark:text-slate-100">{event.title}</div>
                       <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">{event.detail}</div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        type="button"
-                        disabled={Boolean(ackingIds[event.id])}
-                        onClick={() => ackEvent(event.id, 30 * 60 * 1000)}
-                        className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
-                      >
-                        {ackingIds[event.id] ? t('monitor.taskSection.ackLoading') : t('monitor.taskSection.ack30m')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={Boolean(ackingIds[event.id])}
-                        onClick={() => ackEvent(event.id, 24 * 60 * 60 * 1000)}
-                        className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
-                      >
-                        {ackingIds[event.id] ? t('monitor.taskSection.ackLoading') : t('monitor.taskSection.ack24h')}
-                      </button>
-                    </div>
+                    <XCircle size={16} className="text-slate-300 dark:text-slate-600" />
                   </div>
                 </div>
               );

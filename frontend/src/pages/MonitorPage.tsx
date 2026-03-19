@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Square, FolderOpen } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DecisionDashboard } from '../components/monitor/DecisionDashboard';
 import { ActionCenter } from '../components/ActionCenter';
@@ -8,7 +8,7 @@ import TerminalLog from '../components/common/TerminalLog';
 
 interface MonitorPageProps {
   running: boolean;
-  onToggleGateway: () => Promise<void>;
+  onToggleGateway: () => void;
   onOpenRuntimeSettings: () => void;
   config: any;
   resolvedConfigDir: string;
@@ -168,27 +168,28 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
           </div>
         </div>
 
-        {/* Toggle Button */}
-        <button
-          onClick={onToggleGateway}
-          className={`self-start lg:self-center px-8 py-4 rounded-2xl font-black flex items-center transition-all ${
-            running
-              ? 'bg-red-500/10 dark:bg-red-500/20 text-red-500 dark:text-red-400 border border-red-500/30 dark:border-red-500/40 hover:bg-red-500/20'
-              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 dark:border-emerald-500/40 hover:bg-emerald-500/20'
-          }`}
-        >
-          {running ? (
-            <>
-              <Square size={18} className="mr-2 fill-current" />
-              {t('monitor.disconnect')}
-            </>
-          ) : (
-            <>
-              <Play size={18} className="mr-2 fill-current" />
-              {t('monitor.startService')}
-            </>
-          )}
-        </button>
+        <div className="self-start lg:self-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-6 py-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Gateway Status
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <div className={`h-2.5 w-2.5 rounded-full ${running ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+            <span className={`text-sm font-bold ${running ? 'text-emerald-600 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}`}>
+              {running ? t('app.gatewayActive') : t('app.standby')}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onToggleGateway}
+            className={`mt-4 w-full rounded-xl px-4 py-2 text-xs font-bold text-white transition-colors ${
+              running
+                ? 'bg-rose-600 hover:bg-rose-500'
+                : 'bg-emerald-600 hover:bg-emerald-500'
+            }`}
+          >
+            {running ? t('monitor.disconnect') : t('monitor.startService')}
+          </button>
+        </div>
       </div>
 
       {/* Decision Dashboard */}

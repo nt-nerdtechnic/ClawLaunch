@@ -367,7 +367,7 @@ function App() {
     };
   }, []); // Run ONLY once on mount
 
-  useSnapshotSync({
+  const { syncSnapshot } = useSnapshotSync({
     running,
     resolvedConfigDir,
     config,
@@ -823,7 +823,7 @@ function App() {
               </div>
             );
           })()}
-          {activeTab === 'controlCenter' && <ControlCenterPage />}
+          {activeTab === 'controlCenter' && <ControlCenterPage onRefreshSnapshot={syncSnapshot} />}
           {activeTab === 'skills' && <SkillsPage />}
 
           {activeTab === 'analytics' && (
