@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState } from 'react';
-import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle, ArrowRight, Server } from 'lucide-react';
+import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';
 import { Trans, useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
@@ -18,6 +18,11 @@ const SetupStepLaunch = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
   const autoStartedRef = React.useRef(false);
+
+  // 最後一步固定不走 daemon，避免在背景安裝/執行服務。
+  React.useEffect(() => {
+    setConfig({ installDaemon: false });
+  }, [setConfig]);
 
   const steps = {
     preparing: t('launch.steps.preparing'),
@@ -69,32 +74,6 @@ const SetupStepLaunch = ({ onComplete }) => {
           </div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">{t('launch.ui.finalLaunchTitle')}</h2>
           <p className="text-gray-500 font-medium">{t('launch.ui.finalLaunchDesc')}</p>
-        </div>
-
-        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start justify-between gap-4 mb-8">
-          <div className="flex items-start gap-3">
-            <div className={`mt-0.5 w-10 h-10 rounded-xl flex items-center justify-center ${config.installDaemon ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-              <Server size={18} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-black text-slate-800">{t('modelSetup.daemon.title')}</p>
-              <p className="text-[11px] text-slate-500 leading-relaxed max-w-xl">{t('modelSetup.daemon.desc')}</p>
-              <p className={`text-[10px] font-black uppercase tracking-widest ${config.installDaemon ? 'text-emerald-600' : 'text-slate-400'}`}>
-                {config.installDaemon ? t('modelSetup.daemon.enabled') : t('modelSetup.daemon.disabled')}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setConfig({ installDaemon: !config.installDaemon })}
-            className={`shrink-0 mt-1 inline-flex h-7 w-12 items-center rounded-full border transition-all ${config.installDaemon ? 'bg-emerald-500 border-emerald-500 justify-end' : 'bg-white border-slate-300 justify-start'}`}
-            aria-pressed={config.installDaemon}
-            aria-label={t('modelSetup.daemon.toggle')}
-            title={t('modelSetup.daemon.toggle')}
-          >
-            <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
-          </button>
         </div>
 
         <button

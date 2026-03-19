@@ -553,6 +553,10 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               addLocalLog('ℹ️ 目前模型為免憑證模式，略過雙層憑證檢查。', 'system');
               break;
             }
+            if (DIRECT_MINIMAX_TOKEN_CHOICES.has(selectedAuthChoice)) {
+              await verifyMiniMaxPortalTokenConfig({ authChoice: selectedAuthChoice, configPath, addLocalLog });
+              break;
+            }
             await verifyAnyDualLayerAuthPersistence({ configPath, addLocalLog });
             break;
           }
@@ -903,27 +907,15 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         case 'launch': {
           addLocalLog(`🚀 啟動最終發射檢查程序 (Final Verification)...`, 'system');
 
-          if (config.installDaemon) {
-            addLocalLog('🧩 依照設定安裝背景 Gateway 服務 (daemon)...', 'system');
-            const workspaceFlag = workspacePath ? `--workspace ${shellQuote(workspacePath)}` : '';
-            const installDaemonCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw onboard --auth-choice skip ${workspaceFlag} --install-daemon --skip-health --non-interactive --accept-risk`;
-            const daemonRes = await (window as any).electronAPI.exec(installDaemonCmd);
-            if (!isCommandSuccess(daemonRes)) {
-              throw new Error(daemonRes.stderr || '背景 Gateway 服務安裝失敗');
-            }
-            addLocalLog('✅ 背景 Gateway 服務安裝完成。', 'system');
-            await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
-          } else {
-            // installDaemon=false 時 Gateway 尚未啟動（將從儀表板手動啟動），只驗證 CLI 可用性
-            addLocalLog('ℹ️ 目前設定為不安裝背景 Gateway 服務，Gateway 將於儀表板手動啟動。', 'system');
-            const versionRes = await (window as any).electronAPI.exec(
-              `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
-            );
-            if (!isCommandSuccess(versionRes)) {
-              throw new Error(versionRes.stderr || 'OpenClaw CLI 無法啟動');
-            }
-            addLocalLog('✅ OpenClaw CLI 可正常執行，請於儀表板手動啟動 Gateway。', 'system');
+          // 最後一步固定不安裝 daemon，Gateway 由儀表板手動啟動。
+          addLocalLog('ℹ️ 已停用 daemon 安裝流程，Gateway 將於儀表板手動啟動。', 'system');
+          const versionRes = await (window as any).electronAPI.exec(
+            `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
+          );
+          if (!isCommandSuccess(versionRes)) {
+            throw new Error(versionRes.stderr || 'OpenClaw CLI 無法啟動');
           }
+          addLocalLog('✅ OpenClaw CLI 可正常執行，請於儀表板手動啟動 Gateway。', 'system');
           break;
         }
       }

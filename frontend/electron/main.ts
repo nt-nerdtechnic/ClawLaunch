@@ -2811,6 +2811,16 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           parsed.agents.defaults.workspace = workspacePath;
           changed = true;
         }
+
+        // 修復各 provider 缺少 models array 的問題（OpenClaw >=2026.3.x 要求此欄位存在）
+        if (parsed.models && typeof parsed.models.providers === 'object' && parsed.models.providers !== null) {
+          for (const [providerKey, providerVal] of Object.entries(parsed.models.providers)) {
+            if (providerVal && typeof providerVal === 'object' && !Array.isArray((providerVal as any).models)) {
+              (providerVal as any).models = [];
+              changed = true;
+            }
+          }
+        }
       }
 
       if (changed) {
@@ -3193,6 +3203,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 ...portalProvider,
                 baseUrl,
                 apiKey: secret,
+                models: Array.isArray(portalProvider.models) ? portalProvider.models : [],
               },
             },
           },

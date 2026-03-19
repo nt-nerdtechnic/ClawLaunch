@@ -39,16 +39,16 @@ const SetupStepMessaging = ({ onNext }) => {
     }
   }, [config.botToken, detectedConfig?.botToken, setConfig, userType]);
 
-  // 自動跳過：若 botToken 已存在（任何 userType），不顯示此步驟，直接前進
+  // 自動跳過：僅在偵測到既有設定 token 時才自動前進，避免手動貼上後直接跳步。
   const autoAdvancedRef = React.useRef(false);
   useEffect(() => {
     if (autoAdvancedRef.current) return;
-    const existingToken = (config.botToken || detectedConfig?.botToken || '').trim();
-    if (existingToken) {
+    const detectedToken = String(detectedConfig?.botToken || '').trim();
+    if (detectedToken) {
       autoAdvancedRef.current = true;
       // 確保 config 中的 botToken 已填入再前進
       if (!config.botToken) {
-        setConfig({ botToken: existingToken });
+        setConfig({ botToken: detectedToken });
       }
       onNext();
     }
