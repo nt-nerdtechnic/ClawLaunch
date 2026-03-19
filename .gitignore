@@ -34,3 +34,6 @@ npm-debug.log*
 release/
 dist-electron/
 
+.claude/
+.cursor/
+.vscode/
