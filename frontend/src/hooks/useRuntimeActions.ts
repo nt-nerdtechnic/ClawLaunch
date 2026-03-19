@@ -78,7 +78,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   const [runtimeSaveState, setRuntimeSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const launcherResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runtimeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isUnrestrictedMode = config?.unrestrictedMode === true;
 
   useEffect(() => {
     return () => {
@@ -232,13 +231,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const handleLaunchFullOnboarding = async () => {
-    if (!isUnrestrictedMode) {
-      const msg = '目前為受限模式，已禁止完整導引操作。請先啟用「無限制模式」。';
-      setAuthAddError(msg);
-      addLog(msg, 'stderr');
-      return;
-    }
-
     if (!config.corePath?.trim()) {
       setAuthAddError('缺少 Core Path，無法啟動完整導引。');
       return;
@@ -265,14 +257,45 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     }
   };
 
-  const handleRemoveAuthProfile = async (profileId: string) => {
-    if (!isUnrestrictedMode) {
-      const msg = '目前為受限模式，已禁止移除授權。請先啟用「無限制模式」。';
-      setAuthAddError(msg);
-      addLog(msg, 'stderr');
+  const handleOpenClawDoctor = async () => {
+    if (!config.corePath?.trim()) {
+      addLog('缺少 Core Path，無法執行 doctor 診斷。', 'stderr');
       return;
     }
+    try {
+      const envPrefix = buildOpenClawEnvPrefix();
+      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw doctor --fix`;
+      await execInTerminal(cmd, {
+        title: 'OpenClaw Doctor — 系統診斷（--fix）',
+        holdOpen: true,
+        cwd: config.corePath,
+      });
+      addLog('已啟動 openclaw doctor --fix 診斷視窗。', 'system');
+    } catch (e: any) {
+      addLog(`啟動 doctor 診斷失敗：${e?.message || e}`, 'stderr');
+    }
+  };
 
+  const handleSecurityCheck = async () => {
+    if (!config.corePath?.trim()) {
+      addLog('缺少 Core Path，無法執行資安稽核。', 'stderr');
+      return;
+    }
+    try {
+      const envPrefix = buildOpenClawEnvPrefix();
+      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw security audit --fix --deep`;
+      await execInTerminal(cmd, {
+        title: 'OpenClaw 資安稽核 (security audit --fix --deep)',
+        holdOpen: true,
+        cwd: config.corePath,
+      });
+      addLog('已啟動資安稽核視窗（--fix 自動收緊設定，--deep 探測 Gateway）。', 'system');
+    } catch (e: any) {
+      addLog(`啟動資安稽核失敗：${e?.message || e}`, 'stderr');
+    }
+  };
+
+  const handleRemoveAuthProfile = async (profileId: string) => {
     if (!window.electronAPI || !resolvedConfigDir || !profileId) return;
     setAuthRemovingId(profileId);
     setAuthAddError('');
@@ -297,13 +320,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const handleAddAuthProfile = async () => {
-    if (!isUnrestrictedMode) {
-      const msg = '目前為受限模式，已禁止新增授權。請先啟用「無限制模式」。';
-      setAuthAddError(msg);
-      addLog(msg, 'stderr');
-      return;
-    }
-
     if (!window.electronAPI) return;
     setAuthAddError('');
 
@@ -359,11 +375,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const handleRunAuthTokenCommand = async () => {
-    if (!isUnrestrictedMode) {
-      setAuthAddTokenError('目前為受限模式，已禁止執行授權指令。請先啟用「無限制模式」。');
-      return;
-    }
-
     const command = (authAddTokenCommand || '').trim();
     if (!command) {
       setAuthAddTokenError('請先輸入要執行的指令');
@@ -389,13 +400,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const approveTelegramPairing = async (request: TelegramPairingRequest) => {
-    if (!isUnrestrictedMode) {
-      const msg = '目前為受限模式，已禁止核准配對。請先啟用「無限制模式」。';
-      setTelegramPairingError(msg);
-      addLog(msg, 'stderr');
-      return;
-    }
-
     if (!window.electronAPI) {
       addLog(t('logs.commFailed', { msg: 'Electron API not available' }), 'stderr');
       return;
@@ -428,12 +432,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const rejectTelegramPairing = async (request: TelegramPairingRequest) => {
-    if (!isUnrestrictedMode) {
-      const msg = '目前為受限模式，已禁止拒絕配對。請先啟用「無限制模式」。';
-      setTelegramPairingError(msg);
-      addLog(msg, 'stderr');
-      return;
-    }
 
     if (!window.electronAPI || !resolvedConfigDir) {
       setTelegramPairingError(t('monitor.telegramPairing.missingConfig'));
@@ -462,13 +460,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   };
 
   const clearTelegramPairingRequests = async () => {
-    if (!isUnrestrictedMode) {
-      const msg = '目前為受限模式，已禁止清空待配對清單。請先啟用「無限制模式」。';
-      setTelegramPairingError(msg);
-      addLog(msg, 'stderr');
-      return;
-    }
-
     if (!window.electronAPI || !resolvedConfigDir) {
       setTelegramPairingError(t('monitor.telegramPairing.missingConfig'));
       return;
@@ -495,6 +486,35 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     }
   };
 
+  const handleSaveChannelToken = async (channelId: string, token: string) => {
+    if (!window.electronAPI) return;
+    const corePath = String(config.corePath || '').trim();
+    if (!corePath) {
+      addLog('缺少 Core Path，無法更新通道 Token。', 'stderr');
+      return;
+    }
+    if (!resolvedConfigDir) {
+      addLog('缺少 Config Path，無法更新通道 Token。', 'stderr');
+      return;
+    }
+    try {
+      const envPrefix = buildOpenClawEnvPrefix();
+      const safeChannelId = channelId.replace(/[^a-z0-9_-]/gi, '');
+      const cmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw config set channels.${safeChannelId}.botToken ${shellQuote(JSON.stringify(token))} --json`;
+      const res = await window.electronAPI.exec(cmd);
+      if ((res.code ?? res.exitCode) !== 0) {
+        throw new Error(res.stderr || `更新 ${channelId} Token 失敗`);
+      }
+      addLog(`>>> ${channelId} Bot Token 已更新。`, 'system');
+      const probeRes = await window.electronAPI.exec(`config:probe ${shellQuote(resolvedConfigDir)}`);
+      if (probeRes.code === 0 && probeRes.stdout) {
+        setRuntimeProfile(JSON.parse(probeRes.stdout));
+      }
+    } catch (e: any) {
+      addLog(`更新 ${channelId} Token 失敗：${e?.message || e}`, 'stderr');
+    }
+  };
+
   return {
     handleSaveLauncherConfig,
     handleSaveConfig,
@@ -504,8 +524,11 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     handleAddAuthProfile,
     handleLaunchFullOnboarding,
     handleRunAuthTokenCommand,
+    handleOpenClawDoctor,
+    handleSecurityCheck,
     approveTelegramPairing,
     rejectTelegramPairing,
     clearTelegramPairingRequests,
+    handleSaveChannelToken,
   };
 }

@@ -145,6 +145,7 @@ function App() {
     setAuthAddTokenCommand,
     authAddTokenRunning,
     setAuthAddTokenRunning,
+    authAddTokenError,
     setAuthAddTokenError,
     loadAuthProfiles,
   } = useAuthProfiles(resolvedConfigDir, activeTab);
@@ -405,11 +406,13 @@ function App() {
     runtimeSaveState,
     handleRemoveAuthProfile,
     handleAddAuthProfile,
-    handleLaunchFullOnboarding,
     handleRunAuthTokenCommand,
+    handleOpenClawDoctor,
+    handleSecurityCheck,
     approveTelegramPairing,
     rejectTelegramPairing,
     clearTelegramPairingRequests,
+    handleSaveChannelToken,
   } = useRuntimeActions({
     config,
     resolvedConfigDir,
@@ -895,9 +898,11 @@ function App() {
               authAddTokenCommand={authAddTokenCommand}
               setAuthAddTokenCommand={setAuthAddTokenCommand}
               authAddTokenRunning={authAddTokenRunning}
+              authAddTokenError={authAddTokenError}
               onHandleAddAuthProfile={handleAddAuthProfile}
               onHandleRunAuthTokenCommand={handleRunAuthTokenCommand}
-              onHandleLaunchFullOnboarding={handleLaunchFullOnboarding}
+              onHandleOpenClawDoctor={handleOpenClawDoctor}
+              onHandleSecurityCheck={handleSecurityCheck}
               runtimeProfileError={runtimeProfileError}
               telegramPairingRequests={telegramPairingRequests}
               telegramAuthorizedUsers={telegramAuthorizedUsers}
@@ -909,6 +914,7 @@ function App() {
               onHandleApproveTelegramPairing={approveTelegramPairing}
               onHandleRejectTelegramPairing={rejectTelegramPairing}
               onHandleClearTelegramPairingRequests={clearTelegramPairingRequests}
+              onSaveChannelToken={handleSaveChannelToken}
               onSave={handleSaveConfig}
               saveState={runtimeSaveState}
             />
