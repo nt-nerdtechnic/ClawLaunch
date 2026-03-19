@@ -167,7 +167,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                 自動重啟 Gateway（崩潰時）
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                僅套用於非 daemon 且背景啟動模式，異常退出時自動重啟。
+                套用於非 daemon 模式；異常退出時會依啟動模式進行自動重啟。
               </div>
             </div>
             <button
@@ -181,32 +181,6 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
               aria-pressed={config.autoRestartGateway}
               aria-label="自動重啟 Gateway"
               title="自動重啟 Gateway"
-            >
-              <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
-            </button>
-          </div>
-
-          {/* Restart in Foreground Terminal */}
-          <div className="mt-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
-            <div>
-              <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                自動重啟改用前台 Terminal
-              </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                啟用後，發生自動重啟時會以 macOS Terminal 前台視窗重新啟動，避免權限上下文遺失。
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setConfig({ restartInForegroundTerminal: !config.restartInForegroundTerminal })}
-              className={`shrink-0 inline-flex h-7 w-12 items-center rounded-full border transition-all ${
-                config.restartInForegroundTerminal
-                  ? 'bg-emerald-500 border-emerald-500 justify-end'
-                  : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'
-              }`}
-              aria-pressed={config.restartInForegroundTerminal}
-              aria-label="自動重啟改用前台 Terminal"
-              title="自動重啟改用前台 Terminal"
             >
               <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
             </button>

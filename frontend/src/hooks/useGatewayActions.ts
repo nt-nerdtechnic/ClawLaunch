@@ -236,7 +236,6 @@ export function useGatewayActions({
         const payload = {
           command: runCmd,
           autoRestart: !!config.autoRestartGateway,
-          restartInForegroundTerminal: !!config.restartInForegroundTerminal,
         };
         const resRaw: any = await window.electronAPI.exec(`gateway:start-bg-json ${JSON.stringify(payload)}`);
         const code = resRaw.code ?? resRaw.exitCode;

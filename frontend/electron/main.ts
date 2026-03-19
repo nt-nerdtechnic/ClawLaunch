@@ -30,12 +30,10 @@ interface LauncherConfig {
   configPath?: string;
   gatewayPort?: string;
   autoRestartGateway?: boolean;
-  restartInForegroundTerminal?: boolean;
 }
 
 interface GatewayStartOptions {
   autoRestart: boolean;
-  restartInForegroundTerminal: boolean;
   maxRestarts: number;
   baseBackoffMs: number;
 }
@@ -71,7 +69,6 @@ interface GatewayHttpWatchdogState {
 
 const DEFAULT_GATEWAY_WATCHDOG_OPTIONS: GatewayStartOptions = {
   autoRestart: false,
-  restartInForegroundTerminal: false,
   maxRestarts: 5,
   baseBackoffMs: 1000,
 };
@@ -337,21 +334,6 @@ const spawnWatchedGatewayProcess = (command: string) => {
       gatewayWatchdog.options.baseBackoffMs * 2 ** (gatewayWatchdog.restartAttempts - 1),
       30000,
     );
-
-    if (gatewayWatchdog.options.restartInForegroundTerminal) {
-      emitShellStdout(
-        `[gateway-watchdog] restart attempt ${gatewayWatchdog.restartAttempts}/${gatewayWatchdog.options.maxRestarts} via macOS Terminal\n`,
-        'stdout',
-      );
-      const ok = await launchGatewayViaTerminal(gatewayWatchdog.command);
-      if (ok) {
-        emitShellStdout('[gateway-watchdog] handed over restart to foreground Terminal\n', 'stdout');
-      } else {
-        emitShellStdout('[gateway-watchdog] failed to launch foreground Terminal restart\n', 'stderr');
-      }
-      stopGatewayWatchdog('restart handed to foreground terminal');
-      return;
-    }
 
     emitShellStdout(
       `[gateway-watchdog] restart attempt ${gatewayWatchdog.restartAttempts}/${gatewayWatchdog.options.maxRestarts} in ${delayMs}ms\n`,
@@ -2644,7 +2626,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     return { code: 0, stdout: 'gateway watchdogs stopped', exitCode: 0 };
   }
 
-  // gateway:start-bg-json { command, autoRestart, restartInForegroundTerminal, maxRestarts?, baseBackoffMs? }
+  // gateway:start-bg-json { command, autoRestart, maxRestarts?, baseBackoffMs? }
   if (fullCommand.startsWith('gateway:start-bg-json ')) {
     try {
       const payloadStr = fullCommand.replace(/^gateway:start-bg-json\s+/, '').trim();
@@ -2661,7 +2643,6 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       gatewayWatchdog.restartAttempts = 0;
       gatewayWatchdog.options = {
         autoRestart: Boolean(payload?.autoRestart),
-        restartInForegroundTerminal: Boolean(payload?.restartInForegroundTerminal),
         maxRestarts: Number.isInteger(payload?.maxRestarts) ? Math.max(1, Number(payload.maxRestarts)) : 5,
         baseBackoffMs: Number.isInteger(payload?.baseBackoffMs) ? Math.max(200, Number(payload.baseBackoffMs)) : 1000,
       };
