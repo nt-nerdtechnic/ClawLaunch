@@ -5,16 +5,11 @@ import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
 
-const PathItem = ({ label, path, icon, description, onBrowse, onChange, error, warning }) => {
+const PathItem = ({ label, path, icon, description, onBrowse, onChange, error, warning, info }) => {
     const { t } = useTranslation();
     const isError = !!error;
     const isWarning = !!warning && !isError;
-
-    const borderClass = isError
-        ? 'border-red-300'
-        : isWarning
-        ? 'border-amber-300'
-        : 'border-gray-200 focus-within:border-blue-400';
+    const isInfo = !!info && !isError && !isWarning;
 
     return (
         <div className="flex flex-col gap-2">
@@ -46,6 +41,7 @@ const PathItem = ({ label, path, icon, description, onBrowse, onChange, error, w
             </div>
             {isError && <p className="text-[10px] text-red-500 font-bold px-1 flex items-center gap-1"><AlertCircle size={10} /> {error}</p>}
             {isWarning && <p className="text-[10px] text-amber-600 font-bold px-1 flex items-center gap-1"><AlertCircle size={10} /> {warning}</p>}
+            {isInfo && <p className="text-[10px] text-blue-500 font-medium px-1 flex items-center gap-1"><ArrowRight size={10} /> {info}</p>}
         </div>
     );
 };
@@ -59,6 +55,7 @@ const SetupStepInitialize = ({ onNext }) => {
     const [progress, setProgress] = useState('');
     const [errors, setErrors] = useState({ corePath: '', configPath: '', workspacePath: '' });
     const [warnings, setWarnings] = useState({ corePath: '', configPath: '', workspacePath: '' });
+    const [infos, setInfos] = useState({ corePath: '', configPath: '', workspacePath: '' });
     const [checking, setChecking] = useState(false);
     const [versions, setVersions] = useState<string[]>(['main']);
     const [selectedVersion, setSelectedVersion] = useState('main');
@@ -66,6 +63,7 @@ const SetupStepInitialize = ({ onNext }) => {
     const [createdItems, setCreatedItems] = useState<string[]>([]);
     const [existingItems, setExistingItems] = useState<string[]>([]);
     const [hasInitializeAttempt, setHasInitializeAttempt] = useState(false);
+    const validateDebounceRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
     const pushProgress = (message: string) => {
         setProgress(message);
@@ -111,6 +109,18 @@ const SetupStepInitialize = ({ onNext }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const handlePathChange = (key: string, val: string) => {
+        setConfig({ [key]: val });
+        clearTimeout(validateDebounceRef.current[key]);
+        validateDebounceRef.current[key] = setTimeout(() => {
+            if (val.trim()) validatePath(key, val.trim());
+            else {
+                setWarnings(prev => ({ ...prev, [key]: '' }));
+                setInfos(prev => ({ ...prev, [key]: '' }));
+            }
+        }, 500);
+    };
+
     const handleBrowse = async (key) => {
         if (window.electronAPI && window.electronAPI.selectDirectory) {
             const selectedPath = await window.electronAPI.selectDirectory();
@@ -124,26 +134,28 @@ const SetupStepInitialize = ({ onNext }) => {
     const validatePath = async (key, path) => {
         setChecking(true);
         try {
-            const res = await window.electronAPI.exec(`project:check-empty ${path}`);
+            const resolvedPath = resolveInitializedPath(key, path);
+            const checkTarget = resolvedPath || path;
+            const res = await window.electronAPI.exec(`project:check-empty ${checkTarget}`);
             if (res.code === 0) {
                 const data = JSON.parse(res.stdout);
                 if (!data.isEmpty && !data.notExist) {
                     let warnMsg = '';
-                    const resolvedPath = resolveInitializedPath(key, path);
                     if (key === 'configPath') {
-                        // 特別提示：此目錄已有 OpenClaw 設定與授權資料，新建專案建議改用全新路徑
-                        warnMsg = `${t('setupInitialize.configPathWarning')} 實際初始化將使用：${resolvedPath}`;
+                        warnMsg = `${t('setupInitialize.configPathWarning')} 實際初始化將使用：${checkTarget}`;
                     } else {
                         let subDir = '';
                         if (key === 'corePath') subDir = 'openclaw';
                         if (key === 'workspacePath') subDir = 'openclaw-workspace';
-                        warnMsg = `${t('setupInitialize.pathWarning', { name: subDir })} 實際初始化將使用：${resolvedPath}`;
+                        warnMsg = `${t('setupInitialize.pathWarning', { name: subDir })} 實際初始化將使用：${checkTarget}`;
                     }
                     setWarnings(prev => ({ ...prev, [key]: warnMsg }));
+                    setInfos(prev => ({ ...prev, [key]: '' }));
                     setErrors(prev => ({ ...prev, [key]: '' }));
                 } else {
                     setErrors(prev => ({ ...prev, [key]: '' }));
                     setWarnings(prev => ({ ...prev, [key]: '' }));
+                    setInfos(prev => ({ ...prev, [key]: `將初始化至：${checkTarget}` }));
                 }
             }
         } catch (e) {
@@ -291,35 +303,38 @@ const SetupStepInitialize = ({ onNext }) => {
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
-                    <PathItem 
+                    <PathItem
                         label={t('setupInitialize.corePath')}
                         description={t('setupInitialize.coreDesc')}
                         path={config.corePath}
                         icon={<Package size={14} />}
                         onBrowse={() => handleBrowse('corePath')}
-                        onChange={(val) => setConfig({ corePath: val })}
+                        onChange={(val) => handlePathChange('corePath', val)}
                         error={errors.corePath}
                         warning={warnings.corePath}
+                        info={infos.corePath}
                     />
-                    <PathItem 
+                    <PathItem
                         label={t('setupInitialize.configPath')}
                         description={t('setupInitialize.configDesc')}
                         path={config.configPath}
                         icon={<Settings size={14} />}
                         onBrowse={() => handleBrowse('configPath')}
-                        onChange={(val) => setConfig({ configPath: val })}
+                        onChange={(val) => handlePathChange('configPath', val)}
                         error={errors.configPath}
                         warning={warnings.configPath}
+                        info={infos.configPath}
                     />
-                    <PathItem 
+                    <PathItem
                         label={t('setupInitialize.workspacePath')}
                         description={t('setupInitialize.workspaceDesc')}
                         path={config.workspacePath}
                         icon={<Database size={14} />}
                         onBrowse={() => handleBrowse('workspacePath')}
-                        onChange={(val) => setConfig({ workspacePath: val })}
+                        onChange={(val) => handlePathChange('workspacePath', val)}
                         error={errors.workspacePath}
                         warning={warnings.workspacePath}
+                        info={infos.workspacePath}
                     />
                 </div>
 

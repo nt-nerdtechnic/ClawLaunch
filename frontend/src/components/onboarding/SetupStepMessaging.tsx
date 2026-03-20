@@ -18,7 +18,7 @@ const CHANNEL_OPTIONS = [
   { id: 'discord', name: 'Discord', icon: <Bot size={16} />, descKey: 'setupMessaging.channels.discord.desc', placeholderKey: 'setupMessaging.channels.discord.placeholder', keyLabelKey: 'setupMessaging.channels.discord.keyLabel' },
   { id: 'irc', name: 'IRC', icon: <Server size={16} />, descKey: 'setupMessaging.channels.irc.desc', placeholderKey: 'setupMessaging.channels.irc.placeholder', keyLabelKey: 'setupMessaging.channels.irc.keyLabel', reqKey: false },
   { id: 'googlechat', name: 'Google Chat', icon: <Mails size={16} />, descKey: 'setupMessaging.channels.googlechat.desc', placeholderKey: 'setupMessaging.channels.googlechat.placeholder', keyLabelKey: 'setupMessaging.channels.googlechat.keyLabel' },
-  { id: 'slack', name: 'Slack', icon: <Hash size={16} />, descKey: 'setupMessaging.channels.slack.desc', placeholderKey: 'setupMessaging.channels.slack.placeholder', keyLabelKey: 'setupMessaging.channels.slack.keyLabel' },
+  { id: 'slack', name: 'Slack', icon: <Hash size={16} />, descKey: 'setupMessaging.channels.slack.desc', placeholderKey: 'setupMessaging.channels.slack.placeholder', keyLabelKey: 'setupMessaging.channels.slack.keyLabel', needsAppToken: true },
   { id: 'signal', name: 'Signal', icon: <Shield size={16} />, descKey: 'setupMessaging.channels.signal.desc', placeholderKey: 'setupMessaging.channels.signal.placeholder', keyLabelKey: 'setupMessaging.channels.signal.keyLabel', reqKey: false },
   { id: 'imessage', name: 'iMessage', icon: <MessageCircle size={16} />, descKey: 'setupMessaging.channels.imessage.desc', placeholderKey: 'setupMessaging.channels.imessage.placeholder', keyLabelKey: 'setupMessaging.channels.imessage.keyLabel', reqKey: false },
   { id: 'line', name: 'LINE', icon: <Waves size={16} />, descKey: 'setupMessaging.channels.line.desc', placeholderKey: 'setupMessaging.channels.line.placeholder', keyLabelKey: 'setupMessaging.channels.line.keyLabel' }
@@ -56,7 +56,7 @@ const SetupStepMessaging = ({ onNext }) => {
 
   const handleChannelSelect = (channelId) => {
     setLocalError('');
-    setConfig({ platform: channelId, botToken: '' }); // 重設 Token
+    setConfig({ platform: channelId, botToken: '', appToken: '' }); // 重設 Token
   };
 
   const selectedChannel = CHANNEL_OPTIONS.find(c => c.id === config.platform) || CHANNEL_OPTIONS[0];
@@ -210,9 +210,9 @@ const SetupStepMessaging = ({ onNext }) => {
                     </div>
                     
                     <div className="relative">
-                        <input 
+                        <input
                               type={selectedChannel.reqKey === false || config.platform === 'telegram' ? "text" : "password"}
-                            placeholder={t(selectedChannel.placeholderKey)} 
+                            placeholder={t(selectedChannel.placeholderKey)}
                             value={config.botToken}
                             onChange={(e) => {
                               setLocalError('');
@@ -226,12 +226,55 @@ const SetupStepMessaging = ({ onNext }) => {
                             className="w-full p-4 bg-white border border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500/50 outline-none transition-all shadow-sm text-sm font-mono disabled:bg-gray-100 disabled:text-gray-400"
                         />
                     </div>
+
+                    {/* Slack Socket Mode: App-Level Token (xapp-...) */}
+                    {selectedChannel.needsAppToken && (
+                      <div className="mt-3 space-y-1">
+                        <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest px-1">
+                          {t('setupMessaging.channels.slack.appTokenLabel')}
+                        </label>
+                        <input
+                          type="password"
+                          placeholder={t('setupMessaging.channels.slack.appTokenPlaceholder')}
+                          value={config.appToken}
+                          onChange={(e) => {
+                            setLocalError('');
+                            setConfig({ appToken: e.target.value });
+                          }}
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          className="w-full p-4 bg-white border border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500/50 outline-none transition-all shadow-sm text-sm font-mono"
+                        />
+                        <p className="text-[10px] text-amber-600 font-medium px-1">
+                          {t('setupMessaging.channels.slack.appTokenHint')}
+                        </p>
+                      </div>
+                    )}
                     
                     {selectedChannel.reqKey === false && (
-                        <div className="pt-2 px-1">
-                            <p className="text-[11px] font-black text-emerald-600">
-                              {t('setupMessaging.noTokenNeeded')}
-                            </p>
+                        <div className="pt-2 px-1 space-y-1">
+                            {config.platform === 'irc' && (
+                              <p className="text-[11px] font-black text-amber-600">
+                                {t('setupMessaging.postSetupHint.irc')}
+                              </p>
+                            )}
+                            {config.platform === 'signal' && (
+                              <p className="text-[11px] font-black text-amber-600">
+                                {t('setupMessaging.postSetupHint.signal')}
+                              </p>
+                            )}
+                            {config.platform === 'imessage' && (
+                              <p className="text-[11px] font-black text-amber-600">
+                                {t('setupMessaging.postSetupHint.imessage')}
+                              </p>
+                            )}
+                            {config.platform === 'whatsapp' && (
+                              <p className="text-[11px] font-black text-emerald-600">
+                                {t('setupMessaging.noTokenNeeded')}
+                              </p>
+                            )}
                         </div>
                     )}
                 </div>

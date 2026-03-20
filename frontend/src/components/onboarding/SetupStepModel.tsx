@@ -132,7 +132,7 @@ const SetupStepModel = ({ onNext }) => {
       desc: 'Ollama, vLLM, DeepSeek Local',
       choices: [
                 { id: 'ollama', name: 'Ollama', desc: t('modelSetup.modelSelect.choiceDesc.ollamaLocal'), reqKey: false, defaultModel: 'ollama/llama3', link: null },
-                { id: 'vllm', name: 'vLLM', desc: t('modelSetup.modelSelect.choiceDesc.vllmLocal'), reqKey: false, defaultModel: 'vllm', link: null }
+                { id: 'vllm', name: 'vLLM', desc: t('modelSetup.modelSelect.choiceDesc.vllmLocal'), reqKey: false, defaultModel: 'vllm/mistral-7b', link: null }
       ]
     },
     {
@@ -161,6 +161,13 @@ const SetupStepModel = ({ onNext }) => {
       desc: 'Grok-1 / Grok-2',
       choices: [
                 { id: 'xai-api-key', name: 'xAI (Grok)', desc: t('modelSetup.modelSelect.choiceDesc.xaiApiKey'), reqKey: true, defaultModel: 'grok-4', link: 'https://console.x.ai/' }
+      ]
+    },
+    {
+      id: 'qwen', label: 'Qwen', icon: <Globe size={16} />,
+      desc: t('modelSetup.modelSelect.providerDesc.qwen'),
+      choices: [
+        { id: 'qwen-portal', name: 'Qwen Portal (Device Code)', desc: t('modelSetup.modelSelect.choiceDesc.qwenPortalDevice'), reqKey: false, defaultModel: 'qwen-max', link: null }
       ]
     }
   ];
@@ -756,10 +763,15 @@ const SetupStepModel = ({ onNext }) => {
                             </div>
                         )}
                         {!currentChoice?.reqKey && (
-                            <div className="pt-4 border-t border-gray-200/60 mt-4 px-1">
+                            <div className="pt-4 border-t border-gray-200/60 mt-4 px-1 space-y-2">
                                 <p className="text-[11px] font-black text-emerald-600">
                                     {t('modelSetup.modelSelect.noApiKeyNeeded')}
                                 </p>
+                                {selectedChoiceId === 'vllm' && (
+                                    <p className="text-[10px] text-amber-600 font-medium">
+                                        {t('modelSetup.modelSelect.vllmModelHint')}
+                                    </p>
+                                )}
                             </div>
                         )}
                     </div>

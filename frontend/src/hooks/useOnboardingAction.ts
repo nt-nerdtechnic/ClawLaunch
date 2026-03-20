@@ -576,6 +576,19 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               if (!hasSelectedChannel) {
                 throw new Error(`目前選擇的通訊頻道未配置: ${selectedPlatform}`);
               }
+              // 驗證 enabled=true
+              if (typeof selectedChannel === 'object' && selectedChannel.enabled === false) {
+                throw new Error(`通訊頻道 ${selectedPlatform} 已配置但 enabled=false，請先啟用或重新設定。`);
+              }
+              // 驗證 token 非空（whatsapp/irc/signal/imessage 不需要 token，略過）
+              const tokenlessChannels = new Set(['whatsapp', 'irc', 'signal', 'imessage']);
+              if (!tokenlessChannels.has(selectedPlatform) && typeof selectedChannel === 'object') {
+                const channelTokenKey = selectedPlatform === 'googlechat' ? 'webhookUrl' : 'botToken';
+                const storedToken = String(selectedChannel[channelTokenKey] || '').trim();
+                if (!storedToken) {
+                  addLocalLog(`⚠️ 通訊頻道 ${selectedPlatform} 的 ${channelTokenKey} 為空，可能尚未完成設定。`, 'stderr');
+                }
+              }
             }
             break;
           }
@@ -738,6 +751,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               channelFlags = `--token ${shellQuote(config.botToken)}`;
             } else if (platform === 'slack') {
               channelFlags = `--bot-token ${shellQuote(config.botToken)}`;
+              // Slack Socket Mode 還需要 App-Level Token (xapp-...)
+              const appToken = String(config.appToken || '').trim();
+              if (appToken) {
+                channelFlags += ` --app-token ${shellQuote(appToken)}`;
+              }
             } else if (platform === 'discord') {
               channelFlags = `--token ${shellQuote(config.botToken)}`;
             } else if (platform === 'googlechat') {
@@ -806,12 +824,13 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             break;
           }
 
-          // config set fallback：channels add 因 plugin registry bug 回傳 "Unknown channel" → 直接寫入 botToken
+          // config set fallback：channels add 因 plugin registry bug 回傳 "Unknown channel" → 直接寫入 botToken/webhookUrl
           if (!success && config.botToken) {
             const directConfigKeyMap: Record<string, string> = {
               telegram: 'botToken',
               discord: 'botToken',
               line: 'botToken',
+              googlechat: 'webhookUrl',
             };
             const directKey = directConfigKeyMap[platform];
             const hadUnknownChannel = /unknown channel/i.test(lastErr || '');

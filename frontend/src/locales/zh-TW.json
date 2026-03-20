@@ -481,8 +481,9 @@
       "tokenCommandPlaceholder": "claude setup-token",
       "running": "執行中",
       "runCommand": "執行指令",
-      "tokenCommandHint": "執行後請在彈出的終端機完成授權，取得 Token 後貼到上方 API 密鑰欄位。",
+      "tokenCommandHint": "步驟：① 點擊「執行指令」開啟終端機 → ② 在終端機依指示完成授權 → ③ 複製輸出的 Token → ④ 貼到上方「API 密鑰」欄位後按授權。",
       "noApiKeyNeeded": "✓ 此授權模式無須輸入 API 密鑰。按下授權後將會進行對應的驗證流程（如自動開啟瀏覽器或本地服務）。",
+      "vllmModelHint": "⚠️ 預設模型名稱僅為範例（vllm/mistral-7b），請至「設定 → 模型」頁面修改為實際部署的模型名稱。",
       "oauthRetryHint": "OAuth 流程若中途取消或失敗，可點擊下方按鈕重新開啟授權流程。",
       "retryOAuthBtn": "重新授權",
       "confirmAuthContinue": "確認核心授權並繼續",
@@ -503,14 +504,16 @@
         "chutesOauth": "透過 Chutes OAuth 登入",
         "moonshotApiKey": "輸入 Kimi API Key",
         "openrouterApiKey": "支援多種模型，包含 Llama 3",
-        "xaiApiKey": "輸入 Grok API Key"
+        "xaiApiKey": "輸入 Grok API Key",
+        "qwenPortalDevice": "透過 Qwen Portal Device Code 授權登入"
       },
       "choiceHelp": {
-        "setupTokenCli": "可在下方直接執行「claude setup-token」來獲取授權 Token"
+        "setupTokenCli": "使用 Anthropic CLI 產生的 Setup Token 授權。流程：執行指令取得 Token → 複製 Token → 貼入下方 API 密鑰欄位。"
       },
       "providerDesc": {
         "moonshot": "Kimi K2.5 / 長文本專家",
-        "openrouter": "統一 API 閘道"
+        "openrouter": "統一 API 閘道",
+        "qwen": "Qwen / 阿里雲通義系列"
       },
       "tokenFlowTitle": "Claude Token 授權流程",
       "neuralLinking": "「神經連結建立中，請保持頻率一致...」",
@@ -665,7 +668,12 @@
     "bindingSyncLogs": "頻道繫結同步中 (Real-time Logs)",
     "step1": "選擇對接頻道 (Channel)",
     "guideTitle": "教學攻略",
-    "noTokenNeeded": "✓ 此頻道無須在此輸入 Token。在稍後的「核心發射」階段，CLI 將自動引導您完成互動式認證登入程序。",
+    "noTokenNeeded": "✓ 此頻道無須在此輸入 Token。稍後掃描 QR Code 即可完成連線。",
+    "postSetupHint": {
+      "irc": "⚠️ IRC 需在 openclaw.json 中額外設定 server / port / nick / channel 等欄位，Token 欄位可留空，繼續後請至「Runtime Config」頁面完成設定。",
+      "signal": "⚠️ Signal 需透過 signal-cli 先完成手機號碼註冊（signal-cli register / verify），完成後 OpenClaw 才能連線。Token 欄位可留空，稍後依 signal-cli 引導操作。",
+      "imessage": "⚠️ iMessage 支援為實驗性功能，僅適用於 macOS，且需在系統偏好設定中允許存取「訊息」App。Token 欄位可留空，稍後依 CLI 引導完成設定。"
+    },
     "pathNames": {
       "core": "Core Path",
       "config": "Config Path",
@@ -710,7 +718,10 @@
       "slack": {
         "desc": "原生 Socket Mode 支援",
         "placeholder": "xoxb-xxxx-xxxx...",
-        "keyLabel": "Bot Token"
+        "keyLabel": "Bot Token (xoxb-...)",
+        "appTokenLabel": "App-Level Token（Socket Mode）",
+        "appTokenPlaceholder": "xapp-1-xxxx-xxxx...",
+        "appTokenHint": "Socket Mode 需要同時提供 Bot Token 和 App-Level Token（xapp-）。請至 Slack App 設定 → Socket Mode 生成。"
       },
       "signal": {
         "desc": "透過 signal-cli 連接，高隱私",

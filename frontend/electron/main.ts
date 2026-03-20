@@ -1454,6 +1454,22 @@ function parseOpenClawConfig(content: string) {
             }
         }
 
+        // 4.5 MiniMax Coding Plan Token 偵測：不寫入 auth.profiles，需從 models.providers 推斷
+        // （minimax-coding-plan-* 使用 Provider 層認證，apiKey 存於 models.providers.minimax-portal）
+        const portalProvider = parsed.models?.providers?.['minimax-portal'];
+        if (portalProvider?.apiKey) {
+          if (!authChoice) {
+            const portalBaseUrl = String(portalProvider.baseUrl || '');
+            if (portalBaseUrl.includes('minimaxi.com')) {
+              authChoice = 'minimax-coding-plan-cn-token';
+            } else {
+              authChoice = 'minimax-coding-plan-global-token';
+            }
+          }
+          // 匯入設定時優先使用 provider 層 apiKey，避免讀到歷史殘留欄位。
+          apiKey = String(portalProvider.apiKey || apiKey || '');
+        }
+
         // 5. 二次推斷：如果還是沒有 authChoice，根據模型名稱推斷
         if (!authChoice && model) {
             const lowModel = model.toLowerCase();
@@ -1525,6 +1541,24 @@ const OAUTH_AUTH_CHOICES = new Set([
 ]);
 
 const sanitizeSecret = (value: string) => String(value || '').replace(/\s+/g, '');
+
+const hasCjkCharacters = (value: string) => /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/.test(String(value || ''));
+
+const isLikelyNaturalLanguageSentence = (value: string) => {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  const hasSentencePunctuation = /[。！？：；，、]/.test(text);
+  const hasMultipleWords = (text.match(/\s+/g) || []).length >= 2;
+  return hasCjkCharacters(text) && (hasSentencePunctuation || hasMultipleWords);
+};
+
+const isPlausibleMachineToken = (value: string) => {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (text.length < 16) return false;
+  if (/\s/.test(text)) return false;
+  return /^[\x21-\x7e]+$/.test(text);
+};
 
 const normalizeConfigDirectory = (rawPath: string) => String(rawPath || '').trim().replace(/[\\/]openclaw\.json$/i, '');
 
@@ -1756,28 +1790,6 @@ async function collectAuthProfiles(configDir: string) {
 
   return { configFilePath, configJson, agentFiles, profiles, summary };
 }
-
-// 系統級核心技能 (不可異動)
-const CORE_SKILLS = [
-  { id: 'aesthetic-expert', name: 'Aesthetic Expert', desc: '高端視覺設計與 CSS 專家，專精於精品品牌美學', category: 'Core', details: '提供排版與現代 UI 技術指導。' },
-  { id: 'browser-navigator', name: 'Browser Navigator', desc: '瀏覽器自動化與測試專家', category: 'Core', details: '執行 E2E 流程與網頁操作。' },
-  { id: 'bug-buster', name: 'Bug Buster', desc: '智能除錯助手', category: 'Core', details: '分析錯誤日誌並提供修復方案。' },
-  { id: 'clean-code-architect', name: 'Clean Code Architect', desc: '專案結構設計指導', category: 'Core', details: '確保代碼保持高內聚、低耦合，符合 Clean Architecture。' },
-  { id: 'code-review-expert', name: 'Code Review Expert', desc: '專業代碼審查', category: 'Core', details: '寫完程式碼後執行審查，確保符合安全、效能規範。' },
-  { id: 'code-translator', name: 'Code Translator', desc: '代碼翻譯與命名規範化工具', category: 'Core', details: '支援中英互轉與變數命名建議。' },
-  { id: 'data-analyst', name: 'Data Analyst', desc: 'Excel 與 CSV 數據處理技能', category: 'Core', details: '包含讀取、寫入、清洗與分析。' },
-  { id: 'doc-generator', name: 'Doc Generator', desc: '自動生成標準化文檔與註釋', category: 'Core', details: '支援 PHPDoc, JSDoc, Markdown。' },
-  { id: 'docker-captain', name: 'Docker Captain', desc: 'Docker 容器管理專家', category: 'Core', details: '協助除錯、服務檢查與配置優化。' },
-  { id: 'git-commit-helper', name: 'Git Commit Helper', desc: '自動分析 Git 變動與生成提交訊息', category: 'Core', details: '根據 Conventional Commits 生成帶有 Emoji 的訊息。' },
-  { id: 'i18n-manager', name: 'i18n Manager', desc: '多語系同步與管理工具', category: 'Core', details: '確保翻譯完整性與一致性。' },
-  { id: 'laravel-expert', name: 'Laravel Expert', desc: 'Laravel 開發專家', category: 'Core', details: '提供最佳實踐、架構指導與代碼生成。' },
-  { id: 'pdf-wizard', name: 'PDF Wizard', desc: 'PDF 文件處理技能', category: 'Core', details: '包含文字提取、合併、分割與 OCR 前處理。' },
-  { id: 'readme-updater', name: 'Readme Updater', desc: '自動更新專案文件', category: 'Core', details: '保持 README.md 與實際程式碼同步。' },
-  { id: 'tailwind-styler', name: 'Tailwind Styler', desc: 'Tailwind CSS 專家', category: 'Core', details: '協助轉換樣式與優化 Class 排序。' },
-  { id: 'test-writer', name: 'Test Writer', desc: '自動化測試生成專家', category: 'Core', details: '支援 PHPUnit, Pest, Vitest, Jest。' },
-  { id: 'ui-designer', name: 'UI Designer', desc: 'UI/UX 設計輔助專家', category: 'Core', details: '專精於生成介面 Mockup 與素材。' },
-  { id: 'wordpress-architect', name: 'WordPress Architect', desc: 'WordPress 核心與架構專家', category: 'Core', details: '專精於主題開發、Hooks 機制與 WP-CLI。' },
-];
 
 /**
  * 遞迴複製目錄 (排除 .git, node_modules)
@@ -3179,8 +3191,25 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         return { code: 1, stdout: '', stderr: 'Credential is required for this authChoice', exitCode: 1 };
       }
 
+      if (authChoice === 'minimax-coding-plan-global-token' || authChoice === 'minimax-coding-plan-cn-token') {
+        if (!isPlausibleMachineToken(secret) || isLikelyNaturalLanguageSentence(rawSecret)) {
+          return {
+            code: 1,
+            stdout: '',
+            stderr: 'MiniMax Coding Plan Token 格式異常：目前內容看起來像說明文字或無效字串，請重新貼上平台 Token。',
+            exitCode: 1,
+          };
+        }
+      }
+
       const configFilePath = path.join(configDir, 'openclaw.json');
 
+      // MiniMax Coding Plan Token 採用 Provider 層認證模式（與標準 auth.profiles 不同）：
+      // 核心 Runtime 透過 models.providers.minimax-portal.apiKey 直接存取，
+      // 無需建立 auth.profiles 或 agent/auth-profiles.json。
+      // 驗證邏輯由 verifyMiniMaxPortalTokenConfig 負責，不走雙層 profile 檢查。
+      // 注意：因不寫入 auth.profiles，inferAuthChoiceFromProfile 無法自動偵測此 authChoice；
+      //       authChoice 需由 Launcher 設定持久化（config:write）確保重啟後仍可取得。
       if (authChoice === 'minimax-coding-plan-global-token' || authChoice === 'minimax-coding-plan-cn-token') {
         const configJson = (await loadJsonFile(configFilePath)) || {};
         const providers = configJson?.models?.providers && typeof configJson.models.providers === 'object'
@@ -3218,7 +3247,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         };
       }
 
-      const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} `;
+      const mainAgentDir = path.join(configDir, 'agents', 'main', 'agent');
+      const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_AGENT_DIR=${shellQuote(mainAgentDir)} `;
       const workspaceFlag = String(payload?.workspacePath || '').trim() ? ` --workspace ${shellQuote(String(payload.workspacePath).trim())}` : '';
 
       let authFlags = '';
