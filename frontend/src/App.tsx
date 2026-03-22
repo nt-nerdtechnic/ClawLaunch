@@ -17,6 +17,7 @@ import { useGatewayControl } from './hooks/useGatewayControl';
 import { useGatewayActions } from './hooks/useGatewayActions';
 import { useRuntimeActions } from './hooks/useRuntimeActions';
 import { useSnapshotSync } from './hooks/useSnapshotSync';
+import { useRuntimeUsageSync } from './hooks/useRuntimeUsageSync';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { LauncherSettingsPage } from './pages/LauncherSettingsPage';
 import { RuntimeSettingsPage } from './pages/RuntimeSettingsPage';
@@ -374,6 +375,9 @@ function App() {
     setRawSnapshot,
     setSnapshotSourcePath,
   });
+
+  // JSONL 自算 — 直接掃 ~/.openclaw/agents/*/sessions/*.jsonl
+  useRuntimeUsageSync();
 
   const { theme } = useStore();
   useEffect(() => {

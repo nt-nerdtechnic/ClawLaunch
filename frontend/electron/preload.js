@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTitle: (title) => ipcRenderer.invoke('window:set-title', title),
   ackEvent: (payload) => ipcRenderer.invoke('events:ack', payload),
   getEventState: (payload) => ipcRenderer.invoke('events:state', payload),
+  scanSessions: (payload) => ipcRenderer.invoke('usage:scan-sessions', payload),
   invokeChat: (request) => ipcRenderer.invoke('openclaw:chat.invoke', request),
   abortChat: (requestId) => ipcRenderer.invoke('openclaw:chat.abort', requestId),
   onChatChunk: (callback) => {

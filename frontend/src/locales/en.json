@@ -595,14 +595,22 @@
     "noData": "No consumption data available",
     "waitingData": "Awaiting data injection...",
     "window": {
+      "title": "Window",
       "today": "Today",
       "7d": "Last 7 Days",
       "30d": "Last 30 Days",
-      "tokensUnit": "tokens"
+      "tokensUnit": "tokens",
+      "requests": "req"
+    },
+    "pace": {
+      "rising": "Rising",
+      "steady": "Steady",
+      "cooling": "Cooling"
     },
     "labels": {
       "dailyTotalStacked": "Daily Total Consumption (Stacked)",
       "readModel": "Read Model",
+      "jsonlSource": "JSONL Self-Computed",
       "input": "Input",
       "output": "Output",
       "inputOutputRatio": "Input vs Output Ratio",
@@ -620,6 +628,7 @@
     "connectors": {
       "title": "Data Connectors",
       "subtitle": "Connection Health",
+      "runtimeEvents": "JSONL Event Scanner",
       "snapshot": "Read Model Snapshot",
       "history": "Usage History",
       "budget": "Budget Summary",
@@ -639,8 +648,13 @@
     "costHotspots": {
       "title": "Cost Hotspots",
       "subtitle": "Where It Starts Getting Expensive",
+      "subtitleRuntime": "by model · JSONL self-computed",
       "unknownSource": "unknown",
       "noData": "No cost data"
+    },
+    "providerBreakdown": {
+      "title": "Provider Distribution",
+      "subtitle": "From JSONL session events, sorted by cost"
     },
     "budget": {
       "subtitle": "30-Day Budget Policy Enforcement",

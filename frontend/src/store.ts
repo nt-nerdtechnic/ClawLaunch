@@ -124,6 +124,21 @@ export interface ReadModelHistoryPoint {
   estimatedCost: number;
 }
 
+// 直接從 session JSONL 掃描的原始用量事件（複製 openclaw-control-center Track 2 邏輯）
+export interface RuntimeUsageEvent {
+  timestamp: string;
+  day: string;          // YYYY-MM-DD for date bucketing
+  sessionId: string;
+  agentId: string;
+  model?: string;
+  provider?: string;
+  tokensIn: number;
+  tokensOut: number;
+  cacheTokens: number;
+  tokens: number;       // in + out + cache
+  cost: number;         // from message.usage.cost.total
+}
+
 export interface EventQueueItem {
   id: string;
   level: 'info' | 'warn' | 'action-required';
@@ -200,6 +215,9 @@ interface AppState {
   ackEventLocal: (eventId: string, ttlMs?: number) => void;
   setRawSnapshot: (rawSnapshot: any | null) => void;
   setSnapshotSourcePath: (path: string) => void;
+  // Runtime Usage Events（從 JSONL 自算）
+  runtimeUsageEvents: RuntimeUsageEvent[];
+  setRuntimeUsageEvents: (events: RuntimeUsageEvent[]) => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   language: string;
@@ -307,6 +325,8 @@ export const useStore = create<AppState>((set) => ({
   }),
   setRawSnapshot: (rawSnapshot) => set({ rawSnapshot }),
   setSnapshotSourcePath: (snapshotSourcePath) => set({ snapshotSourcePath }),
+  runtimeUsageEvents: [],
+  setRuntimeUsageEvents: (runtimeUsageEvents) => set({ runtimeUsageEvents }),
   theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'dark',
   setTheme: (theme) => {
     localStorage.setItem('theme', theme);

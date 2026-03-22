@@ -595,14 +595,22 @@
     "noData": "暂无消耗数据记录",
     "waitingData": "等待数据注入...",
     "window": {
+      "title": "时窗",
       "today": "今日",
       "7d": "近 7 天",
       "30d": "近 30 天",
-      "tokensUnit": "tokens"
+      "tokensUnit": "tokens",
+      "requests": "次"
+    },
+    "pace": {
+      "rising": "消耗上升中",
+      "steady": "消耗稳定",
+      "cooling": "消耗降低中"
     },
     "labels": {
       "dailyTotalStacked": "每日总消耗（堆叠）",
       "readModel": "读模快照",
+      "jsonlSource": "JSONL 自算",
       "input": "输入",
       "output": "输出",
       "inputOutputRatio": "输入与输出比例",
@@ -620,6 +628,7 @@
     "connectors": {
       "title": "数据接线",
       "subtitle": "连接健康度",
+      "runtimeEvents": "JSONL 事件扫描",
       "snapshot": "读模快照",
       "history": "用量历史",
       "budget": "预算摘要",
@@ -639,8 +648,13 @@
     "costHotspots": {
       "title": "成本热点",
       "subtitle": "最容易升高成本的来源",
+      "subtitleRuntime": "by model · JSONL 自算",
       "unknownSource": "未知来源",
       "noData": "没有成本数据"
+    },
+    "providerBreakdown": {
+      "title": "提供者分布",
+      "subtitle": "来自 JSONL session 事件，按费用排序"
     },
     "budget": {
       "subtitle": "30 天预算治理",

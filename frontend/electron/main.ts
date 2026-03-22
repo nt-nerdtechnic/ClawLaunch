@@ -554,6 +554,92 @@ const resolveCostFromSessionEntry = (session: any, tokensIn: number, tokensOut: 
   return estimateUsageCost(tokensIn, tokensOut);
 };
 
+// ── Runtime Usage Event (JSONL Scanner) ───────────────────────────────────
+
+interface RuntimeUsageEvent {
+  timestamp: string;
+  day: string;
+  sessionId: string;
+  agentId: string;
+  model?: string;
+  provider?: string;
+  tokensIn: number;
+  tokensOut: number;
+  cacheTokens: number;
+  tokens: number;
+  cost: number;
+}
+
+const inferProviderFromModel = (model: string | undefined): string => {
+  if (!model) return 'Unknown';
+  const m = model.toLowerCase();
+  if (m.includes('claude')) return 'Anthropic';
+  if (m.includes('gpt') || m.includes('o1') || m.includes('o3') || m.includes('o4')) return 'OpenAI';
+  if (m.includes('gemini')) return 'Google';
+  if (m.includes('llama') || m.includes('mistral') || m.includes('qwen') || m.includes('deepseek')) return 'OSS/Other';
+  return 'Unknown';
+};
+
+const parseSessionJsonlForUsage = (content: string, agentId: string): RuntimeUsageEvent[] => {
+  const events: RuntimeUsageEvent[] = [];
+  let currentSessionId = '';
+  let currentModel = '';
+
+  for (const line of content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
+    let entry: any;
+    try { entry = JSON.parse(line); } catch { continue; }
+
+    if (entry.type === 'session' && entry.id) currentSessionId = String(entry.id);
+    if (entry.sessionId) currentSessionId = String(entry.sessionId);
+    if (entry.message?.model) currentModel = String(entry.message.model);
+
+    if (entry.type === 'message' && entry.message?.role === 'assistant' && entry.message?.usage) {
+      const usage = entry.message.usage;
+
+      const tokensIn = normalizeNumber(
+        pickFirst(usage, ['input', 'inputTokens', 'input_tokens', 'prompt_tokens', 'promptTokens'], 0), 0);
+      const tokensOut = normalizeNumber(
+        pickFirst(usage, ['output', 'outputTokens', 'output_tokens', 'completion_tokens', 'completionTokens'], 0), 0);
+      const cacheRead = normalizeNumber(
+        pickFirst(usage, ['cacheRead', 'cache_read_input_tokens', 'cacheReadInputTokens'], 0), 0);
+      const cacheWrite = normalizeNumber(
+        pickFirst(usage, ['cacheWrite', 'cache_creation_input_tokens', 'cacheCreationInputTokens'], 0), 0);
+      const cacheTokens = cacheRead + cacheWrite;
+      const tokens = tokensIn + tokensOut + cacheTokens;
+
+      if (tokens === 0) continue;
+
+      const cost = normalizeNumber(
+        usage?.cost?.total ?? usage?.cost ?? usage?.estimatedCost ?? usage?.totalCost ?? 0, 0);
+
+      const timestamp = String(entry.timestamp || entry.message?.timestamp || '');
+      const day = timestamp.length >= 10 ? timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      const model: string | undefined = entry.message?.model || currentModel || undefined;
+      // 優先使用 message.provider（如 "minimax", "openai"），fallback 才推算
+      const provider = typeof entry.message?.provider === 'string' && entry.message.provider
+        ? entry.message.provider
+        : inferProviderFromModel(model);
+
+      events.push({
+        timestamp,
+        day,
+        sessionId: currentSessionId,
+        agentId,
+        model,
+        provider,
+        tokensIn,
+        tokensOut,
+        cacheTokens,
+        tokens,
+        cost,
+      });
+    }
+  }
+  return events;
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+
 const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
   const lines = String(content || '')
     .split(/\r?\n/)
@@ -3959,6 +4045,43 @@ ipcMain.handle('port:find-free', async (_event, startPort?: number, endPort?: nu
   }
   return { port: null, error: `No free port found in range ${start}-${end}` };
 });
+
+// ── usage:scan-sessions ────────────────────────────────────────────────────
+// 直接掃描 ~/.openclaw/agents/*/sessions/*.jsonl，無需後端預聚合
+// 複製 openclaw-control-center usage-cost.ts Track 2 (JSONL 掃描) 邏輯
+ipcMain.handle('usage:scan-sessions', async (_event, payload?: string) => {
+  try {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+    const parsed = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+    const agentsDir: string = parsed.agentsDir || path.join(homeDir, '.openclaw', 'agents');
+
+    const events: RuntimeUsageEvent[] = [];
+
+    let agentIds: string[] = [];
+    try { agentIds = await fs.readdir(agentsDir); } catch { /* dir not found */ }
+
+    for (const agentId of agentIds) {
+      const sessionsDir = path.join(agentsDir, agentId, 'sessions');
+      let files: string[] = [];
+      try {
+        const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
+        files = entries.filter((e) => e.isFile() && e.name.endsWith('.jsonl')).map((e) => e.name);
+      } catch { continue; }
+
+      for (const file of files) {
+        let content = '';
+        try { content = await fs.readFile(path.join(sessionsDir, file), 'utf-8'); } catch { continue; }
+        const parsed = parseSessionJsonlForUsage(content, agentId);
+        for (const ev of parsed) events.push(ev);
+      }
+    }
+
+    return { code: 0, stdout: JSON.stringify(events), stderr: '' };
+  } catch (e: any) {
+    return { code: 1, stdout: '[]', stderr: String(e?.message || 'scan failed') };
+  }
+});
+// ──────────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
   const port = Number(rawPort);
