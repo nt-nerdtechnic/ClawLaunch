@@ -58,6 +58,8 @@ interface RuntimeSettingsPageProps {
   setRuntimeDraftModel: (model: string) => void;
   runtimeDraftBotToken: string;
   setRuntimeDraftBotToken: (token: string) => void;
+  runtimeDraftGatewayPort: string;
+  setRuntimeDraftGatewayPort: (port: string) => void;
   dynamicModelOptions: any[];
   dynamicModelLoading: boolean;
   selectedModelProvider: string;
@@ -121,6 +123,8 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   setRuntimeDraftModel,
   runtimeDraftBotToken,
   setRuntimeDraftBotToken,
+  runtimeDraftGatewayPort,
+  setRuntimeDraftGatewayPort,
   dynamicModelOptions,
   dynamicModelLoading,
   selectedModelProvider,
@@ -655,6 +659,41 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Gateway Port */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                Gateway Port
+              </label>
+              <div className="flex items-stretch gap-2">
+                <input
+                  type="text"
+                  value={runtimeDraftGatewayPort}
+                  onChange={(e) => setRuntimeDraftGatewayPort(e.target.value)}
+                  placeholder="留空 = 使用 openclaw 預設值"
+                  className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                />
+              </div>
+              {runtimeProfile?.gateway?.port && (
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                  <span>已儲存：</span>
+                  <button
+                    type="button"
+                    onClick={() => setRuntimeDraftGatewayPort(String(runtimeProfile.gateway.port))}
+                    className="font-mono text-blue-600 dark:text-blue-400 hover:underline"
+                    title={`點擊還原為已儲存值：${runtimeProfile.gateway.port}`}
+                  >
+                    {runtimeProfile.gateway.port}
+                  </button>
+                  {runtimeDraftGatewayPort !== String(runtimeProfile.gateway.port) && (
+                    <span className="text-amber-500 dark:text-amber-400 font-bold">(已修改，未儲存)</span>
+                  )}
+                </div>
+              )}
+              <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                寫入 openclaw.json 的 gateway.port，Gateway 啟動時使用此端口。留空則使用 openclaw 預設值。
+              </div>
             </div>
           </div>
 

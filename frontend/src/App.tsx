@@ -118,12 +118,15 @@ function App() {
     setRuntimeDraftModel,
     runtimeDraftBotToken,
     setRuntimeDraftBotToken,
+    runtimeDraftGatewayPort,
+    setRuntimeDraftGatewayPort,
     dynamicModelOptions,
     dynamicModelLoading,
     loadDynamicModelOptions,
   } = useRuntimeConfig(resolvedConfigDir, activeTab, detectedConfig, config.corePath, config.workspacePath);
   const effectiveRuntimeModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
   const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
+  const effectiveRuntimeGatewayPort = String(runtimeProfile?.gateway?.port ?? '').trim();
   const {
     authProfiles,
     authProfileSummary,
@@ -302,15 +305,6 @@ function App() {
   const buildOpenClawEnvPrefix = (cfg?: any) =>
     ConfigService.buildOpenClawEnvPrefix(cfg?.configPath ?? config.configPath);
 
-  const resolveGatewayPortArg = (cfg?: any): string | null =>
-    ConfigService.resolveGatewayPortArg(cfg?.gatewayPort ?? config.gatewayPort);
-
-  const resolveGatewayPortForPrecheck = (cfg?: any): { port: number } | null =>
-    ConfigService.resolveGatewayPortForPrecheck(cfg?.gatewayPort ?? config.gatewayPort);
-
-  const isGatewayListeningOnConfiguredPort = async (cfg?: any): Promise<boolean | null> =>
-    ConfigService.isGatewayListeningOnConfiguredPort(cfg?.gatewayPort ?? config.gatewayPort);
-
   const gatewayRuntimeZones = [
     {
       key: 'core',
@@ -391,6 +385,12 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
+    if (!window.electronAPI?.setTitle) return;
+    const cp = String(config.configPath || '').trim();
+    void window.electronAPI.setTitle(cp ? `OpenClaw — ${cp}` : 'OpenClaw');
+  }, [config.configPath]);
+
+  useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;
     void loadDynamicModelOptions(config.corePath, effectiveAuthorizedProviders);
   }, [activeTab, resolvedConfigDir, config.corePath, effectiveAuthorizedProviders.join('|')]);
@@ -418,8 +418,10 @@ function App() {
     resolvedConfigDir,
     runtimeDraftModel,
     runtimeDraftBotToken,
+    runtimeDraftGatewayPort,
     effectiveRuntimeModel,
     effectiveRuntimeBotToken,
+    effectiveRuntimeGatewayPort,
     authAddProvider,
     authAddChoice,
     authAddSecret,
@@ -451,13 +453,11 @@ function App() {
     handleKillGatewayPortHolder,
   } = useGatewayActions({
     config,
+    runtimeProfile,
     running,
     setRunning,
     shellQuote,
     buildOpenClawEnvPrefix,
-    resolveGatewayPortArg,
-    resolveGatewayPortForPrecheck,
-    isGatewayListeningOnConfiguredPort,
     addLog,
     t,
     gatewayConflictModal,
@@ -516,26 +516,27 @@ function App() {
       let stopped = false;
       try {
         const envPrefix = buildOpenClawEnvPrefix();
-        const portArg = resolveGatewayPortArg();
-        // 多實例並行安全守衛：必須有 configPath 或 gatewayPort 才能安全識別實例
+        // 多實例並行安全守衛：必須有 configPath 才能安全識別實例
         const hasConfigIsolation = !!config.configPath?.trim();
-        const hasPortIsolation = portArg !== null;
 
-        if (portArg === null) {
-          addLog(t('logs.invalidGatewayPort'), 'stderr');
-        } else if (!hasConfigIsolation && !hasPortIsolation) {
-          addLog('錯誤: 未設定 Config Path 且未指定 Gateway Port，為避免誤停其他並行服務，本次重設不會主動停止 Gateway。', 'stderr');
+        if (!hasConfigIsolation) {
+          addLog('錯誤: 未設定 Config Path，為避免誤停其他並行服務，本次重設不會主動停止 Gateway。', 'stderr');
         } else {
-          const stopCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop${portArg}`;
+          const stopCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
           const stopRes: any = await window.electronAPI.exec(stopCmd);
           const stopCode = stopRes.code ?? stopRes.exitCode;
           if (stopCode !== 0) {
             addLog(t('logs.stopGatewayFailed', { msg: stopRes.stderr || `exit ${stopCode}` }), 'stderr');
           }
 
-          // 停止後以目標埠 LISTEN 驗證，避免被其他服務輸出誤導。
-          const listening = await isGatewayListeningOnConfiguredPort(config);
-          stopped = listening === false;
+          // 停止後以目標埠 LISTEN 驗證（如 openclaw.json 有設定 port）
+          const port = Number(runtimeProfile?.gateway?.port ?? 0);
+          if (port > 0) {
+            const lsofRes: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+            stopped = (lsofRes.code ?? lsofRes.exitCode) !== 0 || !String(lsofRes.stdout || '').trim();
+          } else {
+            stopped = true;
+          }
         }
       } catch (err: any) {
         addLog(t('logs.stopGatewayFailed', { msg: err?.message || 'unknown error' }), 'stderr');
@@ -872,6 +873,8 @@ function App() {
               setRuntimeDraftModel={setRuntimeDraftModel}
               runtimeDraftBotToken={runtimeDraftBotToken}
               setRuntimeDraftBotToken={setRuntimeDraftBotToken}
+              runtimeDraftGatewayPort={runtimeDraftGatewayPort}
+              setRuntimeDraftGatewayPort={setRuntimeDraftGatewayPort}
               dynamicModelOptions={dynamicModelOptions}
               dynamicModelLoading={dynamicModelLoading}
               selectedModelProvider={selectedModelProvider}

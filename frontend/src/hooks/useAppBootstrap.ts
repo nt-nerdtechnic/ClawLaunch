@@ -17,20 +17,14 @@ export function useAppBootstrap({
 }: UseAppBootstrapParams) {
   const initPromiseRef = useRef<Promise<void> | null>(null);
 
-  const checkOnboardingStatus = useCallback((loadedConfig?: any, detected?: any) => {
+  const checkOnboardingStatus = useCallback((loadedConfig?: any, _detected?: any) => {
     const persisted = loadedConfig || {};
-    const detectedTop = detected || {};
-    const detectedExisting = detected?.existingConfig || {};
+    // 只看已儲存的 config 判斷是否完成 onboarding。
+    // 偵測到的路徑僅供 wizard 預填，不代表此實例已完成設定。
     const hasAnyConfiguredPath = Boolean(
       (persisted.corePath && String(persisted.corePath).trim()) ||
       (persisted.configPath && String(persisted.configPath).trim()) ||
-      (persisted.workspacePath && String(persisted.workspacePath).trim()) ||
-      (detectedTop.corePath && String(detectedTop.corePath).trim()) ||
-      (detectedTop.configPath && String(detectedTop.configPath).trim()) ||
-      (detectedTop.workspacePath && String(detectedTop.workspacePath).trim()) ||
-      (detectedExisting.corePath && String(detectedExisting.corePath).trim()) ||
-      (detectedExisting.configPath && String(detectedExisting.configPath).trim()) ||
-      (detectedExisting.workspacePath && String(detectedExisting.workspacePath).trim()),
+      (persisted.workspacePath && String(persisted.workspacePath).trim()),
     );
 
     const forceReset = localStorage.getItem(ONBOARDING_FORCE_RESET_KEY) === 'true';
@@ -137,9 +131,16 @@ export function useAppBootstrap({
       syncGatewayStatus(loadedConfig),
     ]);
 
-    // 若偵測到全三條路徑且 agent auth 已健康，直接完成 onboarding，不再顯示 wizard
+    // 若偵測到全三條路徑且 agent auth 已健康，且此實例已有儲存的 config，直接完成 onboarding，不再顯示 wizard
+    const hasSavedConfig = Boolean(
+      loadedConfig && (
+        (loadedConfig.corePath && String(loadedConfig.corePath).trim()) ||
+        (loadedConfig.configPath && String(loadedConfig.configPath).trim()) ||
+        (loadedConfig.workspacePath && String(loadedConfig.workspacePath).trim())
+      ),
+    );
     const forceReset = localStorage.getItem(ONBOARDING_FORCE_RESET_KEY) === 'true';
-    if (!forceReset && !localStorage.getItem(ONBOARDING_FINISHED_KEY)) {
+    if (!forceReset && !localStorage.getItem(ONBOARDING_FINISHED_KEY) && hasSavedConfig) {
       const detCorePath    = String(detected?.corePath    || '').trim();
       const detConfigPath  = String(detected?.configPath  || '').trim();
       const detWorkspace   = String(detected?.workspacePath || '').trim();

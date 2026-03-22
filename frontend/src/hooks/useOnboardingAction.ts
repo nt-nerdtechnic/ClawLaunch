@@ -361,10 +361,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
   const resolveGatewayStatusError = (rawError: string) => {
     const message = String(rawError || '');
-    const rawPort = String(config.gatewayPort || '').trim();
-    const commandHint = /^\d+$/.test(rawPort)
-      ? `openclaw gateway status --deep --url ws://127.0.0.1:${rawPort}`
-      : 'Launcher 尚未設定有效 Gateway Port，請先於設定頁填入埠號後再檢查';
+    const commandHint = 'openclaw gateway status --deep';
     if (/device signature invalid|signature invalid|1008/i.test(message)) {
       return [
         'Gateway 驗證失敗：偵測到裝置簽章不一致 (1008 / device signature invalid)。',
@@ -391,15 +388,24 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     addLocalLog('✅ OpenClaw CLI 可正常執行。', 'system');
 
     addLocalLog('🔍 正在進行被動網關探測 (Gateway Pulse Check)...', 'system');
-    const rawPort = String(config.gatewayPort || '').trim();
-    if (!/^\d+$/.test(rawPort)) {
-      throw new Error('Launcher 尚未設定有效 Gateway Port，請先至設定頁填入埠號。');
+
+    // 從 openclaw.json 讀取 gateway.port，動態組建 --url 參數
+    const configPath = String(config.configPath || '').trim();
+    let gatewayStatusCmd = `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw gateway status`;
+    if (configPath) {
+      try {
+        const openclawData = await readOpenClawConfig(configPath);
+        const gatewayPort = openclawData?.gateway?.port;
+        if (gatewayPort && /^\d+$/.test(String(gatewayPort))) {
+          const gatewayUrl = `ws://127.0.0.1:${gatewayPort}`;
+          gatewayStatusCmd = `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw gateway status --url ${shellQuote(gatewayUrl)}`;
+        }
+      } catch {
+        // 讀取失敗則不帶 --url，由 openclaw 使用預設值
+      }
     }
-    const gatewayPort = Number(rawPort);
-    const gatewayUrl = `ws://127.0.0.1:${gatewayPort}`;
-    const gatewayRes = await (window as any).electronAPI.exec(
-      `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw gateway status --url ${shellQuote(gatewayUrl)}`,
-    );
+
+    const gatewayRes = await (window as any).electronAPI.exec(gatewayStatusCmd);
     if (!isCommandSuccess(gatewayRes)) {
       const gatewayErr = gatewayRes.stderr || gatewayRes.stdout || '';
       if (/device signature invalid|signature invalid|1008/i.test(gatewayErr)) {

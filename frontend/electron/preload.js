@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPath: (targetPath) => ipcRenderer.invoke('shell:open-path', targetPath),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
   killPortHolder: (port) => ipcRenderer.invoke('shell:kill-port-holder', port),
+  findFreePort: (startPort, endPort) => ipcRenderer.invoke('port:find-free', startPort, endPort),
+  setTitle: (title) => ipcRenderer.invoke('window:set-title', title),
   ackEvent: (payload) => ipcRenderer.invoke('events:ack', payload),
   getEventState: (payload) => ipcRenderer.invoke('events:state', payload),
   invokeChat: (request) => ipcRenderer.invoke('openclaw:chat.invoke', request),

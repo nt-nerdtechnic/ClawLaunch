@@ -48,6 +48,8 @@ declare global {
         failed?: Array<{ pid: number; reason: string }>;
         error?: string;
       }>;
+      findFreePort: (startPort?: number, endPort?: number) => Promise<{ port: number | null; error?: string }>;
+      setTitle: (title: string) => Promise<void>;
       ackEvent: (payload: {
         eventId: string;
         ttlMs?: number;

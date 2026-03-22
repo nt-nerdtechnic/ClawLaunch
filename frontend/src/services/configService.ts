@@ -32,49 +32,6 @@ export const ConfigService = {
     return `${stateDirEnv}${configPathEnv}`;
   },
 
-  /**
-   * 解析和驗證 Gateway Port
-   */
-  resolveGatewayPortArg: (gatewayPort?: string | number): string | null => {
-    const raw = String(gatewayPort ?? '').trim();
-    if (!raw) return null;
-    if (!/^\d+$/.test(raw)) return null;
-    const port = Number(raw);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
-    return ` --port ${port}`;
-  },
-
-  /**
-   * 解析 Gateway Port 用於前置檢查
-   */
-  resolveGatewayPortForPrecheck: (gatewayPort?: string | number): { port: number } | null => {
-    const raw = String(gatewayPort ?? '').trim();
-    if (!raw) return null;
-    if (!/^\d+$/.test(raw)) return null;
-    const port = Number(raw);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
-    return { port };
-  },
-
-  /**
-   * 檢查 Gateway 是否在配置的埠上監聽
-   */
-  isGatewayListeningOnConfiguredPort: async (gatewayPort?: string | number): Promise<boolean | null> => {
-    if (!window.electronAPI) return null;
-    const portInfo = ConfigService.resolveGatewayPortForPrecheck(gatewayPort);
-    if (!portInfo) return null;
-
-    try {
-      const probeRes: any = await window.electronAPI.exec(
-        `lsof -nP -iTCP:${portInfo.port} -sTCP:LISTEN`
-      );
-      const probeCode = probeRes.code ?? probeRes.exitCode;
-      const probeOutput = String(probeRes.stdout || '').trim();
-      return probeCode === 0 && !!probeOutput;
-    } catch {
-      return null;
-    }
-  },
 };
 
 /**

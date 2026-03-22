@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { ReadModelSnapshot } from '../../store';
 
 type EnvStatus = { node: string; git: string; pnpm: string };
-type AppConfig = { corePath: string; configPath: string; workspacePath: string; gatewayPort?: string };
+type AppConfig = { corePath: string; configPath: string; workspacePath: string };
 type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
 
 type AuditLogSummary = {

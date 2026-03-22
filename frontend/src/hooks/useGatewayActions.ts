@@ -13,13 +13,11 @@ interface GatewayConflictModal {
 
 interface UseGatewayActionsParams {
   config: any;
+  runtimeProfile: any;
   running: boolean;
   setRunning: (running: boolean) => void;
   shellQuote: (value: string) => string;
   buildOpenClawEnvPrefix: (cfg?: any) => string;
-  resolveGatewayPortArg: (cfg?: any) => string | null;
-  resolveGatewayPortForPrecheck: (cfg?: any) => { port: number } | null;
-  isGatewayListeningOnConfiguredPort: (cfg?: any) => Promise<boolean | null>;
   addLog: (msg: string, source?: LogSource) => void;
   t: TFn;
   gatewayConflictModal: GatewayConflictModal | null;
@@ -31,13 +29,11 @@ interface UseGatewayActionsParams {
 
 export function useGatewayActions({
   config,
+  runtimeProfile,
   running,
   setRunning,
   shellQuote,
   buildOpenClawEnvPrefix,
-  resolveGatewayPortArg,
-  resolveGatewayPortForPrecheck,
-  isGatewayListeningOnConfiguredPort,
   addLog,
   t,
   gatewayConflictModal,
@@ -49,14 +45,37 @@ export function useGatewayActions({
   const shouldUseExternalTerminal = (cfg?: any) =>
     (cfg?.useExternalTerminal ?? config.useExternalTerminal) !== false;
 
+  // 從 openclaw.json (runtimeProfile) 取得 gateway port
+  const getGatewayPort = (): number | null => {
+    const raw = String(runtimeProfile?.gateway?.port ?? '').trim();
+    if (!raw || !/^\d+$/.test(raw)) return null;
+    const port = Number(raw);
+    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
+  };
+
+  // 用 lsof 檢查 gateway 是否在監聽（port 未知時回傳 null）
+  const isGatewayListening = async (): Promise<boolean | null> => {
+    if (!window.electronAPI) return null;
+    const port = getGatewayPort();
+    if (!port) return null;
+    try {
+      const res: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+      const code = res.code ?? res.exitCode;
+      return code === 0 && !!String(res.stdout || '').trim();
+    } catch {
+      return null;
+    }
+  };
+
   const waitForGatewayListening = async (
-    runtimeConfig?: any,
     timeoutMs = 15000,
     intervalMs = 500,
   ): Promise<boolean> => {
+    // 若 port 未知則無法確認，視為成功（依 openclaw 自行管理）
+    if (getGatewayPort() === null) return true;
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      const listening = await isGatewayListeningOnConfiguredPort(runtimeConfig || config);
+      const listening = await isGatewayListening();
       if (listening === true) {
         return true;
       }
@@ -65,10 +84,9 @@ export function useGatewayActions({
     return false;
   };
 
-  const syncGatewayStatus = async (runtimeConfig?: any) => {
+  const syncGatewayStatus = async () => {
     try {
-      const effectiveConfig = runtimeConfig || config;
-      const listening = await isGatewayListeningOnConfiguredPort(effectiveConfig);
+      const listening = await isGatewayListening();
       if (listening !== null) {
         setRunning(listening);
       }
@@ -87,35 +105,29 @@ export function useGatewayActions({
       return;
     }
 
+    if (!config.configPath?.trim()) {
+      addLog('錯誤: 未設定 Config Path，無法安全識別目標實例，拒絕停止以避免誤停其他並行服務。', 'stderr');
+      return;
+    }
+
     addLog(t('logs.stoppingGateway'), 'system');
     try {
       await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
       const envPrefix = buildOpenClawEnvPrefix();
-      const portArg = resolveGatewayPortArg();
-      const portInfo = resolveGatewayPortForPrecheck();
-      if (portArg === null) {
-        addLog(t('logs.invalidGatewayPort'), 'stderr');
-        return;
-      }
-      const hasConfigIsolation = !!config.configPath?.trim();
-      const hasPortIsolation = portArg !== null;
-      if (!hasConfigIsolation && !hasPortIsolation) {
-        addLog('錯誤: 未設定 Config Path 且未指定 Gateway Port，無法安全識別目標實例，拒絕停止以避免誤停其他並行服務。', 'stderr');
-        return;
-      }
+      const port = getGatewayPort();
 
       if (options?.killTerminalAndPortHolders) {
-        if (portInfo) {
+        if (port) {
           try {
-            const killRes = await window.electronAPI.killPortHolder(portInfo.port);
+            const killRes = await window.electronAPI.killPortHolder(port);
             if (killRes.success) {
               const allKilled = [...(killRes.killed || []), ...(killRes.forceKilled || [])];
               if (allKilled.length > 0) {
-                addLog(`已先行關閉 Port ${portInfo.port} 相關程序（PID: ${Array.from(new Set(allKilled)).join(', ')}）`, 'system');
+                addLog(`已先行關閉 Port ${port} 相關程序（PID: ${Array.from(new Set(allKilled)).join(', ')}）`, 'system');
               }
             }
           } catch (e: any) {
-            addLog(`關閉 Port ${portInfo.port} 相關程序時發生錯誤：${e?.message || e}`, 'stderr');
+            addLog(`關閉 Port ${port} 相關程序時發生錯誤：${e?.message || e}`, 'stderr');
           }
         }
 
@@ -124,7 +136,7 @@ export function useGatewayActions({
         await window.electronAPI.exec(closeTerminalWindowsCmd).catch(() => {});
       }
 
-      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop${portArg}`;
+      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
       const resRaw: any = shouldUseExternalTerminal()
         ? await execInTerminal(cmd, {
             title: 'Stopping OpenClaw Gateway',
@@ -168,28 +180,22 @@ export function useGatewayActions({
     addLog(t('logs.startingGateway'), 'system');
     try {
       const envPrefix = buildOpenClawEnvPrefix();
-      const portArg = resolveGatewayPortArg();
-      if (portArg === null) {
-        addLog(t('logs.invalidGatewayPort'), 'stderr');
-        return;
-      }
+      const port = getGatewayPort();
 
-      const precheck = resolveGatewayPortForPrecheck();
-      if (!precheck) {
-        addLog(t('logs.invalidGatewayPort'), 'stderr');
-        return;
-      }
-      const precheckRes: any = await window.electronAPI.exec(`lsof -nP -iTCP:${precheck.port} -sTCP:LISTEN`);
-      const precheckCode = precheckRes.code ?? precheckRes.exitCode;
-      const precheckOutput = String(precheckRes.stdout || '').trim();
-      if (precheckCode === 0 && precheckOutput) {
-        const message = `錯誤: 啟動前檢查到 Port ${precheck.port} 已被占用，請改用其他 Gateway Port。`;
-        addLog(message, 'stderr');
-        addLog(precheckOutput, 'stderr');
-        setGatewayConflictActionMessage('');
-        setKillingGatewayPortHolder(false);
-        setGatewayConflictModal({ message, detail: precheckOutput, port: precheck.port });
-        return;
+      // 啟動前 port 衝突檢查（僅在 openclaw.json 已設定 port 時執行）
+      if (port) {
+        const precheckRes: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+        const precheckCode = precheckRes.code ?? precheckRes.exitCode;
+        const precheckOutput = String(precheckRes.stdout || '').trim();
+        if (precheckCode === 0 && precheckOutput) {
+          const message = `錯誤: 啟動前檢查到 Port ${port} 已被占用，請在 openclaw.json 配置頁面改用其他 Gateway Port。`;
+          addLog(message, 'stderr');
+          addLog(precheckOutput, 'stderr');
+          setGatewayConflictActionMessage('');
+          setKillingGatewayPortHolder(false);
+          setGatewayConflictModal({ message, detail: precheckOutput, port });
+          return;
+        }
       }
 
       const checkDir = await window.electronAPI.exec(`test -d ${shellQuote(config.corePath)}`);
@@ -202,8 +208,8 @@ export function useGatewayActions({
       let startCmd = '';
       if (useExternalTerminal) {
         startCmd = config.installDaemon
-          ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start${portArg}`
-          : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run${portArg} --verbose --force`;
+          ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`
+          : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
 
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
 
@@ -221,7 +227,7 @@ export function useGatewayActions({
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } else if (config.installDaemon) {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
-        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start${portArg}`;
+        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`;
         const resRaw: any = await window.electronAPI.exec(cmd);
         const code = resRaw.code ?? resRaw.exitCode;
         if (code === 0) {
@@ -232,7 +238,7 @@ export function useGatewayActions({
         }
       } else {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
-        const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run${portArg} --verbose --force`;
+        const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
         const payload = {
           command: runCmd,
           autoRestart: !!config.autoRestartGateway,
@@ -247,14 +253,13 @@ export function useGatewayActions({
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      const listening = await waitForGatewayListening(config);
+      const listening = await waitForGatewayListening();
       if (listening) {
         setRunning(true);
         addLog(t('logs.gatewayStarted'), 'system');
 
         if (useExternalTerminal && !config.installDaemon) {
-          const portInfo = resolveGatewayPortForPrecheck(config);
-          const healthCheckCommand = portInfo ? `lsof -nP -iTCP:${portInfo.port} -sTCP:LISTEN` : '';
+          const healthCheckCommand = port ? `lsof -nP -iTCP:${port} -sTCP:LISTEN` : '';
           const watchdogPayload = {
             enabled: !!config.autoRestartGateway,
             healthCheckCommand,

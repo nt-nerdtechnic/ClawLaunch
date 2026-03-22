@@ -44,7 +44,6 @@ interface Config {
   platform: string;
   botToken: string;
   appToken: string; // Slack App-Level Token (xapp-...)
-  gatewayPort: string;
   installDaemon: boolean;
   useExternalTerminal: boolean;
   autoRestartGateway: boolean;
@@ -238,7 +237,6 @@ export const useStore = create<AppState>((set) => ({
     platform: 'telegram', 
     botToken: '',
     appToken: '',
-    gatewayPort: '',
     installDaemon: false,
     useExternalTerminal: true,
     autoRestartGateway: false,

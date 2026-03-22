@@ -15,6 +15,7 @@ export function useRuntimeConfig(
   const [runtimeProfileError, setRuntimeProfileError] = useState('');
   const [runtimeDraftModel, setRuntimeDraftModel] = useState('');
   const [runtimeDraftBotToken, setRuntimeDraftBotToken] = useState('');
+  const [runtimeDraftGatewayPort, setRuntimeDraftGatewayPort] = useState('');
   const [dynamicModelOptions, setDynamicModelOptions] = useState<any[]>([]);
   const [dynamicModelSource, setDynamicModelSource] = useState('');
   const [dynamicModelLoading, setDynamicModelLoading] = useState(false);
@@ -70,8 +71,10 @@ export function useRuntimeConfig(
     
     const nextModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
     const nextBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
+    const nextGatewayPort = String(runtimeProfile?.gateway?.port ?? '').trim();
     setRuntimeDraftModel(nextModel);
     setRuntimeDraftBotToken(nextBotToken);
+    setRuntimeDraftGatewayPort(nextGatewayPort);
   }, [activeTab, runtimeProfile, detectedConfig]);
 
   // 加載動態模型選項
@@ -124,6 +127,8 @@ export function useRuntimeConfig(
     setRuntimeDraftModel,
     runtimeDraftBotToken,
     setRuntimeDraftBotToken,
+    runtimeDraftGatewayPort,
+    setRuntimeDraftGatewayPort,
     dynamicModelOptions,
     setDynamicModelOptions,
     dynamicModelSource,

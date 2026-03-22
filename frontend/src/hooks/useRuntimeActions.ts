@@ -14,8 +14,10 @@ interface UseRuntimeActionsParams {
   resolvedConfigDir: string;
   runtimeDraftModel: string;
   runtimeDraftBotToken: string;
+  runtimeDraftGatewayPort: string;
   effectiveRuntimeModel: string;
   effectiveRuntimeBotToken: string;
+  effectiveRuntimeGatewayPort: string;
   authAddProvider: string;
   authAddChoice: string;
   authAddSecret: string;
@@ -47,8 +49,10 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     resolvedConfigDir,
     runtimeDraftModel,
     runtimeDraftBotToken,
+    runtimeDraftGatewayPort,
     effectiveRuntimeModel,
     effectiveRuntimeBotToken,
+    effectiveRuntimeGatewayPort,
     authAddProvider,
     authAddChoice,
     authAddSecret,
@@ -125,14 +129,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       return;
     }
 
-    const gatewayPortRaw = String(config.gatewayPort ?? '').trim();
-    if (!gatewayPortRaw || !/^\d+$/.test(gatewayPortRaw)) {
-      setLauncherSaveState('error');
-      scheduleSaveStateReset(launcherResetTimerRef, setLauncherSaveState);
-      addLog('錯誤: Gateway Port 未填或格式不正確，儲存已中止。請先至設定頁填入有效的 Gateway Port（正整數）後再儲存。', 'stderr');
-      return;
-    }
-
     const workspacePathRaw = String(config.workspacePath ?? '').trim();
     if (workspacePathRaw) {
       const checkWs = await window.electronAPI.exec(`test -d ${shellQuote(workspacePathRaw)}`);
@@ -162,14 +158,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       return;
     }
 
-    const gatewayPortRaw = String(config.gatewayPort ?? '').trim();
-    if (!gatewayPortRaw || !/^\d+$/.test(gatewayPortRaw)) {
-      setRuntimeSaveState('error');
-      scheduleSaveStateReset(runtimeResetTimerRef, setRuntimeSaveState);
-      addLog('錯誤: Gateway Port 未填或格式不正確，儲存已中止。請先至設定頁填入有效的 Gateway Port（正整數）後再儲存。', 'stderr');
-      return;
-    }
-
     setRuntimeSaveState('saving');
     addLog(t('logs.savingConfig'), 'system');
     try {
@@ -177,8 +165,14 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
       const modelChanged = runtimeDraftModel.trim() !== effectiveRuntimeModel;
       const tokenChanged = runtimeDraftBotToken !== effectiveRuntimeBotToken;
+      const portDraft = runtimeDraftGatewayPort.trim();
+      const portChanged = portDraft !== effectiveRuntimeGatewayPort;
 
-      if (modelChanged || tokenChanged) {
+      if (portDraft && !/^\d+$/.test(portDraft)) {
+        throw new Error('Gateway Port 格式不正確，請填入正整數或留空（移除設定）。');
+      }
+
+      if (modelChanged || tokenChanged || portChanged) {
         const corePath = String(config.corePath || '').trim();
         if (!corePath) {
           throw new Error('缺少 Core Path，無法更新 OpenClaw 動態設定');
@@ -210,6 +204,16 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
           const setTokenRes = await window.electronAPI.exec(setTokenCmd);
           if ((setTokenRes.code ?? setTokenRes.exitCode) !== 0) {
             throw new Error(setTokenRes.stderr || '更新 Telegram Bot Token 失敗');
+          }
+        }
+
+        if (portChanged) {
+          if (portDraft) {
+            const setPortCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set gateway.port ${Number(portDraft)} --json`;
+            const setPortRes = await window.electronAPI.exec(setPortCmd);
+            if ((setPortRes.code ?? setPortRes.exitCode) !== 0) {
+              throw new Error(setPortRes.stderr || '更新 Gateway Port 失敗');
+            }
           }
         }
 

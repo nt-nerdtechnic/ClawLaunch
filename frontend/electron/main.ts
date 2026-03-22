@@ -2,8 +2,20 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
+import { mkdirSync, unlinkSync } from 'node:fs';
+
+// ── Multi-instance support ──────────────────────────────────────────────────
+// 在 app.whenReady() 之前：
+// 為每個 process 設定獨立的 Electron userData 目錄（附加 PID），
+// 避免 Chromium singleton lock 讓第二個實例閃退。
+// config.json 也存放在 per-PID 目錄，讓每個實例的設定與授權完全獨立。
+app.setPath('userData', `${app.getPath('userData')}-${process.pid}`);
+const CONFIG_DIR = app.getPath('userData');
+mkdirSync(CONFIG_DIR, { recursive: true });
+// ───────────────────────────────────────────────────────────────────────────
 
 // Suppress EPIPE errors that occur when concurrently/piped launchers close
 // the parent stdout/stderr pipe while Electron tries to write to console.
@@ -16,6 +28,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
 const activeProcesses = new Set<any>();
 const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean }>();
+let activeLockFilePath: string | null = null;
 
 const DEV_PORT_RANGE_START = 5173;
 const DEV_PORT_RANGE_END = 5185;
@@ -28,7 +41,6 @@ const NT_CLAW_TERMINAL_MARKER_PREFIX = '__NT_CLAWLAUNCH_MANAGED__';
 interface LauncherConfig {
   corePath?: string;
   configPath?: string;
-  gatewayPort?: string;
   autoRestartGateway?: boolean;
 }
 
@@ -1213,7 +1225,7 @@ const waitForAssistantFinalByHistory = async ({
 };
 
 async function resolveOpenClawRuntime() {
-  const launcherConfigPath = path.join(app.getPath('userData'), 'config.json');
+  const launcherConfigPath = path.join(CONFIG_DIR, 'config.json');
   let launcherConfig: LauncherConfig = {};
   try {
     const raw = await fs.readFile(launcherConfigPath, 'utf-8');
@@ -1236,7 +1248,7 @@ async function resolveOpenClawRuntime() {
   }
 
   const gatewayCredentials = resolveGatewayCredentials(openclawConfig);
-  const gatewayUrlArg = buildGatewayUrlArg(launcherConfig.gatewayPort);
+  const gatewayUrlArg = buildGatewayUrlArg(String(openclawConfig?.gateway?.port ?? ''));
   const gatewayAuthArg = buildGatewayAuthArg(gatewayCredentials);
   const envPrefix = `${configDir ? `OPENCLAW_STATE_DIR=${shellQuote(configDir)} ` : ''}${configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} ` : ''}`;
   const cdPrefix = corePath ? `cd ${shellQuote(corePath)} && ` : '';
@@ -1300,21 +1312,20 @@ async function resolveDevServerUrl(): Promise<string> {
     return envUrl;
   }
 
-  const fixedDevUrl = 'http://localhost:5173';
   const deadline = Date.now() + DEV_SERVER_WAIT_MS;
   while (Date.now() < deadline) {
-    // Keep launcher and renderer on a fixed dev port.
-    // Scanning a range can accidentally bind to an unrelated local Vite server.
-    // eslint-disable-next-line no-await-in-loop
-    if (await isDevServerReachable(fixedDevUrl)) {
-      return fixedDevUrl;
+    for (let port = DEV_PORT_RANGE_START; port <= DEV_PORT_RANGE_END; port++) {
+      const url = `http://localhost:${port}`;
+      // eslint-disable-next-line no-await-in-loop
+      if (await isDevServerReachable(url)) {
+        return url;
+      }
     }
     // eslint-disable-next-line no-await-in-loop
     await sleep(250);
   }
 
-  // Fallback for clearer diagnostics in renderer load failure.
-  return fixedDevUrl;
+  return `http://localhost:${DEV_PORT_RANGE_START}`;
 }
 
 function killAllSubprocesses() {
@@ -1335,6 +1346,125 @@ function killAllSubprocesses() {
   }
   activeProcesses.clear();
 }
+
+// ── Lock file helpers for configPath isolation ──────────────────────────────
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeLockFile(configPathDir: string): Promise<string | null> {
+  const lockFileName = `.nt-clawlaunch-${process.pid}.lock`;
+  const lockFilePath = path.join(configPathDir, lockFileName);
+  try {
+    await fs.writeFile(lockFilePath, String(process.pid), 'utf-8');
+    return lockFilePath;
+  } catch (e) {
+    console.error('[lock] Failed to write lock file:', e);
+    return null;
+  }
+}
+
+async function cleanupLockFile(): Promise<void> {
+  if (!activeLockFilePath) return;
+  const prev = activeLockFilePath;
+  activeLockFilePath = null;
+  try {
+    await fs.unlink(prev);
+  } catch {
+    // silently ignore — file may already be gone
+  }
+}
+
+interface ConfigPathConflictResult {
+  conflictPid: number | null;
+  suggestionPath: string;
+}
+
+async function checkConfigPathConflict(configPathDir: string): Promise<ConfigPathConflictResult> {
+  let conflictPid: number | null = null;
+  try {
+    const entries = await fs.readdir(configPathDir);
+    for (const entry of entries) {
+      const match = entry.match(/^\.nt-clawlaunch-(\d+)\.lock$/);
+      if (!match) continue;
+      const pid = Number(match[1]);
+      if (pid === process.pid) continue;
+      if (isPidAlive(pid)) {
+        conflictPid = pid;
+        break;
+      }
+      // Stale lock from dead process — clean up opportunistically
+      try { await fs.unlink(path.join(configPathDir, entry)); } catch {}
+    }
+  } catch {
+    return { conflictPid: null, suggestionPath: '' };
+  }
+
+  if (conflictPid === null) return { conflictPid: null, suggestionPath: '' };
+
+  const base = configPathDir.replace(/\/+$/, '');
+  let suggestionPath = '';
+  for (let i = 2; i <= 9; i++) {
+    const candidate = `${base}-${i}`;
+    let candidateFree = true;
+    try {
+      const candidateEntries = await fs.readdir(candidate);
+      for (const e of candidateEntries) {
+        const m = e.match(/^\.nt-clawlaunch-(\d+)\.lock$/);
+        if (m && Number(m[1]) !== process.pid && isPidAlive(Number(m[1]))) {
+          candidateFree = false;
+          break;
+        }
+      }
+    } catch {
+      // Candidate directory doesn't exist — definitely free
+    }
+    if (candidateFree) { suggestionPath = candidate; break; }
+  }
+
+  return { conflictPid, suggestionPath };
+}
+
+async function activateConfigPath(newConfigPath: string): Promise<void> {
+  const normalized = String(newConfigPath || '').trim();
+
+  if (activeLockFilePath) {
+    const currentDir = path.dirname(activeLockFilePath);
+    if (normalized && currentDir === normalized) return;
+  }
+
+  await cleanupLockFile();
+  if (!normalized) return;
+
+  const { conflictPid, suggestionPath } = await checkConfigPathConflict(normalized);
+
+  const lockPath = await writeLockFile(normalized);
+  if (lockPath) activeLockFilePath = lockPath;
+
+  if (conflictPid !== null) {
+    const suggestionLine = suggestionPath ? `\n\n建議改用路徑：\n${suggestionPath}` : '';
+    const dialogOptions = {
+      type: 'warning' as const,
+      title: 'Config Path 衝突警告',
+      message: `另一個 NT-ClawLaunch 實例（PID ${conflictPid}）已在使用此 Config Path：\n\n${normalized}\n\n多個實例共用同一 Config Path 可能導致 gateway 設定衝突。建議在「Launcher 設定」中為此視窗指定獨立的 Config Path。${suggestionLine}`,
+      buttons: ['知道了'],
+    };
+    const parentWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    if (parentWindow) {
+      dialog.showMessageBox(parentWindow, dialogOptions).catch(() => {});
+    } else {
+      dialog.showMessageBox(dialogOptions).catch(() => {});
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 async function createWindow() {
   const iconPath = process.env.NODE_ENV === 'development'
@@ -2267,6 +2397,12 @@ ipcMain.on('window:resize', (event, mode: 'mini' | 'expanded') => {
   }
 });
 
+ipcMain.handle('window:set-title', (_event, title: string) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setTitle(String(title || ''));
+  }
+});
+
 ipcMain.handle('dialog:selectDirectory', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ['openDirectory']
@@ -2769,9 +2905,12 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const configStr = fullCommand.replace('config:write ', '');
       const config = JSON.parse(configStr);
-      const configPath = path.join(app.getPath('userData'), 'config.json');
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-      return { code: 0, stdout: `Config saved to ${configPath}`, stderr: '', exitCode: 0 };
+      const configFilePath = path.join(CONFIG_DIR, 'config.json');
+      await fs.writeFile(configFilePath, JSON.stringify(config, null, 2));
+      if (config?.configPath) {
+        activateConfigPath(String(config.configPath)).catch(() => {});
+      }
+      return { code: 0, stdout: `Config saved to ${configFilePath}`, stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
@@ -2779,8 +2918,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
   if (fullCommand === 'config:read') {
     try {
-      const configPath = path.join(app.getPath('userData'), 'config.json');
-      const content = await fs.readFile(configPath, 'utf-8');
+      const configFilePath = path.join(CONFIG_DIR, 'config.json');
+      const content = await fs.readFile(configFilePath, 'utf-8');
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed?.configPath) {
+          activateConfigPath(String(parsed.configPath)).catch(() => {});
+        }
+      } catch {}
       return { code: 0, stdout: content, stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: 'No config file found', exitCode: 1 };
@@ -2849,7 +2994,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     const home = app.getPath('home');
     const possibleWorkspace = path.join(home, '.openclaw');
     const searchScopes = [home, path.join(home, 'Desktop'), path.join(home, 'Documents'), path.dirname(app.getAppPath())];
-    const launcherConfigPath = path.join(app.getPath('userData'), 'config.json');
+    const launcherConfigPath = path.join(CONFIG_DIR, 'config.json');
 
     let corePath = '';
     let configPath = '';
@@ -2975,7 +3120,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
 
       // 取得目標路徑
-      const configPath = path.join(app.getPath('userData'), 'config.json');
+      const configPath = path.join(CONFIG_DIR, 'config.json');
       let targetBaseDir = '';
       try {
         const content = await fs.readFile(configPath, 'utf-8');
@@ -3005,7 +3150,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const skillPath = fullCommand.replace('skill:delete ', '').trim();
       if (!skillPath) throw new Error('未提供路徑');
 
-      const launcherConfigPath = path.join(app.getPath('userData'), 'config.json');
+      const launcherConfigPath = path.join(CONFIG_DIR, 'config.json');
       let configuredWorkspacePath = '';
       let configuredConfigPath = '';
       try {
@@ -3795,10 +3940,38 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   });
 });
 
+ipcMain.handle('port:find-free', async (_event, startPort?: number, endPort?: number) => {
+  const start = Math.max(1024, Math.min(65533, Number(startPort) || 10000));
+  const end = Math.max(start + 1, Math.min(65535, Number(endPort) || 60000));
+
+  const isPortFree = (port: number): Promise<boolean> => new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => resolve(true));
+    });
+  });
+
+  for (let port = start; port <= end; port++) {
+    const free = await isPortFree(port);
+    if (free) return { port };
+  }
+  return { port: null, error: `No free port found in range ${start}-${end}` };
+});
+
 ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return { success: false, error: 'Invalid port', port };
+  }
+
+  // 先嘗試卸載 launchctl 管理的 gateway daemon，避免 process 被殺後立刻重啟
+  const launchctlLabel = 'ai.openclaw.gateway';
+  const uid = (await runShellCommand('id -u')).stdout.trim();
+  if (uid) {
+    await runShellCommand(`launchctl bootout gui/${uid}/${launchctlLabel} 2>/dev/null || true`);
+    await sleep(300);
   }
 
   const lookupRes = await runShellCommand(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`);
@@ -3811,7 +3984,7 @@ ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
     .filter((pid) => Number.isInteger(pid) && pid > 0)));
 
   if (!pids.length) {
-    return { success: false, error: `No listening process found on port ${port}`, port };
+    return { success: true, error: undefined, port, pids: [], killed: [], forceKilled: [], failed: [] };
   }
 
   const termSent: number[] = [];
@@ -4181,6 +4354,10 @@ ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
 
 app.on('before-quit', () => {
   killAllSubprocesses();
+  if (activeLockFilePath) {
+    try { unlinkSync(activeLockFilePath); } catch {}
+    activeLockFilePath = null;
+  }
 });
 
 app.on('window-all-closed', () => {

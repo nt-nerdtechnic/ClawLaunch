@@ -118,22 +118,6 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">
             Launcher Start Behavior
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Gateway Port */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {t('settings.gatewayPort')}
-              </label>
-              <input
-                type="text"
-                value={config.gatewayPort || ''}
-                onChange={(e) => setConfig({ gatewayPort: e.target.value })}
-                placeholder={t('settings.gatewayPortPlaceholder')}
-                className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-              />
-            </div>
-          </div>
-
           {/* External Terminal Toggle */}
           <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
             <div>
