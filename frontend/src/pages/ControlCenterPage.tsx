@@ -2,10 +2,29 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle, Clock,
-  CalendarClock, Zap, Activity,
+  CalendarClock, Zap, Activity, Server, Terminal,
 } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
+
+interface CrontabEntry {
+  schedule: string;
+  command: string;
+  name: string;
+  raw: string;
+}
+
+interface LaunchAgent {
+  label: string;
+  name: string;
+  plistExists: boolean;
+  keepAlive: boolean;
+  comment: string;
+  loaded: boolean;
+  running: boolean;
+  pid: number | null;
+  exitCode: number | null;
+}
 
 interface CronSchedule {
   kind: 'cron' | 'every';
@@ -76,6 +95,8 @@ function nextTime(ms?: number): string {
 
 export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshSnapshot, stateDir }) => {
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
+  const [crontabEntries, setCrontabEntries] = useState<CrontabEntry[]>([]);
+  const [launchAgents, setLaunchAgents] = useState<LaunchAgent[]>([]);
   const [loading, setLoading] = useState(false);
   const [cronLoading, setCronLoading] = useState(false);
   const [error, setError] = useState('');
@@ -99,17 +120,28 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     } catch { setCronJobs([]); }
   }, [stateDir]);
 
+  const loadSystem = useCallback(async () => {
+    try {
+      const [ctRes, laRes] = await Promise.all([
+        window.electronAPI.exec('system:crontab:list'),
+        window.electronAPI.exec('system:launchagents:list'),
+      ]);
+      setCrontabEntries(JSON.parse(ctRes.stdout || '{}').entries || []);
+      setLaunchAgents(JSON.parse(laRes.stdout || '{}').agents || []);
+    } catch { /* non-fatal */ }
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      await loadCron();
+      await Promise.all([loadCron(), loadSystem()]);
       if (onRefreshSnapshot) await onRefreshSnapshot();
       setLastRefreshed(new Date());
     } catch (e: any) {
       setError(e?.message || '載入失敗');
     } finally { setLoading(false); }
-  }, [loadCron, onRefreshSnapshot]);
+  }, [loadCron, loadSystem, onRefreshSnapshot]);
 
   const refreshCron = useCallback(async () => {
     setCronLoading(true);
@@ -117,12 +149,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     setCronLoading(false);
   }, [loadCron]);
 
-  // 每 30 秒自動刷新
+  // 初始載入 + 每 30 秒自動刷新
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    const id = setInterval(() => void loadCron(), 30000);
+    const id = setInterval(() => void Promise.all([loadCron(), loadSystem()]), 30000);
     return () => clearInterval(id);
-  }, [loadCron]);
+  }, [loadCron, loadSystem]);
 
   // ── Cron actions ──────────────────────────────────────────────────────────
 
@@ -263,115 +295,154 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
 
         </div>
 
-        {/* ── 右：排程 ─────────────────────────────────────────── */}
-        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden">
-          <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(139,92,246,0.45),transparent)' }} />
-          <div className="p-6 space-y-3">
-            <div className="flex items-center justify-between">
+        {/* ── 右：排程三層 ──────────────────────────────────────── */}
+        <div className="flex flex-col gap-4">
+
+          {/* 層 1：系統服務 LaunchAgents */}
+          <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
+            <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(16,185,129,0.45),transparent)' }} />
+            <div className="p-5 space-y-2.5">
               <div className="flex items-center gap-2">
-                <CalendarClock size={13} className="text-violet-500" />
-                <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 dark:text-slate-100">排程管理</h3>
-                <span className="text-[10px] text-slate-400">{cronJobs.length} 個</span>
+                <Server size={12} className="text-emerald-500" />
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">系統服務</span>
+                <span className="text-[9px] text-slate-400">LaunchAgents</span>
               </div>
-              <button
-                onClick={() => void refreshCron()}
-                className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all"
-              >
-                <RefreshCw size={10} className={cronLoading ? 'animate-spin' : ''} />
-                {cronLoading ? '同步中' : '重新整理'}
-              </button>
-            </div>
-
-            <div className="space-y-1.5 max-h-[700px] overflow-y-auto pr-0.5">
-              {cronJobs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                  <CalendarClock size={26} className="mb-2 opacity-30" />
-                  <span className="text-sm">沒有排程任務</span>
-                </div>
-              ) : cronJobs.map(job => {
-                const hasError = (job.state?.consecutiveErrors ?? 0) > 0;
-                return (
-                  <div
-                    key={job.id}
-                    className={`rounded-2xl border px-3.5 py-3 transition-all ${
-                      hasError
-                        ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-950/15'
-                        : job.enabled
-                          ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 hover:border-slate-200 dark:hover:border-slate-700'
-                          : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
-                    }`}
-                  >
-                    {/* 上行：名稱 + 控制 */}
-                    <div className="flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${job.enabled ? 'bg-violet-500' : 'bg-slate-400'}`} />
-                      <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
-                      {hasError && <AlertTriangle size={11} className="text-amber-500 shrink-0" />}
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <button
-                          onClick={() => void toggleCron(job.id)}
-                          title={job.enabled ? '暫停' : '啟動'}
-                          className={`p-1.5 rounded-xl transition-all ${
-                            job.enabled
-                              ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20'
-                              : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20'
-                          }`}
-                        >
-                          {job.enabled ? <Pause size={11} /> : <Play size={11} />}
-                        </button>
-                        <button
-                          onClick={() => void deleteCron(job.id)}
-                          className="p-1.5 rounded-xl text-slate-300 dark:text-slate-600 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all"
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 下行：排程資訊 */}
-                    <div className="mt-1.5 flex items-center gap-2.5 pl-4 text-[10px] text-slate-400 flex-wrap">
-                      <span className="flex items-center gap-1">
-                        <Zap size={8} />
-                        {formatSchedule(job.schedule)}
-                      </span>
-                      {job.state?.lastRunAtMs && (
-                        <>
-                          <span className="text-slate-300 dark:text-slate-700">·</span>
-                          <span className="flex items-center gap-1">
-                            {job.state.lastStatus === 'ok'
-                              ? <CheckCircle size={8} className="text-emerald-500" />
-                              : job.state.lastStatus === 'error'
-                                ? <AlertTriangle size={8} className="text-rose-400" />
-                                : <Clock size={8} />
-                            }
-                            {relTime(job.state.lastRunAtMs)}
-                          </span>
-                        </>
-                      )}
-                      {job.enabled && job.state?.nextRunAtMs && (
-                        <>
-                          <span className="text-slate-300 dark:text-slate-700">·</span>
-                          <span className="text-violet-500">{nextTime(job.state.nextRunAtMs)}</span>
-                        </>
-                      )}
-                      {job.state?.lastDurationMs ? (
-                        <>
-                          <span className="text-slate-300 dark:text-slate-700">·</span>
-                          <span>{(job.state.lastDurationMs / 1000).toFixed(1)}s</span>
-                        </>
-                      ) : null}
-                    </div>
-
-                    {/* 錯誤訊息 */}
-                    {hasError && job.state?.lastError && (
-                      <div className="mt-1.5 ml-4 text-[10px] text-amber-600 dark:text-amber-400 truncate">
-                        {job.state.lastError}
-                      </div>
-                    )}
+              {launchAgents.length === 0 ? (
+                <p className="text-[11px] text-slate-400 py-2">未偵測到系統服務</p>
+              ) : launchAgents.map(agent => (
+                <div key={agent.label} className="flex items-center gap-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 px-3 py-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${agent.running ? 'bg-emerald-500' : agent.loaded ? 'bg-amber-400' : 'bg-slate-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">{agent.name}</div>
+                    <div className="text-[10px] text-slate-400 truncate">{agent.label}</div>
                   </div>
-                );
-              })}
+                  <div className="shrink-0 text-right">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${
+                      agent.running
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
+                        : agent.loaded
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    }`}>
+                      {agent.running ? `運行中 · PID ${agent.pid}` : agent.loaded ? '已載入' : agent.plistExists ? '未載入' : '未安裝'}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+
+          {/* 層 2：系統 crontab */}
+          <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
+            <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(245,158,11,0.45),transparent)' }} />
+            <div className="p-5 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Terminal size={12} className="text-amber-500" />
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">系統排程</span>
+                <span className="text-[9px] text-slate-400">crontab · {crontabEntries.length} 項</span>
+              </div>
+              {crontabEntries.length === 0 ? (
+                <p className="text-[11px] text-slate-400 py-2">無 crontab 項目</p>
+              ) : crontabEntries.map((entry, i) => (
+                <div key={i} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Zap size={10} className="text-amber-400 shrink-0" />
+                    <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">{entry.name}</span>
+                  </div>
+                  <div className="mt-1 pl-4 flex items-center gap-2 text-[10px] text-slate-400">
+                    <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{entry.schedule}</span>
+                    <span className="truncate max-w-[160px] opacity-60">{entry.command.split('/').slice(-2).join('/')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 層 3：OpenClaw 應用排程 */}
+          <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
+            <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(139,92,246,0.45),transparent)' }} />
+            <div className="p-5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CalendarClock size={12} className="text-violet-500" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">應用排程</span>
+                  <span className="text-[9px] text-slate-400">OpenClaw · {cronJobs.length} 個</span>
+                </div>
+                <button
+                  onClick={() => void refreshCron()}
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all"
+                >
+                  <RefreshCw size={9} className={`inline ${cronLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
+                {cronJobs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                    <CalendarClock size={24} className="mb-2 opacity-30" />
+                    <span className="text-sm">沒有排程任務</span>
+                  </div>
+                ) : cronJobs.map(job => {
+                  const hasError = (job.state?.consecutiveErrors ?? 0) > 0;
+                  return (
+                    <div
+                      key={job.id}
+                      className={`rounded-xl border px-3 py-2.5 transition-all ${
+                        hasError
+                          ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-950/15'
+                          : job.enabled
+                            ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
+                            : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${job.enabled ? 'bg-violet-500' : 'bg-slate-400'}`} />
+                        <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
+                        {hasError && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={() => void toggleCron(job.id)}
+                            title={job.enabled ? '暫停' : '啟動'}
+                            className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}
+                          >
+                            {job.enabled ? <Pause size={10} /> : <Play size={10} />}
+                          </button>
+                          <button
+                            onClick={() => void deleteCron(job.id)}
+                            className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 pl-3.5 text-[9px] text-slate-400 flex-wrap">
+                        <span className="font-mono">{formatSchedule(job.schedule)}</span>
+                        {job.state?.lastRunAtMs && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="flex items-center gap-0.5">
+                              {job.state.lastStatus === 'ok'
+                                ? <CheckCircle size={8} className="text-emerald-500" />
+                                : <AlertTriangle size={8} className="text-rose-400" />
+                              }
+                              {relTime(job.state.lastRunAtMs)}
+                            </span>
+                          </>
+                        )}
+                        {job.enabled && job.state?.nextRunAtMs && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="text-violet-400">{nextTime(job.state.nextRunAtMs)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
         </div>
 
       </div>

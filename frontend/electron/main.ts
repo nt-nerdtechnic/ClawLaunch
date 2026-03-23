@@ -2682,7 +2682,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   }
 
   // ── NT_SKILL tasks.json helpers ──────────────────────────────────────────
-  const NT_SKILL_TASKS_FILE = path.join(process.env['HOME'] || '', 'NT_SKILL', 'tasks.json');
+  const NT_SKILL_TASKS_FILE = path.join(process.env['HOME'] || '', 'Desktop', 'clawdbot-main', 'tasks.json');
   const readNTTasks = async (): Promise<any[]> => {
     try {
       const raw = await fs.readFile(NT_SKILL_TASKS_FILE, 'utf-8');
@@ -2777,6 +2777,78 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'delete task failed', exitCode: 1 };
+    }
+  }
+
+  // ── 靜默執行 shell 指令（不送 renderer log）────────────────────────────
+  const runSilent = (cmd: string): Promise<{ stdout: string; stderr: string; code: number }> =>
+    new Promise((resolve) => {
+      const child = spawn(cmd, { shell: true });
+      let stdout = '', stderr = '';
+      child.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+      child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+      child.on('close', (code: number | null) => resolve({ stdout, stderr, code: code ?? 1 }));
+      child.on('error', () => resolve({ stdout, stderr, code: 1 }));
+    });
+
+  if (fullCommand === 'system:crontab:list') {
+    try {
+      const res = await runSilent('crontab -l');
+      const lines = res.stdout.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+      const entries = lines.map(line => {
+        const parts = line.trim().split(/\s+/);
+        const schedule = parts.slice(0, 5).join(' ');
+        const command = parts.slice(5).join(' ');
+        const name = command.split('/').pop()?.replace(/\.sh$/, '') || command.slice(0, 40);
+        return { schedule, command, name, raw: line.trim() };
+      });
+      return { code: 0, stdout: JSON.stringify({ entries }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 0, stdout: JSON.stringify({ entries: [] }), stderr: '', exitCode: 0 };
+    }
+  }
+
+  if (fullCommand === 'system:launchagents:list') {
+    try {
+      const home = process.env['HOME'] || '';
+      const knownAgents = [
+        { label: 'ai.openclaw.gateway',  plist: path.join(home, 'Library/LaunchAgents/ai.openclaw.gateway.plist'),  name: 'OpenClaw Gateway' },
+        { label: 'ai.openclaw.watchdog', plist: path.join(home, 'Library/LaunchAgents/ai.openclaw.watchdog.plist'), name: 'OpenClaw Watchdog' },
+      ];
+      const launchctlRes = await runSilent('launchctl list');
+      const listOutput = launchctlRes.stdout;
+
+      const agents = await Promise.all(knownAgents.map(async (agent) => {
+        // plist 是否存在
+        let plistExists = false;
+        let keepAlive = false;
+        let comment = '';
+        try {
+          const raw = await fs.readFile(agent.plist, 'utf-8');
+          plistExists = true;
+          keepAlive = raw.includes('<key>KeepAlive</key>');
+          const commentMatch = raw.match(/<key>Comment<\/key>\s*<string>([^<]+)<\/string>/);
+          if (commentMatch) comment = commentMatch[1];
+        } catch { /* plist missing */ }
+
+        // launchctl 狀態
+        const line = listOutput.split('\n').find(l => l.includes(agent.label));
+        let running = false;
+        let pid: number | null = null;
+        let exitCode: number | null = null;
+        if (line) {
+          const parts = line.trim().split(/\s+/);
+          pid = parts[0] && parts[0] !== '-' ? parseInt(parts[0]) : null;
+          exitCode = parts[1] ? parseInt(parts[1]) : null;
+          running = pid !== null && !isNaN(pid);
+        }
+
+        return { label: agent.label, name: agent.name, plistExists, keepAlive, comment, loaded: !!line, running, pid, exitCode };
+      }));
+
+      return { code: 0, stdout: JSON.stringify({ agents }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'launchagents list failed', exitCode: 1 };
     }
   }
 
