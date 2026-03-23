@@ -2330,12 +2330,15 @@ function isControlMutationCommand(fullCommand: string): boolean {
   const prefixes = [
     'control:tasks:add ',
     'control:tasks:update-status ',
+    'control:tasks:delete ',
     'control:projects:add ',
     'control:queue:add ',
     'control:queue:ack ',
     'control:approvals:add ',
     'control:approvals:decide ',
     'control:budget:set-policy ',
+    'cron:toggle ',
+    'cron:delete ',
   ];
   return prefixes.some((prefix) => fullCommand.startsWith(prefix));
 }
@@ -2734,6 +2737,95 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       return { code: 0, stdout: JSON.stringify({ items: audited.tasks }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'update task status failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('control:tasks:delete ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('control:tasks:delete ', '').trim() || '{}');
+      const taskId = String(payload?.taskId || '').trim();
+      if (!taskId) {
+        return { code: 1, stdout: '', stderr: 'taskId is required', exitCode: 1 };
+      }
+      const state = await readControlCenterState();
+      const next: ControlCenterState = { ...state, tasks: state.tasks.filter((t) => t.id !== taskId) };
+      await appendControlAudit(next, 'task.delete', taskId, true, `task deleted: ${taskId}`);
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'delete task failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'cron:list') {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:list', '').trim() || '{}');
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
+      try {
+        const raw = await fs.readFile(cronPath, 'utf-8');
+        return { code: 0, stdout: raw, stderr: '', exitCode: 0 };
+      } catch {
+        return { code: 0, stdout: JSON.stringify({ version: 1, jobs: [] }), stderr: '', exitCode: 0 };
+      }
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'cron list failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('cron:list ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:list ', '').trim() || '{}');
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
+      try {
+        const raw = await fs.readFile(cronPath, 'utf-8');
+        return { code: 0, stdout: raw, stderr: '', exitCode: 0 };
+      } catch {
+        return { code: 0, stdout: JSON.stringify({ version: 1, jobs: [] }), stderr: '', exitCode: 0 };
+      }
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'cron list failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('cron:toggle ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:toggle ', '').trim() || '{}');
+      const jobId = String(payload?.jobId || '').trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
+      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
+      const raw = await fs.readFile(cronPath, 'utf-8');
+      const data = JSON.parse(raw);
+      let toggled = false;
+      data.jobs = (data.jobs || []).map((job: any) => {
+        if (job.id === jobId) { toggled = true; return { ...job, enabled: !job.enabled, updatedAtMs: Date.now() }; }
+        return job;
+      });
+      if (!toggled) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
+      await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'cron toggle failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('cron:delete ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:delete ', '').trim() || '{}');
+      const jobId = String(payload?.jobId || '').trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
+      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
+      const raw = await fs.readFile(cronPath, 'utf-8');
+      const data = JSON.parse(raw);
+      const before = (data.jobs || []).length;
+      data.jobs = (data.jobs || []).filter((job: any) => job.id !== jobId);
+      if (data.jobs.length === before) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
+      await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'cron delete failed', exitCode: 1 };
     }
   }
 

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
-import type { ReadModelBudgetSummary, ReadModelSession, ReadModelStatus } from '../store';
+import type { ReadModelSession } from '../store';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
-import { Target, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 type DaySeries = {
@@ -14,33 +14,6 @@ type DaySeries = {
 };
 
 type PeriodAgg = { tokens: number; cost: number; requestCount: number };
-
-type SubscriptionWindow = {
-  connected: boolean;
-  planLabel: string;
-  consumed: number;
-  remaining: number;
-  limit: number;
-  usagePercent: number;
-  cycleStart: string;
-  cycleEnd: string;
-  unit: string;
-};
-
-type SubscriptionRaw = Partial<{
-  consumed: number;
-  remaining: number;
-  limit: number;
-  usagePercent: number;
-  cycleStart: string;
-  cycleEnd: string;
-  unit: string;
-  planLabel: string;
-}>;
-
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
-};
 
 const formatDelta = (current: number, previous: number) => {
   if (previous === 0) return current > 0 ? '+100.0%' : '+0.0%';
@@ -77,7 +50,7 @@ const toDateKey = (isoTime: string) => {
 
 export function Analytics() {
   const { t } = useTranslation();
-  const { setUsage, snapshot, snapshotHistory, rawSnapshot, runtimeUsageEvents } = useStore();
+  const { setUsage, snapshot, snapshotHistory, runtimeUsageEvents } = useStore();
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const [usageWindow, setUsageWindow] = useState<'today' | '7d' | '30d'>('7d');
 
@@ -88,7 +61,6 @@ export function Analytics() {
     if (!Array.isArray(snapshotSessions)) return [];
     return snapshotSessions.filter((item): item is ReadModelSession => !!item && typeof item === 'object');
   }, [snapshotSessions]);
-  const budget: ReadModelBudgetSummary | null = snapshot?.budgetSummary || null;
 
   // ── Track 2: JSONL 自算 - 從 runtimeUsageEvents 建立 per-day DaySeries ──
   const runtimeDayMap = useMemo<DaySeries[]>(() => {
@@ -270,75 +242,6 @@ export function Analytics() {
     return chartData.slice(-30);
   }, [chartData, usageWindow]);
 
-  const subscriptionWindow = useMemo(() => {
-    const root = asRecord(rawSnapshot) || {};
-    const billing = asRecord(root.billing) || {};
-    const raw = (asRecord(root.subscription) || asRecord(billing.subscription) || {}) as SubscriptionRaw;
-    const consumed = normalizeFinite(raw.consumed, NaN);
-    const remaining = normalizeFinite(raw.remaining, NaN);
-    const limit = normalizeFinite(raw.limit, NaN);
-    const usagePercent = normalizeFinite(raw.usagePercent, NaN);
-    const computedPercent = Number.isFinite(usagePercent)
-      ? usagePercent
-      : Number.isFinite(consumed) && Number.isFinite(limit) && limit > 0
-        ? (consumed / limit) * 100
-        : NaN;
-
-    const data: SubscriptionWindow = {
-      connected:
-        Number.isFinite(computedPercent) ||
-        Boolean(String(raw.cycleStart || '').trim()) ||
-        Boolean(String(raw.cycleEnd || '').trim()),
-      planLabel: String(raw.planLabel || '').trim(),
-      consumed: Number.isFinite(consumed) ? consumed : 0,
-      remaining: Number.isFinite(remaining) ? remaining : 0,
-      limit: Number.isFinite(limit) ? limit : 0,
-      usagePercent: Number.isFinite(computedPercent) ? Math.max(0, Math.min(100, computedPercent)) : 0,
-      cycleStart: String(raw.cycleStart || '').trim(),
-      cycleEnd: String(raw.cycleEnd || '').trim(),
-      unit: String(raw.unit || t('analytics.subscription.defaultUnit')).trim() || t('analytics.subscription.defaultUnit'),
-    };
-    return data;
-  }, [rawSnapshot, t]);
-
-  const connectorStatus = useMemo(() => {
-    const rows = [
-      { key: 'runtimeEvents', label: t('analytics.connectors.runtimeEvents'), connected: runtimeUsageEvents.length > 0 },
-      { key: 'snapshot', label: t('analytics.connectors.snapshot'), connected: Boolean(snapshot) },
-      { key: 'history', label: t('analytics.connectors.history'), connected: Array.isArray(snapshotHistory) && snapshotHistory.length > 0 },
-      { key: 'budget', label: t('analytics.connectors.budget'), connected: Boolean(budget) },
-      { key: 'subscription', label: t('analytics.connectors.subscription'), connected: subscriptionWindow.connected },
-      {
-        key: 'context',
-        label: t('analytics.connectors.context'),
-        connected: Array.isArray(snapshot?.statuses) && snapshot.statuses.some((item) => normalizeFinite(item?.contextWindowTokens, 0) > 0),
-      },
-    ];
-    return rows;
-  }, [budget, snapshot, snapshotHistory, runtimeUsageEvents.length, subscriptionWindow.connected, t]);
-
-  const contextPressureRows = useMemo(() => {
-    const statuses: ReadModelStatus[] = Array.isArray(snapshot?.statuses) ? snapshot.statuses : [];
-    return statuses
-      .map((item) => {
-        const used = normalizeFinite(item.tokensIn, 0) + normalizeFinite(item.tokensOut, 0);
-        const limit = normalizeFinite(item.contextWindowTokens, 0);
-        const ratio = limit > 0 ? (used / limit) * 100 : 0;
-        const state = ratio >= 90 ? 'critical' : ratio >= 70 ? 'warn' : 'ok';
-        return {
-          sessionKey: String(item.sessionKey || t('analytics.context.unknownSession')),
-          model: String(item.model || t('analytics.context.unknownModel')),
-          used,
-          limit,
-          ratio,
-          state,
-        };
-      })
-      .filter((item) => item.limit > 0)
-      .sort((a, b) => b.ratio - a.ratio)
-      .slice(0, 6);
-  }, [snapshot, t]);
-
   // Track 2 優先：從 runtimeUsageEvents by model（精確來歷）
   const costHotspots = useMemo(() => {
     if (runtimeUsageEvents.length > 0) {
@@ -391,40 +294,6 @@ export function Analytics() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [runtimeUsageEvents, sessions]);
-
-  const scopedRiskRows = useMemo(() => {
-    const evaluations = Array.isArray(budget?.evaluations) ? budget.evaluations : [];
-    return [...evaluations]
-      .filter((item) => !!item && typeof item === 'object')
-      .map((item) => {
-        const limit = Number(item.limitCost30d || 0);
-        const used = Number(item.usedCost30d || 0);
-        const ratio = limit > 0 ? (used / limit) * 100 : 0;
-        return {
-          scope: item.scope || 'global',
-          status: item.status || 'unknown',
-          used,
-          limit,
-          ratio,
-        };
-      })
-      .sort((a, b) => b.ratio - a.ratio)
-      .slice(0, 6);
-  }, [budget]);
-
-  const budgetMetrics = useMemo(() => {
-    const used = Number(budget?.usedCost30d ?? 0);
-    const limit = Number(budget?.limitCost30d ?? 0);
-    const burnRatePerDay = Number(budget?.burnRatePerDay ?? 0);
-    const projectedDays = Number(budget?.projectedDaysToLimit ?? 0);
-
-    return {
-      used: Number.isFinite(used) ? used : 0,
-      limit: Number.isFinite(limit) ? limit : 0,
-      burnRatePerDay: Number.isFinite(burnRatePerDay) ? burnRatePerDay : 0,
-      projectedDays: Number.isFinite(projectedDays) ? projectedDays : 0,
-    };
-  }, [budget]);
 
   useEffect(() => {
     setUsage({

@@ -800,7 +800,7 @@ function App() {
               </div>
             );
           })()}
-          {activeTab === 'controlCenter' && <ControlCenterPage onRefreshSnapshot={syncSnapshot} />}
+          {activeTab === 'controlCenter' && <ControlCenterPage onRefreshSnapshot={syncSnapshot} stateDir={resolvedConfigDir || undefined} />}
           {activeTab === 'skills' && <SkillsPage />}
 
           {activeTab === 'analytics' && (
