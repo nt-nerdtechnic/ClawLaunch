@@ -52,6 +52,7 @@ interface Config {
   corePath: string;    // 主核心區
   configPath: string;  // 設定區
   workspacePath: string; // 工作區
+  theme?: 'light' | 'dark'; // 持久化主題
 }
 
 export interface ReadModelSession {
@@ -327,7 +328,8 @@ export const useStore = create<AppState>((set) => ({
   setSnapshotSourcePath: (snapshotSourcePath) => set({ snapshotSourcePath }),
   runtimeUsageEvents: [],
   setRuntimeUsageEvents: (runtimeUsageEvents) => set({ runtimeUsageEvents }),
-  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'dark',
+  theme: (localStorage.getItem('theme') as 'light' | 'dark') ||
+    (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   setTheme: (theme) => {
     localStorage.setItem('theme', theme);
     set({ theme });

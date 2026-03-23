@@ -8,13 +8,18 @@ import fs from 'node:fs/promises';
 import { mkdirSync, unlinkSync } from 'node:fs';
 
 // ── Multi-instance support ──────────────────────────────────────────────────
-// 在 app.whenReady() 之前：
-// 為每個 process 設定獨立的 Electron userData 目錄（附加 PID），
-// 避免 Chromium singleton lock 讓第二個實例閃退。
-// config.json 也存放在 per-PID 目錄，讓每個實例的設定與授權完全獨立。
+// userData 用 PID 隔離，防止 Chromium singleton lock 讓第二個實例閃退。
+// 但 config.json（使用者設定）改存在固定路徑 PERSISTENT_CONFIG_DIR，
+// 讓每次重啟都能讀到上一次的設定，不因 PID 變動而消失。
 app.setPath('userData', `${app.getPath('userData')}-${process.pid}`);
-const CONFIG_DIR = app.getPath('userData');
-mkdirSync(CONFIG_DIR, { recursive: true });
+mkdirSync(app.getPath('userData'), { recursive: true });
+// 固定的 config 目錄：~/Library/Application Support/NT-ClawLaunch/
+const PERSISTENT_CONFIG_DIR = path.join(
+  app.getPath('appData'),
+  app.getName().replace(/ /g, '-'),
+);
+mkdirSync(PERSISTENT_CONFIG_DIR, { recursive: true });
+const CONFIG_DIR = PERSISTENT_CONFIG_DIR;
 // ───────────────────────────────────────────────────────────────────────────
 
 // Suppress EPIPE errors that occur when concurrently/piped launchers close
@@ -2676,10 +2681,24 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     }
   }
 
+  // ── NT_SKILL tasks.json helpers ──────────────────────────────────────────
+  const NT_SKILL_TASKS_FILE = path.join(process.env['HOME'] || '', 'NT_SKILL', 'tasks.json');
+  const readNTTasks = async (): Promise<any[]> => {
+    try {
+      const raw = await fs.readFile(NT_SKILL_TASKS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  };
+  const writeNTTasks = async (tasks: any[]): Promise<void> => {
+    await fs.writeFile(NT_SKILL_TASKS_FILE, JSON.stringify(tasks, null, 2), 'utf-8');
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (fullCommand === 'control:tasks:list') {
     try {
-      const state = await readControlCenterState();
-      return { code: 0, stdout: JSON.stringify({ items: state.tasks }), stderr: '', exitCode: 0 };
+      const items = await readNTTasks();
+      return { code: 0, stdout: JSON.stringify({ items }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'list tasks failed', exitCode: 1 };
     }
@@ -2692,23 +2711,29 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       if (!title) {
         return { code: 1, stdout: '', stderr: 'task title is required', exitCode: 1 };
       }
-      const state = await readControlCenterState();
       const now = nowIso();
-      const task: ControlTaskItem = {
-        id: buildId('task'),
+      const task = {
+        id: Math.random().toString(36).slice(2, 10),
         title,
         status: ['todo', 'in_progress', 'blocked', 'done'].includes(String(payload?.status || ''))
-          ? payload.status
-          : 'todo',
-        projectId: String(payload?.projectId || '').trim(),
-        owner: String(payload?.owner || '').trim(),
-        priority: Number.isFinite(Number(payload?.priority)) ? Number(payload.priority) : 3,
-        createdAt: now,
-        updatedAt: now,
+          ? payload.status : 'todo',
+        priority: String(payload?.priority || 'medium'),
+        components: [
+          { key: 'initial_purpose', label: '最初目的', content: '', weight: 0.2, progress: 0.0 },
+          { key: 'final_goal',      label: '最終目標', content: '', weight: 0.3, progress: 0.0 },
+          { key: 'description',     label: '描述',     content: String(payload?.description || ''), weight: 0.5, progress: 0.0 },
+        ],
+        overall_progress: 0.0,
+        created_at: now,
+        updated_at: now,
+        owner: String(payload?.owner || ''),
+        tags: [],
+        metadata: {},
       };
-      const next: ControlCenterState = { ...state, tasks: [task, ...state.tasks] };
-      const audited = await appendControlAudit(next, 'task.add', task.id, true, `task created: ${task.title}`);
-      return { code: 0, stdout: JSON.stringify({ item: task, total: audited.tasks.length }), stderr: '', exitCode: 0 };
+      const tasks = await readNTTasks();
+      tasks.unshift(task);
+      await writeNTTasks(tasks);
+      return { code: 0, stdout: JSON.stringify({ item: task, total: tasks.length }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'add task failed', exitCode: 1 };
     }
@@ -2718,23 +2743,25 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const payload = JSON.parse(fullCommand.replace('control:tasks:update-status ', '').trim() || '{}');
       const taskId = String(payload?.taskId || '').trim();
-      const status = String(payload?.status || '').trim() as ControlTaskStatus;
+      const status = String(payload?.status || '').trim();
       if (!taskId || !['todo', 'in_progress', 'blocked', 'done'].includes(status)) {
         return { code: 1, stdout: '', stderr: 'taskId/status invalid', exitCode: 1 };
       }
-      const state = await readControlCenterState();
+      const tasks = await readNTTasks();
       let found = false;
-      const tasks = state.tasks.map((item) => {
-        if (item.id !== taskId) return item;
+      const updated = tasks.map((t: any) => {
+        if (t.id !== taskId) return t;
         found = true;
-        return { ...item, status, updatedAt: nowIso() };
+        const next = { ...t, status, updated_at: nowIso() };
+        if (status === 'done') {
+          next.overall_progress = 100.0;
+          next.components = (t.components || []).map((c: any) => ({ ...c, progress: 1.0 }));
+        }
+        return next;
       });
-      if (!found) {
-        return { code: 1, stdout: '', stderr: 'task not found', exitCode: 1 };
-      }
-      const next: ControlCenterState = { ...state, tasks };
-      const audited = await appendControlAudit(next, 'task.updateStatus', taskId, true, `status -> ${status}`);
-      return { code: 0, stdout: JSON.stringify({ items: audited.tasks }), stderr: '', exitCode: 0 };
+      if (!found) return { code: 1, stdout: '', stderr: 'task not found', exitCode: 1 };
+      await writeNTTasks(updated);
+      return { code: 0, stdout: JSON.stringify({ items: updated }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'update task status failed', exitCode: 1 };
     }
@@ -2744,12 +2771,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const payload = JSON.parse(fullCommand.replace('control:tasks:delete ', '').trim() || '{}');
       const taskId = String(payload?.taskId || '').trim();
-      if (!taskId) {
-        return { code: 1, stdout: '', stderr: 'taskId is required', exitCode: 1 };
-      }
-      const state = await readControlCenterState();
-      const next: ControlCenterState = { ...state, tasks: state.tasks.filter((t) => t.id !== taskId) };
-      await appendControlAudit(next, 'task.delete', taskId, true, `task deleted: ${taskId}`);
+      if (!taskId) return { code: 1, stdout: '', stderr: 'taskId is required', exitCode: 1 };
+      const tasks = await readNTTasks();
+      await writeNTTasks(tasks.filter((t: any) => t.id !== taskId));
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'delete task failed', exitCode: 1 };

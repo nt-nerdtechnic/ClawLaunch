@@ -386,6 +386,11 @@ function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
+    // 同步寫進 config.json，讓主題跨重啟保留
+    if (window.electronAPI && config) {
+      const updated = { ...config, theme };
+      window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
+    }
   }, [theme]);
 
   useEffect(() => {

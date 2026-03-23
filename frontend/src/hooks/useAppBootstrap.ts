@@ -49,8 +49,11 @@ export function useAppBootstrap({
         } catch {
           console.error('Config JSON parse failed', res.stdout);
         }
-        const { setConfig } = useStore.getState();
+        const { setConfig, setTheme } = useStore.getState();
         setConfig(savedConfig);
+        if (savedConfig?.theme === 'light' || savedConfig?.theme === 'dark') {
+          setTheme(savedConfig.theme);
+        }
         return savedConfig;
       }
     } catch (e) {
