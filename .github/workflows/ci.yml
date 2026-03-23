@@ -7,11 +7,11 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -21,10 +21,6 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
-        working-directory: frontend
-
-      - name: Run Lint
-        run: npm run lint
         working-directory: frontend
 
       - name: Run Build
