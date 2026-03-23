@@ -136,18 +136,23 @@ export function useGatewayActions({
         await window.electronAPI.exec(closeTerminalWindowsCmd).catch(() => {});
       }
 
-      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
-      const resRaw: any = shouldUseExternalTerminal()
-        ? await execInTerminal(cmd, {
-            title: 'Stopping OpenClaw Gateway',
-            holdOpen: false,
-            cwd: config.corePath,
-          })
-        : await window.electronAPI.exec(cmd);
-      const code = resRaw.code ?? resRaw.exitCode;
+      // non-daemon + killTerminalAndPortHolders 模式下，process 已被 killPortHolder 殺掉，
+      // gateway stop 只適用於 daemon 模式，跳過以避免開多餘的 Terminal 視窗顯示 "service not loaded"
+      const skipGatewayStop = options?.killTerminalAndPortHolders && !config.installDaemon;
+      if (!skipGatewayStop) {
+        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
+        const resRaw: any = shouldUseExternalTerminal()
+          ? await execInTerminal(cmd, {
+              title: 'Stopping OpenClaw Gateway',
+              holdOpen: false,
+              cwd: config.corePath,
+            })
+          : await window.electronAPI.exec(cmd);
+        const code = resRaw.code ?? resRaw.exitCode;
 
-      if (code !== 0) {
-        addLog(t('logs.stopGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
+        if (code !== 0) {
+          addLog(t('logs.stopGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
+        }
       }
 
       setRunning(false);
@@ -173,7 +178,10 @@ export function useGatewayActions({
     }
 
     if (running) {
-      await stopGateway();
+      const useExternalTerminal = shouldUseExternalTerminal();
+      await stopGateway({
+        killTerminalAndPortHolders: useExternalTerminal && !config.installDaemon,
+      });
       return;
     }
 

@@ -588,67 +588,28 @@ export function Analytics() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
-        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
-          <div className="mb-6">
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.subscription.title')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.subscription.subtitle')}</p>
-          </div>
-          <div className="space-y-3">
-            <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{subscriptionWindow.planLabel || t('analytics.subscription.notConnected')}</div>
-            <div className="text-xs text-slate-500">{subscriptionWindow.cycleStart || '--'} ~ {subscriptionWindow.cycleEnd || '--'}</div>
-            <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div className={`h-full ${subscriptionWindow.usagePercent >= 90 ? 'bg-red-500' : subscriptionWindow.usagePercent >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${subscriptionWindow.usagePercent}%` }}></div>
-            </div>
-            <div className="text-xs text-slate-600 dark:text-slate-300">
-              {t('analytics.subscription.usedLimit', {
-                used: subscriptionWindow.consumed.toFixed(2),
-                limit: subscriptionWindow.limit > 0 ? subscriptionWindow.limit.toFixed(2) : '--',
-                unit: subscriptionWindow.unit,
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
-          <div className="mb-6">
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.connectors.title')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.connectors.subtitle')}</p>
-          </div>
-          <div className="space-y-2">
-            {connectorStatus.map((item) => (
-              <div key={item.key} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
-                <span className="text-xs text-slate-700 dark:text-slate-200">{item.label}</span>
-                <span className={`text-[10px] font-black uppercase ${item.connected ? 'text-emerald-500' : 'text-amber-500'}`}>{item.connected ? t('analytics.connectors.connected') : t('analytics.connectors.partial')}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
-        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
-          <div className="mb-6">
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.context.title')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.context.subtitle')}</p>
-          </div>
-          {contextPressureRows.length > 0 ? (
-            <div className="space-y-2">
-              {contextPressureRows.map((row) => (
-                <div key={row.sessionKey} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-mono text-slate-700 dark:text-slate-200">{row.sessionKey}</div>
-                    <div className={`text-[10px] font-black uppercase ${row.state === 'critical' ? 'text-red-500' : row.state === 'warn' ? 'text-amber-500' : 'text-emerald-500'}`}>{row.ratio.toFixed(1)}%</div>
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-500">{t('analytics.context.usageLine', { used: row.used.toLocaleString(), limit: row.limit.toLocaleString(), model: row.model })}</div>
+        {/* Provider Breakdown */}
+        {providerBreakdown.length > 0 && (
+          <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
+            <div className="mb-6">
+              <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.providerBreakdown.title', '提供者分布')}</h3>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.providerBreakdown.subtitle', '來自 JSONL session 事件，按費用排序')}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {providerBreakdown.map((row) => (
+                <div key={row.provider} className="rounded-2xl border border-slate-200 dark:border-slate-700 px-4 py-3 bg-white/70 dark:bg-slate-900/40">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">{row.provider}</div>
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-100">${row.cost.toFixed(3)}</div>
+                  <div className="text-xs text-slate-500">{(row.tokens / 1000).toFixed(1)}K tokens</div>
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="h-full flex items-center justify-center text-slate-700 italic">{t('analytics.context.noData')}</div>
-          )}
-        </div>
+          </div>
+        )}
 
+        {/* Cost Hotspots */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
           <div className="mb-6">
             <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.costHotspots.title')}</h3>
@@ -667,28 +628,7 @@ export function Analytics() {
             )}
           </div>
         </div>
-      </div>
 
-      {/* Provider Breakdown — 只有 runtimeUsageEvents 才有 provider 資訊 */}
-      {providerBreakdown.length > 0 && (
-        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl text-left">
-          <div className="mb-6">
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.providerBreakdown.title', '提供者分布')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.providerBreakdown.subtitle', '來自 JSONL session 事件，按費用排序')}</p>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {providerBreakdown.map((row) => (
-              <div key={row.provider} className="rounded-2xl border border-slate-200 dark:border-slate-700 px-4 py-3 bg-white/70 dark:bg-slate-900/40">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">{row.provider}</div>
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-100">${row.cost.toFixed(3)}</div>
-                <div className="text-xs text-slate-500">{(row.tokens / 1000).toFixed(1)}K tokens</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
         {/* Agent Attribution */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-pink-500/50 to-transparent"></div>
@@ -732,83 +672,6 @@ export function Analytics() {
           </div>
         </div>
 
-        {/* Governance & Budget */}
-        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"></div>
-
-          <div className="mb-8">
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.budgetGovernance', '預算與治理')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.budget.subtitle')}</p>
-          </div>
-
-          {budget ? (
-            <div className="space-y-8">
-              <div className="p-6 bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
-                <div className="flex justify-between items-end mb-4">
-                  <div>
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('analytics.budget.monthlySpent')}</div>
-                    <div className="text-2xl font-black text-slate-900 dark:text-slate-100">${budgetMetrics.used.toFixed(2)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('analytics.budget.limit')}</div>
-                    <div className="text-sm font-bold text-slate-600 dark:text-slate-400">{budgetMetrics.limit > 0 ? `$${budgetMetrics.limit.toFixed(2)}` : t('analytics.budget.noLimit')}</div>
-                  </div>
-                </div>
-
-                <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-1000 ${budget.status === 'over' ? 'bg-red-500' : budget.status === 'warn' ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${Math.min(100, (budgetMetrics.used / (budgetMetrics.limit || 1)) * 100)}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
-                    <div className="text-emerald-600 dark:text-emerald-400 mb-2"><TrendingUp size={18} /></div>
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{t('analytics.budget.burnRate')}</div>
-                  <div className="text-sm font-black text-slate-900 dark:text-slate-100">${budgetMetrics.burnRatePerDay.toFixed(4)}/d</div>
-                </div>
-                <div className="p-4 bg-blue-500/5 dark:bg-blue-500/10 rounded-2xl border border-blue-500/20">
-                    <div className="text-blue-600 dark:text-blue-500 mb-2"><Target size={18} /></div>
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{t('analytics.budget.projectedDays')}</div>
-                  <div className="text-sm font-black text-slate-900 dark:text-slate-100">{budgetMetrics.projectedDays > 0 ? budgetMetrics.projectedDays : t('analytics.budget.infinite')} {t('analytics.budget.days')}</div>
-                </div>
-              </div>
-
-              {scopedRiskRows.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{t('analytics.budget.riskOwnership')}</div>
-                  <div className="space-y-2">
-                    {scopedRiskRows.map((row) => (
-                      <div key={`${row.scope}-${row.status}`} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/80 dark:bg-slate-900/60">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="font-mono text-xs text-slate-700 dark:text-slate-200">{row.scope}</div>
-                          <div className={`text-[10px] font-black uppercase ${row.status === 'over' ? 'text-red-500' : row.status === 'warn' ? 'text-amber-500' : 'text-emerald-500'}`}>
-                            {row.status}
-                          </div>
-                        </div>
-                        <div className="mt-1 text-[11px] text-slate-500">${row.used.toFixed(2)} / ${row.limit.toFixed(2) || '0.00'} ({row.ratio.toFixed(1)}%)</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <p className="text-xs text-slate-500 italic bg-slate-100 dark:bg-slate-800/30 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-                {budget.status === 'over'
-                  ? t('analytics.budgetAlertOver', '預算已超限，請優先檢視高消耗會話。')
-                  : budget.status === 'warn'
-                    ? t('analytics.budgetAlertWarn', '預算接近警戒值，建議調整模型或任務優先序。')
-                    : t('analytics.budgetAlertOk', '預算處於健康範圍，可持續觀測。')}
-              </p>
-            </div>
-          ) : (
-            <div className="h-full flex items-center justify-center text-slate-700 italic border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                {t('analytics.waitingBudget', '等待預算數據...')}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

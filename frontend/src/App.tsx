@@ -517,39 +517,11 @@ function App() {
   const handleResetOnboarding = async () => {
     // 登出前先嘗試停止 Gateway，避免殭屍進程占用 port
     if (running && config.corePath && window.electronAPI) {
-      let stopped = false;
-      try {
-        const envPrefix = buildOpenClawEnvPrefix();
-        // 多實例並行安全守衛：必須有 configPath 才能安全識別實例
-        const hasConfigIsolation = !!config.configPath?.trim();
-
-        if (!hasConfigIsolation) {
-          addLog('錯誤: 未設定 Config Path，為避免誤停其他並行服務，本次重設不會主動停止 Gateway。', 'stderr');
-        } else {
-          const stopCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
-          const stopRes: any = await window.electronAPI.exec(stopCmd);
-          const stopCode = stopRes.code ?? stopRes.exitCode;
-          if (stopCode !== 0) {
-            addLog(t('logs.stopGatewayFailed', { msg: stopRes.stderr || `exit ${stopCode}` }), 'stderr');
-          }
-
-          // 停止後以目標埠 LISTEN 驗證（如 openclaw.json 有設定 port）
-          const port = Number(runtimeProfile?.gateway?.port ?? 0);
-          if (port > 0) {
-            const lsofRes: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
-            stopped = (lsofRes.code ?? lsofRes.exitCode) !== 0 || !String(lsofRes.stdout || '').trim();
-          } else {
-            stopped = true;
-          }
-        }
-      } catch (err: any) {
-        addLog(t('logs.stopGatewayFailed', { msg: err?.message || 'unknown error' }), 'stderr');
-      }
-
-      if (stopped) {
-        setRunning(false);
+      const hasConfigIsolation = !!config.configPath?.trim();
+      if (!hasConfigIsolation) {
+        addLog('錯誤: 未設定 Config Path，為避免誤停其他並行服務，本次重設不會主動停止 Gateway。', 'stderr');
       } else {
-        addLog('警告: Gateway 仍在執行中，可能持續占用目前 Port。', 'stderr');
+        await stopGateway({ killTerminalAndPortHolders: true });
       }
     }
     localStorage.removeItem(ONBOARDING_FINISHED_KEY);
