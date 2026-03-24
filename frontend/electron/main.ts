@@ -5,7 +5,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
-import { mkdirSync, unlinkSync } from 'node:fs';
+import { mkdirSync, unlinkSync, watch as fsWatch, existsSync } from 'node:fs';
 
 // ── Multi-instance support ──────────────────────────────────────────────────
 // userData 用 PID 隔離，防止 Chromium singleton lock 讓第二個實例閃退。
@@ -2236,6 +2236,325 @@ const defaultControlCenterState = (): ControlCenterState => ({
 const nowIso = () => new Date().toISOString();
 const buildId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+// ── Activity Observation Engine ───────────────────────────────────────────────
+// Passively observes all agent artifacts without modifying agents.
+// Collectors: FileSystem Watcher + JSONL Scanner + Cron State Scanner
+// Inference: raw events → semantic ActivityEvent with human-readable title
+
+interface ActivityEvent {
+  id: string;
+  timestamp: number;        // epoch ms
+  source: 'fs' | 'jsonl' | 'cron' | 'system';
+  type:
+    | 'skill_created' | 'skill_updated' | 'skill_deleted'
+    | 'config_changed' | 'task_updated' | 'script_executed'
+    | 'agent_action' | 'file_change'
+    | 'scheduled_run' | 'service_state';
+  category: 'development' | 'execution' | 'scheduled' | 'task' | 'config' | 'alert' | 'system';
+  title: string;
+  detail?: string;
+  path?: string;
+  agent?: string;
+  exitCode?: number;
+}
+
+const ACTIVITY_STORE_FILE = path.join(PERSISTENT_CONFIG_DIR, 'activity-store.json');
+const ACTIVITY_MAX = 500;
+
+// In-memory ring buffer — flushed to disk async
+let activityBuffer: ActivityEvent[] = [];
+let activityFlushPending = false;
+
+async function loadActivityStore(): Promise<void> {
+  try {
+    const raw = await fs.readFile(ACTIVITY_STORE_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) activityBuffer = parsed.slice(-ACTIVITY_MAX);
+  } catch { activityBuffer = []; }
+}
+
+async function flushActivityStore(): Promise<void> {
+  if (activityFlushPending) return;
+  activityFlushPending = true;
+  try {
+    await fs.writeFile(ACTIVITY_STORE_FILE, JSON.stringify(activityBuffer.slice(-ACTIVITY_MAX)), 'utf-8');
+  } catch { /* non-fatal */ }
+  finally { activityFlushPending = false; }
+}
+
+function pushActivity(event: Omit<ActivityEvent, 'id'>): ActivityEvent {
+  const full: ActivityEvent = { id: buildId('act'), ...event };
+  // Deduplicate: skip if exact same title+timestamp already exists (avoid double-scan)
+  const isDuplicate = activityBuffer.some(
+    e => e.title === full.title && e.timestamp === full.timestamp
+  );
+  if (isDuplicate) return full;
+  activityBuffer.push(full);
+  if (activityBuffer.length > ACTIVITY_MAX) activityBuffer = activityBuffer.slice(-ACTIVITY_MAX);
+  void flushActivityStore();
+  return full;
+}
+
+// ── Inference Engine ──────────────────────────────────────────────────────────
+// Map raw path/event → semantic type + title
+
+function inferFsEvent(
+  watchEvent: 'rename' | 'change',
+  filePath: string,
+  existed: boolean,
+): Omit<ActivityEvent, 'id' | 'timestamp'> | null {
+  const base = path.basename(filePath);
+  const parts = filePath.split(path.sep);
+
+  // Detect if path contains a 'skills' segment followed by a skill name
+  const skillsIdx = parts.lastIndexOf('skills');
+  const isInSkills = skillsIdx >= 0 && parts.length > skillsIdx + 1;
+  const skillName = isInSkills ? parts[skillsIdx + 1] : null;
+
+  // Detect if path contains a 'config' segment
+  const isInConfig = parts.includes('config') && !isInSkills;
+
+  if (base === 'SKILL.md' && isInSkills) {
+    const type = (watchEvent === 'rename' && !existed) ? 'skill_created' : 'skill_updated';
+    return { source: 'fs', type, category: 'development',
+      title: `${type === 'skill_created' ? '新技能建立' : '技能更新'}：${skillName}`,
+      detail: filePath, path: filePath };
+  }
+  if ((base.endsWith('.py') || base.endsWith('.ts') || base.endsWith('.js')) && isInSkills) {
+    return { source: 'fs', type: 'skill_updated', category: 'development',
+      title: `技能程式碼${watchEvent === 'rename' ? '新增' : '修改'}：${skillName}/${base}`,
+      detail: filePath, path: filePath };
+  }
+  if (isInConfig && (base.endsWith('.json') || base.endsWith('.yaml') || base.endsWith('.toml'))) {
+    return { source: 'fs', type: 'config_changed', category: 'config',
+      title: `設定檔變更：${base}`, detail: filePath, path: filePath };
+  }
+  if (base === 'tasks.json') {
+    return { source: 'fs', type: 'task_updated', category: 'task',
+      title: '任務清單更新', detail: filePath, path: filePath };
+  }
+  if (base.endsWith('.py') && !isInSkills) {
+    return { source: 'fs', type: 'script_executed', category: 'execution',
+      title: `腳本${watchEvent === 'rename' ? '建立' : '修改'}：${base}`,
+      detail: filePath, path: filePath };
+  }
+  const ext = path.extname(base);
+  if (!base.startsWith('.') && ['.md', '.txt', '.json', '.yaml', '.toml', '.sh'].includes(ext)) {
+    return { source: 'fs', type: 'file_change', category: 'system',
+      title: `檔案${watchEvent === 'rename' ? '建立/刪除' : '修改'}：${path.basename(path.dirname(filePath))}/${base}`,
+      detail: filePath, path: filePath };
+  }
+  return null;
+}
+
+// ── FileSystem Watcher ────────────────────────────────────────────────────────
+const HOME = process.env['HOME'] || '';
+
+// Read launcher config to derive dynamic paths (corePath, workspacePath, stateDir)
+async function readLauncherConfigPaths(): Promise<{
+  corePath: string; workspacePath: string; configPath: string; stateDir: string;
+}> {
+  const fallback = {
+    corePath: '', workspacePath: '', configPath: '',
+    stateDir: process.env['OPENCLAW_STATE_DIR'] || path.join(HOME, '.openclaw'),
+  };
+  try {
+    const raw = await fs.readFile(path.join(CONFIG_DIR, 'config.json'), 'utf-8');
+    const cfg = JSON.parse(raw);
+    return {
+      corePath:      String(cfg.corePath      || '').trim(),
+      workspacePath: String(cfg.workspacePath || '').trim(),
+      configPath:    String(cfg.configPath    || '').trim(),
+      stateDir:      String(cfg.stateDir      || process.env['OPENCLAW_STATE_DIR'] || path.join(HOME, '.openclaw')).trim(),
+    };
+  } catch { return fallback; }
+}
+
+// Build watch dir list from config — no hardcoded paths
+async function buildWatchDirs(): Promise<string[]> {
+  const { corePath, workspacePath, stateDir } = await readLauncherConfigPaths();
+  const dirs: string[] = [];
+  if (corePath) {
+    dirs.push(path.join(corePath, 'skills'));
+    dirs.push(path.join(corePath, 'config'));
+    dirs.push(corePath);
+  }
+  if (workspacePath) dirs.push(workspacePath);
+  if (stateDir)      dirs.push(path.join(stateDir, 'agents'));
+  // Remove duplicates and missing dirs
+  return [...new Set(dirs)];
+}
+
+const activeWatchers: ReturnType<typeof fsWatch>[] = [];
+
+async function startActivityWatcher(extraDirs: string[] = []): Promise<void> {
+  // Stop existing watchers first
+  for (const w of activeWatchers) { try { w.close(); } catch {} }
+  activeWatchers.length = 0;
+
+  const configDirs = await buildWatchDirs();
+  const dirsToWatch = [...new Set([...configDirs, ...extraDirs])];
+
+  for (const dir of dirsToWatch) {
+    if (!existsSync(dir)) continue;
+    try {
+      const watcher = fsWatch(dir, { recursive: true }, (watchEvent, filename) => {
+        if (!filename) return;
+        const fullPath = path.join(dir, String(filename));
+        const base = path.basename(fullPath);
+        if (base.startsWith('.') || fullPath.endsWith('~') || fullPath.endsWith('.lock')) return;
+        const existed = existsSync(fullPath);
+        const inferred = inferFsEvent(watchEvent as 'rename' | 'change', fullPath, existed);
+        if (inferred) pushActivity({ ...inferred, timestamp: Date.now() });
+      });
+      activeWatchers.push(watcher);
+    } catch { /* dir not watchable */ }
+  }
+}
+
+// ── JSONL Session Scanner ─────────────────────────────────────────────────────
+// Tracks last-seen byte offset per session file to avoid re-reading old lines.
+const jsonlOffsets: Map<string, number> = new Map();
+
+async function scanJsonlFile(filePath: string): Promise<void> {
+  try {
+    const fh = await fs.open(filePath, 'r');
+    const stat = await fh.stat();
+    const offset = jsonlOffsets.get(filePath) ?? 0;
+    if (stat.size <= offset) { await fh.close(); return; }
+    const len = stat.size - offset;
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, offset);
+    await fh.close();
+    jsonlOffsets.set(filePath, stat.size);
+    const lines = buf.toString('utf-8').split('\n').filter(Boolean);
+    const agentMatch = filePath.match(/agents\/([^/]+)\/sessions\//);
+    const agentId = agentMatch ? agentMatch[1] : 'unknown';
+
+    for (const line of lines) {
+      try {
+        const evt = JSON.parse(line);
+        if (evt?.type !== 'message') continue;
+        const ts = evt.timestamp ? new Date(evt.timestamp).getTime() : Date.now();
+        const msg = evt.message || {};
+        const role = msg.role || '';
+        const contentArr: any[] = Array.isArray(msg.content) ? msg.content : [];
+
+        // Extract toolCall entries from assistant messages
+        if (role === 'assistant') {
+          for (const c of contentArr) {
+            if (!c || c.type !== 'toolCall') continue;
+            const toolName = String(c.name || '');
+            const args = c.arguments || {};
+
+            if (toolName === 'exec') {
+              const cmd = String(args.command || '').trim().slice(0, 100);
+              if (!cmd) continue;
+              pushActivity({
+                timestamp: ts, source: 'jsonl', type: 'script_executed', category: 'execution',
+                title: `執行指令 [${agentId}]：${cmd}`,
+                detail: cmd, agent: agentId,
+              });
+            } else if (toolName === 'write') {
+              const fp = String(args.path || '');
+              const base = path.basename(fp);
+              if (!fp) continue;
+              const fpParts = fp.split(path.sep);
+              const isSkill = fpParts.includes('skills');
+              const isConfig = fpParts.includes('config') && !isSkill;
+              pushActivity({
+                timestamp: ts, source: 'jsonl',
+                type: isSkill ? 'skill_created' : 'file_change',
+                category: isSkill ? 'development' : isConfig ? 'config' : 'execution',
+                title: isSkill
+                  ? `Agent 建立技能檔案 [${agentId}]：${base}`
+                  : `Agent 寫入檔案 [${agentId}]：${base}`,
+                detail: fp, agent: agentId, path: fp,
+              });
+            } else if (toolName === 'edit') {
+              const fp = String(args.path || '');
+              const base = path.basename(fp);
+              if (!fp) continue;
+              const fpParts = fp.split(path.sep);
+              const isSkill = fpParts.includes('skills');
+              pushActivity({
+                timestamp: ts, source: 'jsonl',
+                type: isSkill ? 'skill_updated' : 'file_change',
+                category: isSkill ? 'development' : 'execution',
+                title: isSkill
+                  ? `Agent 修改技能 [${agentId}]：${base}`
+                  : `Agent 編輯檔案 [${agentId}]：${base}`,
+                detail: fp, agent: agentId, path: fp,
+              });
+            } else if (toolName === 'web_fetch' || toolName === 'web_search') {
+              const query = String(args.url || args.query || '').slice(0, 80);
+              pushActivity({
+                timestamp: ts, source: 'jsonl', type: 'agent_action', category: 'execution',
+                title: `網路${toolName === 'web_search' ? '搜尋' : '抓取'} [${agentId}]：${query}`,
+                detail: query, agent: agentId,
+              });
+            }
+          }
+        }
+      } catch { /* malformed line */ }
+    }
+  } catch { /* file not readable */ }
+}
+
+async function scanAllSessions(stateDir?: string): Promise<void> {
+  const resolved = stateDir || (await readLauncherConfigPaths()).stateDir;
+  const base = resolved || path.join(HOME, '.openclaw');
+  const agentsDir = path.join(base, 'agents');
+  try {
+    const agents = await fs.readdir(agentsDir);
+    for (const agent of agents) {
+      const sessionsDir = path.join(agentsDir, agent, 'sessions');
+      try {
+        const files = await fs.readdir(sessionsDir);
+        const jsonlFiles = files.filter(f => f.endsWith('.jsonl')).map(f => path.join(sessionsDir, f));
+        // Only scan last 10 files (most recent)
+        const recent = jsonlFiles.sort().slice(-10);
+        for (const f of recent) { await scanJsonlFile(f); }
+      } catch { /* no sessions dir */ }
+    }
+  } catch { /* no agents dir */ }
+}
+
+// ── Cron State Scanner ────────────────────────────────────────────────────────
+// Reads OpenClaw jobs.json and generates events from lastRunAtMs changes.
+const cronLastSeen: Map<string, number> = new Map();
+
+async function scanCronJobs(stateDir?: string): Promise<void> {
+  const resolved = stateDir || (await readLauncherConfigPaths()).stateDir;
+  const base = resolved || path.join(HOME, '.openclaw');
+  const cronPath = path.join(base, 'cron', 'jobs.json');
+  try {
+    const raw = await fs.readFile(cronPath, 'utf-8');
+    const data = JSON.parse(raw);
+    for (const job of (data.jobs || [])) {
+      const lastRun = job.state?.lastRunAtMs;
+      if (!lastRun) continue;
+      const prev = cronLastSeen.get(job.id);
+      if (prev === lastRun) continue;
+      cronLastSeen.set(job.id, lastRun);
+      if (prev !== undefined) {
+        // New run detected
+        const isOk = job.state?.lastStatus === 'ok';
+        pushActivity({
+          timestamp: lastRun,
+          source: 'cron', type: 'scheduled_run',
+          category: isOk ? 'scheduled' : 'alert',
+          title: `排程${isOk ? '執行成功' : '執行失敗'}：${job.name}`,
+          detail: job.state?.lastError,
+          agent: job.agentId,
+          exitCode: isOk ? 0 : 1,
+        });
+      }
+    }
+  } catch { /* no jobs.json */ }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function readControlCenterState(): Promise<ControlCenterState> {
   const filePath = CONTROL_CENTER_STATE_FILE();
   try {
@@ -2478,6 +2797,17 @@ app.whenReady().then(() => {
   createWindow().catch((err) => {
     console.error('Failed to create window:', err);
   });
+
+  // Boot Activity Observation Engine
+  void loadActivityStore().then(async () => {
+    await startActivityWatcher();
+    void scanAllSessions();
+    void scanCronJobs();
+    setInterval(() => {
+      void scanAllSessions();
+      void scanCronJobs();
+    }, 60000);
+  });
 });
 
 ipcMain.on('window:resize', (event, mode: 'mini' | 'expanded') => {
@@ -2682,16 +3012,24 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   }
 
   // ── NT_SKILL tasks.json helpers ──────────────────────────────────────────
-  const NT_SKILL_TASKS_FILE = path.join(process.env['HOME'] || '', 'Desktop', 'clawdbot-main', 'tasks.json');
+  // Path derived from saved workspacePath in config — no hardcoded paths
+  const getNTTasksFile = async (): Promise<string> => {
+    const { workspacePath } = await readLauncherConfigPaths();
+    if (workspacePath) return path.join(workspacePath, 'tasks.json');
+    // No config found — return a non-existent path so reads return [] gracefully
+    return path.join(PERSISTENT_CONFIG_DIR, 'tasks-fallback.json');
+  };
   const readNTTasks = async (): Promise<any[]> => {
     try {
-      const raw = await fs.readFile(NT_SKILL_TASKS_FILE, 'utf-8');
+      const file = await getNTTasksFile();
+      const raw = await fs.readFile(file, 'utf-8');
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     } catch { return []; }
   };
   const writeNTTasks = async (tasks: any[]): Promise<void> => {
-    await fs.writeFile(NT_SKILL_TASKS_FILE, JSON.stringify(tasks, null, 2), 'utf-8');
+    const file = await getNTTasksFile();
+    await fs.writeFile(file, JSON.stringify(tasks, null, 2), 'utf-8');
   };
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -3184,6 +3522,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       if (config?.configPath) {
         activateConfigPath(String(config.configPath)).catch(() => {});
       }
+      // Restart file watchers so new corePath/workspacePath are watched
+      void startActivityWatcher();
       return { code: 0, stdout: `Config saved to ${configFilePath}`, stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
@@ -4662,6 +5002,42 @@ ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
     return { success: false, error: e.message };
   }
 });
+
+// ── Activity Engine IPC ───────────────────────────────────────────────────────
+
+ipcMain.handle('activity:events:list', async (_event, payload?: string) => {
+  const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+  const limit = Number(opts?.limit ?? 200);
+  const categoryFilter = opts?.category as string | undefined;
+  const sourceFilter = opts?.source as string | undefined;
+  const since = Number(opts?.since ?? 0);
+
+  let events = activityBuffer.slice(-ACTIVITY_MAX);
+  if (since) events = events.filter(e => e.timestamp > since);
+  if (categoryFilter) events = events.filter(e => e.category === categoryFilter);
+  if (sourceFilter) events = events.filter(e => e.source === sourceFilter);
+  events = events.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+  return { code: 0, stdout: JSON.stringify({ events, total: events.length }), stderr: '', exitCode: 0 };
+});
+
+ipcMain.handle('activity:scan:now', async (_event, payload?: string) => {
+  const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+  const stateDir = opts?.stateDir as string | undefined;
+  await Promise.all([
+    scanAllSessions(stateDir),
+    scanCronJobs(stateDir),
+  ]);
+  return { code: 0, stdout: JSON.stringify({ scanned: true, total: activityBuffer.length }), stderr: '', exitCode: 0 };
+});
+
+ipcMain.handle('activity:watch:restart', async (_event, payload?: string) => {
+  const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+  const extraDirs: string[] = Array.isArray(opts?.extraDirs) ? opts.extraDirs : [];
+  await startActivityWatcher(extraDirs);
+  const dirs = await buildWatchDirs();
+  return { code: 0, stdout: JSON.stringify({ ok: true, watching: dirs.length + extraDirs.length }), stderr: '', exitCode: 0 };
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.on('before-quit', () => {
   killAllSubprocesses();
