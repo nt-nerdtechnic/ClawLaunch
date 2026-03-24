@@ -3860,23 +3860,23 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             const content = await fs.readFile(finalConfigFilePath, 'utf-8');
             const configData = parseOpenClawConfig(content);
 
-            // 補充掃描 agent auth-profiles，填補 global profiles 中只有 meta 而無憑證的情況
+            // Supplementary scan of agent auth-profiles to fill meta-only entries in global profiles
             const agentAuth = await collectAuthProfiles(finalConfigDirPath);
             const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
             if (healthyAgentProfiles.length > 0) {
-              // 合併 providers（包含只在 agent 層的 openai-codex 等）
+              // Merge providers (including agent-only providers like openai-codex)
               const agentProviders = healthyAgentProfiles.map((p: any) => String(p.provider || '').toLowerCase()).filter(Boolean);
               configData.providers = Array.from(new Set([...configData.providers, ...agentProviders]));
-              // 若 authChoice 未偵測到，從最優先的健康 agent profile 推斷
+              // If authChoice is undetected, infer from the highest priority healthy agent profile
               if (!configData.authChoice) {
                 const first = healthyAgentProfiles[0];
                 configData.authChoice = inferAuthChoiceFromProfile(first);
               }
             }
 
-            // Core skills = 只掃 corePath/skills/，不掃 extensions/
+            // Core skills = only scan corePath/skills/, ignore extensions/
             const coreSkills = configData.corePath ? await scanSkillsInDir(path.join(configData.corePath, 'skills')) : [];
-            // Workspace skills = 只掃使用者設定的 workspacePath
+            // Workspace skills = only scan user-configured workspacePath
             const workspaceSkills = configData.workspace ? await scanInstalledSkills(configData.workspace) : [];
             const existingConfig = {
                 ...configData,
@@ -4556,7 +4556,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   }
 
   return new Promise((resolve) => {
-    // 輸出指令到 UI 日誌，方便偵錯
+    // Output commands to UI logs for easier debugging
     sendToRenderer('shell:stdout', { data: `[Exec] ${fullCommand}\n`, source: 'system' });
     
     const child = spawn(fullCommand, { shell: true });

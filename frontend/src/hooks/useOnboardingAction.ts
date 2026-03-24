@@ -320,8 +320,8 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       if (isCommandSuccess(detectRes) && detectRes.stdout) {
         try {
           const detected = JSON.parse(detectRes.stdout);
-          // 直接使用頂層的 detected 值，已經由 electron 正確計算過
-          // 避免從 existingConfig 挖欄位導致欄位名稱不匹配 (workspace 而非 workspacePath)
+          // Use the top-level detected value directly; already correctly calculated by Electron
+          // Avoid extracting fields from existingConfig to prevent name mismatch (workspace vs workspacePath)
           fillMissing({
             corePath: detected.corePath,
             configPath: detected.configPath,
@@ -389,7 +389,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
     addLocalLog('🔍 正在進行被動網關探測 (Gateway Pulse Check)...', 'system');
 
-    // 從 openclaw.json 讀取 gateway.port，動態組建 --url 參數
+    // Read gateway.port from openclaw.json to dynamically build --url parameter
     const configPath = String(config.configPath || '').trim();
     let gatewayStatusCmd = `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw gateway status`;
     if (configPath) {
@@ -401,7 +401,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           gatewayStatusCmd = `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw gateway status --url ${shellQuote(gatewayUrl)}`;
         }
       } catch {
-        // 讀取失敗則不帶 --url，由 openclaw 使用預設值
+        // If reading fails, omit --url and let OpenClaw use the default value
       }
     }
 
@@ -582,11 +582,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               if (!hasSelectedChannel) {
                 throw new Error(`目前選擇的通訊頻道未配置: ${selectedPlatform}`);
               }
-              // 驗證 enabled=true
+              // Verify enabled=true
               if (typeof selectedChannel === 'object' && selectedChannel.enabled === false) {
                 throw new Error(`通訊頻道 ${selectedPlatform} 已配置但 enabled=false，請先啟用或重新設定。`);
               }
-              // 驗證 token 非空（whatsapp/irc/signal/imessage 不需要 token，略過）
+              // Verify token is non-empty (whatsapp/irc/signal/imessage don't need tokens, skip)
               const tokenlessChannels = new Set(['whatsapp', 'irc', 'signal', 'imessage']);
               if (!tokenlessChannels.has(selectedPlatform) && typeof selectedChannel === 'object') {
                 const channelTokenKey = selectedPlatform === 'googlechat' ? 'webhookUrl' : 'botToken';
@@ -603,7 +603,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             if (config.installDaemon) {
               await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
             } else {
-              // installDaemon=false 時 Gateway 尚未啟動（將從儀表板手動啟動），只驗證 CLI 可用性
+              // When installDaemon=false, Gateway isn't started yet (manual start from dashboard); only verify CLI availability
               const versionRes = await (window as any).electronAPI.exec(
                 `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
               );
@@ -625,7 +625,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         return true;
       }
 
-      // [策略模式]：新建專案行為 - 執行實體 CLI 指令
+      // [Strategy Pattern]: New project behavior - executing physical CLI commands
       switch (step) {
         case 'model': {
           addLocalLog(`🧠 正在對齊靈魂頻率 (${selectedAuthChoice})...`, 'system');
@@ -711,9 +711,9 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             throw new Error(addProfileRes.stderr || '核心授權失敗');
           }
 
-          // 新版 OpenClaw 已移除 `openclaw auth set`。
-          // 非 OAuth 導引改為走 auth:add-profile，內部依 authChoice 映射 provider 參數，
-          // 最終仍透過雙層檢查驗證 global + agent 是否一致。
+          // New version of OpenClaw has removed `openclaw auth set`.
+          // Non-OAuth flows now use auth:add-profile, with provider parameters mapped internally by authChoice,
+          // and finally verified via dual-layer check for global/agent consistency.
 
           if (!configPath) {
             throw new Error('缺少 Config Path，無法驗證授權寫入結果');
@@ -757,7 +757,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               channelFlags = `--token ${shellQuote(config.botToken)}`;
             } else if (platform === 'slack') {
               channelFlags = `--bot-token ${shellQuote(config.botToken)}`;
-              // Slack Socket Mode 還需要 App-Level Token (xapp-...)
+              // Slack Socket Mode also requires an App-Level Token (xapp-...)
               const appToken = String(config.appToken || '').trim();
               if (appToken) {
                 channelFlags += ` --app-token ${shellQuote(appToken)}`;
@@ -782,7 +782,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           };
           const candidates = channelAliasCandidates[platform] || [platform || config.platform];
 
-            // 將 channel 啟用動作延後到 messaging 步驟，避免 initialize 階段耦合授權/綁定。
+            // Defer channel activation to the messaging step to avoid coupling auth/binding during initialization.
             if (platform) {
               const enableChannelCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.enabled true --json`;
               const enableRes = await (window as any).electronAPI.exec(enableChannelCmd);
@@ -830,7 +830,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             break;
           }
 
-          // config set fallback：channels add 因 plugin registry bug 回傳 "Unknown channel" → 直接寫入 botToken/webhookUrl
+          // config set fallback: if channels add returns "Unknown channel" due to plugin registry bug, write botToken/webhookUrl directly
           if (!success && config.botToken) {
             const directConfigKeyMap: Record<string, string> = {
               telegram: 'botToken',
@@ -932,7 +932,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         case 'launch': {
           addLocalLog(`🚀 啟動最終發射檢查程序 (Final Verification)...`, 'system');
 
-          // 最後一步固定不安裝 daemon，Gateway 由儀表板手動啟動。
+          // The final step doesn't install a daemon; Gateway is manually started from the dashboard.
           addLocalLog('ℹ️ 已停用 daemon 安裝流程，Gateway 將於儀表板手動啟動。', 'system');
           const versionRes = await (window as any).electronAPI.exec(
             `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
