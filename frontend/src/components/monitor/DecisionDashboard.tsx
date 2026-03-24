@@ -231,8 +231,8 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       out.push({
         id: 'task-blocked-by-heartbeat',
         level: 'action-required',
-        title: t('monitor.decision.alerts.taskBlockedByHeartbeat', '任務心跳超時'),
-        detail: t('monitor.decision.alerts.taskBlockedByHeartbeatDesc', '有 {{count}} 筆任務因長時間未更新被標記為 blocked。', { count: blockedTasks }),
+        title: t('monitor.decision.alerts.taskBlockedByHeartbeat'),
+        detail: t('monitor.decision.alerts.taskBlockedByHeartbeatDesc', { count: blockedTasks }),
         targetId: 'monitor-live-stream',
         targetLabel: t('monitor.decision.targets.liveStream'),
       });
@@ -320,18 +320,18 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       gateway: {
         state: gatewayState,
         detail: running
-          ? t('monitor.decision.health.gatewayRunning', 'Gateway 已連線且運行中。')
-          : t('monitor.decision.health.gatewayStopped', 'Gateway 未連線或尚未啟動。'),
+          ? t('monitor.decision.health.gatewayRunning')
+          : t('monitor.decision.health.gatewayStopped'),
       },
       config: {
         state: configState,
-        detail: t('monitor.decision.health.configState', '已對位 {{count}} / 3 個核心路徑。', { count: configReadyCount }),
+        detail: t('monitor.decision.health.configState', { count: configReadyCount }),
       },
       runtime: {
         state: runtimeState,
         detail: Number.isFinite(snapshotAgeMs)
-          ? t('monitor.decision.health.runtimeFreshness', '快照更新於 {{sec}} 秒前。', { sec: Math.max(0, Math.floor(snapshotAgeMs / 1000)) })
-          : t('monitor.decision.health.runtimeMissing', '尚未取得 runtime 快照。'),
+          ? t('monitor.decision.health.runtimeFreshness', { sec: Math.max(0, Math.floor(snapshotAgeMs / 1000)) })
+          : t('monitor.decision.health.runtimeMissing'),
       },
     };
   }, [config.configPath, config.corePath, config.workspacePath, running, snapshotAgeMs, t]);
@@ -377,7 +377,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         key: 'approvals',
         name: t('monitor.decision.connection.approvals', 'Approvals Feed'),
         status: snapshot ? 'connected' : 'degraded',
-        meta: snapshot ? t('monitor.decision.connection.approvalsCount', '{{count}} 筆', { count: approvals.length }) : undefined,
+        meta: snapshot ? t('monitor.decision.connection.approvalsCount', { count: approvals.length }) : undefined,
       },
       {
         key: 'task-store',
@@ -510,15 +510,15 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.checkedToday', '今日寫入數')}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.checkedToday')}</div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.writes}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.eligibleToday', '今日異動路徑')}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.eligibleToday')}</div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.changedPaths}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.startedToday', '今日可疑變更')}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.startedToday')}</div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.suspicious}</div>
             </div>
           </div>

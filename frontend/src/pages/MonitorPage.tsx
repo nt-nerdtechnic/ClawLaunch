@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DecisionDashboard } from '../components/monitor/DecisionDashboard';
 import { ActionCenter } from '../components/ActionCenter';
@@ -9,7 +9,7 @@ import TerminalLog from '../components/common/TerminalLog';
 interface MonitorPageProps {
   running: boolean;
   onToggleGateway: () => void;
-  onOpenRuntimeSettings: () => void;
+  onNavigate?: (path: string) => void;
   config: any;
   resolvedConfigDir: string;
   snapshot: any;
@@ -57,7 +57,7 @@ const StatusCard: React.FC<{ label: string; status: 'loading' | 'ok' | 'error' }
 export const MonitorPage: React.FC<MonitorPageProps> = ({
   running,
   onToggleGateway,
-  onOpenRuntimeSettings,
+  onNavigate,
   config,
   resolvedConfigDir,
   snapshot,
@@ -93,15 +93,15 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {accessIssue && (
         <div className="rounded-3xl border border-amber-300/80 bg-amber-50/80 p-6 shadow-lg dark:border-amber-700/60 dark:bg-amber-950/30">
-          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
-            OpenClaw Access 未設定
+          <div className="text-sm font-black text-rose-600 dark:text-rose-400 mb-1">
+            {t('monitor.access.title')}
           </div>
-          <div className="mt-2 text-sm text-amber-800 dark:text-amber-200">
-            偵測到 Gateway 回報 access 尚未配置。請先到 Runtime 設定補齊 `Config Path` 與授權設定，之後再啟動服務。
+          <div className="text-[11px] text-rose-500/80 leading-relaxed mb-3">
+            {t('monitor.access.desc')}
           </div>
-          <div className="mt-4 grid gap-2 text-xs text-amber-900 dark:text-amber-100">
-            <div>Telegram User ID：{accessIssue.userId || '未解析到'}</div>
-            <div>Pairing Code：{accessIssue.pairingCode || '未解析到'}</div>
+          <div className="space-y-1 text-[10px] text-rose-400 font-mono mb-4">
+            <div>Telegram User ID：{accessIssue.userId || t('common.labels.notParsed')}</div>
+            <div>Pairing Code：{accessIssue.pairingCode || t('common.labels.notParsed')}</div>
             {accessIssue.approveCmd ? (
               <div className="rounded-xl border border-amber-300/70 bg-white/80 px-3 py-2 font-mono dark:border-amber-700/60 dark:bg-amber-950/40">
                 {accessIssue.approveCmd}
@@ -109,19 +109,13 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
             ) : null}
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={onOpenRuntimeSettings}
-              className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-500"
-            >
-              前往 Runtime 設定
+            <button onClick={() => onNavigate?.('runtime')} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-colors shadow-sm shadow-rose-200 dark:shadow-none">
+              <Settings size={12} />
+              {t('monitor.access.goToRuntime')}
             </button>
-            <button
-              type="button"
-              onClick={() => onOpenZoneFolder(t('monitor.zoneConfig'), resolvedConfigDir)}
-              className="rounded-xl border border-amber-300/80 bg-white/80 px-4 py-2 text-xs font-bold text-amber-800 transition-colors hover:bg-white dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200"
-            >
-              打開 Config 目錄
+            <button onClick={() => void window.electronAPI.exec('open .')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 text-rose-500 border border-rose-200 dark:border-rose-900/50 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors">
+              <FolderOpen size={12} />
+              {t('monitor.access.openConfigDir')}
             </button>
           </div>
         </div>

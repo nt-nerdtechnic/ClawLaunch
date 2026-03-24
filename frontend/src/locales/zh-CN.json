@@ -26,7 +26,27 @@
       "runtimeSettings": "openclaw.json 配置"
     },
     "logoutConfirm": "确定要重置并返回引导流程吗？目前的配置将被保留，但您需要重新完成设定步骤。",
-    "logoutTooltip": "登出并重新设定"
+    "logoutTooltip": "登出并重新设定",
+    "gatewayConflict": {
+      "title": "Gateway Port 已被占用",
+      "goToSettings": "前往设置修改 Port",
+      "forceClose": "强制关闭该程序",
+      "killing": "处理中..."
+    },
+    "stopService": {
+      "title": "停止服务并清理终端机",
+      "desc": "将先终止相关 Gateway 进程，再关闭已开启的 Gateway 终端机窗口，最后切回“启动服务”。",
+      "stopping": "正在关闭相关进程与终端机窗口，请稍候...",
+      "stopped": "已停止服务并完成清理。",
+      "failed": "停止服务失败：{{msg}}"
+    },
+    "workspace": {
+      "error": "工作空间设置异常",
+      "missingPaths": "以下路径尚未设置：{{paths}}。",
+      "reRunWizard": "若路径已填入仍出现此提示，请重新执行设置或返回引导流程。",
+      "fixInSettings": "进行设置",
+      "reLogout": "重新登出"
+    }
   },
   "controlCenter": {
     "kpi": {
@@ -35,7 +55,11 @@
       "projects": "项目数",
       "pendingQueue": "待介入",
       "pendingApprovals": "待审批",
-      "budgetRisk": "预算风险"
+      "budgetRisk": "预算风险",
+      "scheduledRuns": "24h 计划执行",
+      "successError": "成功 / 异常",
+      "devEvents": "24h 开发事件",
+      "activePending": "运行中 / 待办"
     },
     "actions": {
       "refresh": "刷新",
@@ -98,7 +122,35 @@
     "errors": {
       "loadFailed": "控制中心数据加载失败",
       "mutationFailed": "控制中心操作失败",
-      "tokenUpdateFailed": "Token 设置更新失败"
+      "tokenUpdateFailed": "Token 设置更新失败",
+      "genericLoadFailed": "加载失败"
+    },
+    "timeline": {
+      "title": "作业时间轴",
+      "count": "{{count}} 项",
+      "tabs": {
+        "cron": "计划",
+        "task": "任务",
+        "observation": "观察"
+      },
+      "scanBtn": "立即扫描 Agent 作业",
+      "empty": "尚无作业记录"
+    },
+    "services": {
+      "title": "系统服务",
+      "empty": "未侦测到系统服务"
+    },
+    "crontab": {
+      "title": "系统计划",
+      "count": "crontab · {{count}} 项",
+      "empty": "无 crontab 项目"
+    },
+    "cronJobs": {
+      "title": "应用计划",
+      "count": "OpenClaw · {{count}} 个",
+      "empty": "没有计划任务",
+      "pause": "暂停",
+      "start": "启动"
     }
   },
   "chat": {
@@ -117,7 +169,8 @@
     "fallbackLocal": "外部通讯断线，已切换到本机核心命令",
     "errorGeneric": "聊天请求失败，请稍后重试",
     "unavailable": "当前环境无法调用聊天 IPC",
-    "coreRequired": "核心尚未启动，请先启动 Gateway（Core）再发送对话"
+    "coreRequired": "核心尚未启动，请先启动 Gateway（Core）再发送对话",
+    "inputHint": "Enter 发送，Shift+Enter 换行"
   },
   "monitor": {
     "gatewayTitle": "Gateway 通讯中枢",
@@ -223,7 +276,7 @@
       "taskHeartbeat": "配置审计日志",
       "connectionHealth": "連線健康度",
       "checkedToday": "今日写入数",
-      "eligibleToday": "今日变更路径",
+      "eligibleToday": "今日异动路径",
       "startedToday": "今日可疑变更",
       "heartbeatConnected": "已接入配置审计日志",
       "heartbeatLoading": "正在读取配置审计日志",
@@ -235,10 +288,10 @@
         "degraded": "降級"
       },
       "health": {
-        "gatewayRunning": "Gateway 已連線且運行中。",
-        "gatewayStopped": "Gateway 未連線或尚未啟動。",
-        "configState": "已對位 {{count}} / 3 個核心路徑。",
-        "runtimeFreshness": "快照更新於 {{sec}} 秒前。",
+        "gatewayRunning": "Gateway 已连线且运行中。",
+        "gatewayStopped": "Gateway 未连线或尚未启动。",
+        "configState": "已对位 {{count}} / 3 个核心路径。",
+        "runtimeFreshness": "快照更新于 {{sec}} 秒前。",
         "runtimeMissing": "尚未取得 runtime 快照。"
       },
       "filters": {
@@ -263,7 +316,7 @@
         "workspacePath": "Workspace Path",
         "sessions": "Session Feed",
         "approvals": "Approvals Feed",
-        "approvalsCount": "{{count}} 筆",
+        "approvalsCount": "{{count}} 笔",
         "taskStore": "Task Store",
         "budget": "Budget Summary",
         "heartbeat": "配置审计日志"
@@ -280,8 +333,16 @@
         "budgetRisk": "Budget 風險",
         "budgetRiskDesc": "Over {{over}} / Warn {{warn}}。",
         "allClear": "目前無高優先告警",
-        "allClearDesc": "系統指標平穩，可持續觀察。"
+        "allClearDesc": "系統指標平穩，可持續觀察。",
+        "taskBlockedByHeartbeat": "任务心跳超时",
+        "taskBlockedByHeartbeatDesc": "有 {{count}} 笔任务因长时间未更新被标记为 blocked。"
       }
+    },
+    "access": {
+      "title": "OpenClaw Access 未设置",
+      "desc": "侦测到 Gateway 回报 access 尚未配置。请先到 Runtime 设置补齐 `Config Path` 与授权设置，之后再启动服务。",
+      "goToRuntime": "前往 Runtime 设置",
+      "openConfigDir": "打开 Config 目录"
     }
   },
   "settings": {
@@ -293,7 +354,7 @@
     "configPath": "OpenClaw 设定区 (Config)",
     "configPathPlaceholder": "留空则使用默认路径",
     "gatewayPort": "Gateway 端口 (Port)",
-    "gatewayPortPlaceholder": "请填写 Launcher 指定的 Gateway Port（必填）",
+    "gatewayPortPlaceholder": "留空 = 使用 openclaw 默认值",
     "externalTerminalTitle": "外部 Terminal 可视化启动",
     "externalTerminalDesc": "启用后，启动/停止 Gateway 会强制打开外部 Terminal 窗口；关闭后改为后台执行。",
     "workspacePath": "工作区 (Workspace)",
@@ -308,9 +369,35 @@
     "checkUpdateChecking": "检查中...",
     "checkUpdateUpToDate": "已是最新版本",
     "checkUpdateNoReleases": "尚未发布任何版本",
-    "checkUpdateAvailable": "有新版本可用",
+    "checkUpdateAvailable": "有新版本可用: {{version}}",
     "checkUpdateDownload": "前往下载",
-    "checkUpdateError": "无法检查更新"
+    "checkUpdateError": "无法检查更新",
+    "autoRestartGatewayTitle": "自动重启 Gateway（崩溃时）",
+    "autoRestartGatewayDesc": "套用于非 daemon 模式；异常退出时会依启动模式进行自动重启。",
+    "savedDefault": "已保存默认",
+    "modifiedUnsaved": "已修改，未保存",
+    "authorizedFilter": "已授权筛选",
+    "noAccountDetected": "尚未侦测到已授权账号。",
+    "modelsCount": "{{count}} models",
+    "noModelsFromAuth": "尚未从目前授权状态取得可选模型。",
+    "modelSource": "模型来源",
+    "modelNotInAuthScope": "目前模型不在已授权 provider 范围",
+    "diag": {
+      "title": "快捷诊断工具",
+      "terminalHelp": "以下指令将在独立 Terminal 视窗中执行，完成后按 Enter 关闭。"
+    },
+    "auth": {
+      "removeTitle": "移除授权",
+      "oauthFlow": "OAuth 流程",
+      "oauthGuide": "无须输入密钥。点击「新增授权」后将自动启动浏览器 OAuth 授权流程。",
+      "noKeyRequired": "无须密钥",
+      "localServiceGuide": "此本地服务直接新增即可，无须 API 密钥。",
+      "restoreSaved": "点击还原为已储存值：{{val}}",
+      "modifiedUnsaved": "已修改，未储存"
+    },
+    "gateway": {
+      "portHelp": "写入 openclaw.json 的 gateway.port，Gateway 启动时使用此端口。留空则使用 openclaw 預设值。"
+    }
   },
   "logs": {
     "autoDetectSuccess": ">>> 自动侦测完成: 已连结至机甲核心",
@@ -325,7 +412,27 @@
     "savingConfig": ">>> 正在保存配置...",
     "configSaved": ">>> 配置已成功保存到本地磁盘",
     "saveConfigFailed": "误差: 保存配置失败 - {{msg}}",
-    "commFailed": "误差: 通讯失败 - {{msg}}"
+    "commFailed": "误差: 通讯失败 - {{msg}}",
+    "errors": {
+      "missingCorePath": "错误: 尚未设置 Core Path，请至“配置编辑”填入 OpenClaw 主核心区绝对路径後再试。",
+      "missingConfigPath": "错误: 未设置 Config Path，无法安全识别目标实例，拒绝停止以避免误停其他并行服务。",
+      "killPortError": "关闭 Port {{port}} 相关程序时发生错误：{{msg}}",
+      "portOccupied": "错误: 启动前检查到 Port {{port}} 已被占用，请在 openclaw.json 配置页面改用其他 Gateway Port。",
+      "corePathNotExist": "错误: Core Path 目录不存在：{{path}}",
+      "watchdogFailed": "watchdog 设置失败：{{msg}}",
+      "portNotListen": "目标埠未进入 LISTEN 状态",
+      "portKillFailed": "无法关闭 Port {{port}} 的占用程序",
+      "portKillError": "关闭 Port {{port}} 相关程序时发生错误"
+    },
+    "warnings": {
+      "missingConfigPath": "警告: 未设置 Config Path，Gateway 将使用預设 ~/.openclaw 设置。若同时执行多个 OpenClaw 实例，可能导致设置冲突。建议在“Launcher 设置”中明确指定 Config Path。"
+    },
+    "portKilled": "已先行关闭 Port {{port}} 相关程序（PID: {{pids}}）",
+    "watchdogEnabled": "已启用外部 Terminal 模式 Gateway watchdog（HTTP 健康检查 + 自动重启）",
+    "watchdogDisabled": "外部 Terminal 模式 watchdog 已停用（依设置）",
+    "portForceKilled": "已强制关闭 Port {{port}} 相关程序（PID: {{pids}}）{{suffix}}",
+    "portKillAttempted": "已尝试强制关闭 Port {{port}} 相关程序。",
+    "partialKillFailed": "，但仍有部分 PID 关闭失败。"
   },
   "wizard": {
     "steps": {
@@ -904,5 +1011,436 @@
       "title": "System Update Core Logs",
       "start": "🚀 啟動系統更新程序..."
     }
+  },
+  "auth": {
+    "errors": {
+      "loadProfilesFailed": "读取授权列表失败",
+      "missingCorePath": "缺少 Core Path，无法启动完整引导",
+      "missingConfigPath": "缺少 Config Path，无法启动完整引导",
+      "addAuthMissingConfig": "缺少 Config Path，无法新增授权",
+      "addAuthMissingCore": "缺少 Core Path，无法新增授权",
+      "credentialRequired": "此授权方式需要输入凭证",
+      "emptyCommand": "请先输入要执行的指令",
+      "commandExecError": "执行指令时发生错误",
+      "removeFailed": "移除授权失败",
+      "addFailed": "新增授权失败",
+      "onboardFailed": "启动完整引导失败",
+      "onboardLaunched": "已启动完整引导，完成后可回设置页刷新授权列表。"
+    }
+  },
+  "runtime": {
+    "errors": {
+      "missingConfigPath": "尚未设置 Config Path，无法读取 openclaw.json。",
+      "configNotFound": "找不到 openclaw.json：已搜索 {{path}}，均不存在或无法读取。",
+      "loadDynamicModelsFailed": "读取动态模型列表失败",
+      "missingCorePathAction": "缺少 Core Path，无法更新 OpenClaw 动态设置",
+      "missingConfigPathAction": "缺少 Config Path，无法更新 OpenClaw 动态设置",
+      "invalidPort": "Gateway Port 格式不正确，请填入正整数或留空（移除设置）。",
+      "emptyModel": "Model 不能为空值",
+      "unauthorizedModel": "所选模型与目前授权 provider 不相符，请改用授权列表中的模型。",
+      "updateModelFailed": "更新模型设置失败",
+      "updateTokenFailed": "更新 Telegram Bot Token 失败",
+      "updatePortFailed": "更新 Gateway Port 失败",
+      "saveLauncherFailed": "保存 Launcher 设置失败",
+      "workspaceNotFound": "警告: Workspace Path 目录不存在：{{path}}。保存将继续，但请确认路径正确。",
+      "configApplied": ">>> Runtime 设置已写入 openclaw.json。",
+      "doctorFailed": "启动 doctor 诊断失败：{{msg}}",
+      "securityAuditFailed": "启动资安稽核失败：{{msg}}",
+      "missingCorePathToken": "缺少 Core Path，无法更新通道 Token。",
+      "missingConfigPathToken": "缺少 Config Path，无法更新通道 Token。",
+      "updateChannelTokenFailed": "更新 {{channel}} Token 失败：{{msg}}"
+    },
+    "auth": {
+      "management": "认证管理",
+      "loadingProfiles": "加载授权清单...",
+      "profileStats": "已配置 {{total}} 个授权，其中 {{healthy}} 个健康",
+      "repairNeeded": "需要修复",
+      "removeAuth": "移除授权",
+      "addAuth": "新增授权",
+      "selectProvider": "选择 Provider",
+      "verifyMethod": "验证方式",
+      "credentials": "凭据",
+      "getApiKey": "获取密钥 ↗",
+      "inputKey": "输入密钥",
+      "tokenCmdLabel": "Token 生成指令",
+      "tokenCmdHelp": "在新终端窗口中执行上述指令，取得 Token 后贴入上方栏位。",
+      "oauthDesc": "无需输入密钥。点击“新增授权”后将自动启动浏览器 OAuth 授权流程。",
+      "localSvcDesc": "此本地服务直接新增即可，无需 API 密钥。"
+    },
+    "diag": {
+      "title": "快捷诊断工具",
+      "desc": "以下指令将在独立 Terminal 窗口中执行，完成后按 Enter 关闭。",
+      "securityAudit": "资案稽核（自动修复）"
+    },
+    "providers": {
+      "telegram": {
+        "desc": "通过 Bot 接收与发送消息",
+        "placeholder": "输入 Telegram Bot Token"
+      },
+      "whatsapp": {
+        "desc": "官方 Business API 整合"
+      },
+      "discord": {
+        "desc": "服务器 Bot 整合",
+        "placeholder": "输入 Discord Bot Token"
+      },
+      "irc": {
+        "desc": "旧式聊天室协议串接"
+      },
+      "googlechat": {
+        "desc": "Google Workspace 消息整合",
+        "placeholder": "输入 Webhook URL"
+      },
+      "slack": {
+        "desc": "工作区 Bot 整合",
+        "placeholder": "输入 Slack Bot Token (xoxb-...)"
+      },
+      "signal": {
+        "desc": "高加密私聊（手机号码关联）"
+      },
+      "imessage": {
+        "desc": "Apple ID 原生整合"
+      },
+      "line": {
+        "desc": "Channel Access Token 整合",
+        "placeholder": "输入 LINE Channel Access Token"
+      },
+      "anthropic": {
+        "desc": "Anthropic 官方密钥"
+      },
+      "anthropicCli": {
+        "desc": "CLI 指令生成的验证 Token",
+        "help": "执行下方指令后，将生成的 Token 贴入栏位中。",
+        "placeholder": "claude setup-token 后取得的 Token"
+      },
+      "openai": {
+        "desc": "OpenAI sk-... 密钥"
+      },
+      "openaiCodex": {
+        "desc": "浏览器 OAuth 授权，无需 Key"
+      },
+      "gemini": {
+        "desc": "Gemini 官方密钥"
+      },
+      "geminiCli": {
+        "desc": "CLI OAuth 非官方授权"
+      },
+      "openrouter": {
+        "desc": "统一 AI 网关"
+      },
+      "minimax": {
+        "desc": "MiniMax 官方密钥"
+      },
+      "minimaxOauthGlobal": {
+        "desc": "全球区平台 Token"
+      },
+      "minimaxOauthCn": {
+        "desc": "中国区平台 Token"
+      },
+      "moonshot": {
+        "desc": "Moonshot 平台密钥"
+      },
+      "xai": {
+        "desc": "xAI 平台密钥"
+      },
+      "chutes": {
+        "desc": "去中心化平台授权，无需 Key"
+      },
+      "ollama": {
+        "desc": "本地 Ollama 服务，无需密钥"
+      },
+      "vllm": {
+        "desc": "自定义本地服务器"
+      },
+      "qwen": {
+        "desc": "Qwen 通义千问密钥"
+      }
+    },
+    "channel": {
+      "management": "通道 Bot Token 管理",
+      "desc": "为每个通讯频道设置 Bot Token。Telegram 同时支持配对管理。",
+      "configuredTokens": "已设置 Token",
+      "noKeyNeeded": "{{name}} 无需设置 Token",
+      "noKeyDesc": "此通道采用账号绑定方式整合，不需要 Bot Token。请参阅官方文件完成账号授权。",
+      "applyingToken": "套用中...",
+      "appliedToken": "已套用",
+      "applyToken": "套用 Token",
+      "telegramTokenHelp": "Telegram Token 亦可通过下方“保存”按钮一起写入"
+    },
+    "telegram": {
+      "management": "Telegram 配对管理",
+      "pairingLabel": "Telegram 专属",
+      "clearPairing": "清空待配对",
+      "pairingLoading": "读取中...",
+      "noPairing": "目前没有待审核配对。",
+      "approving": "核准中...",
+      "rejecting": "拒绝中...",
+      "authorizedUsers": "已授权使用者",
+      "noAuthorizedUsers": "尚无已授权 Telegram 账号。"
+    },
+    "actions": {
+      "onboardTitle": "OpenClaw 完整授权导引",
+      "doctorMissingCore": "缺少 Core Path，无法执行 doctor 诊断。",
+      "doctorTitle": "OpenClaw Doctor — 系统诊断（--fix）",
+      "doctorStarted": "已启动 openclaw doctor --fix 诊断视窗。",
+      "doctorFailed": "启动 doctor 诊断失败：{{msg}}",
+      "auditMissingCore": "缺少 Core Path，无法执行资安稽核。",
+      "auditTitle": "OpenClaw 资安稽核 (security audit --fix --deep)",
+      "auditStarted": "已启动资安稽核视窗（--fix 自动收紧设置，--deep 探测 Gateway）。",
+      "auditFailed": "启动资安稽核失败：{{msg}}",
+      "authRemoved": "已取消授权：{{id}}",
+      "authAdded": "新增授权成功：{{choice}}",
+      "tokenAuthTitle": "Claude Token 授权流程",
+      "channelTokenUpdated": ">>> {{id}} Bot Token 已更新。",
+      "terminalWaitMsg": "程序结束。按 Enter 键关闭视窗..."
+    }
+  },
+  "main": {
+    "dialogs": {
+      "configPathConflict": {
+        "title": "Config Path 冲突警告",
+        "message": "另一个 NT-ClawLaunch 实例（PID {{pid}}）已在使用此 Config Path：\n\n{{path}}\n\n多个实例共用同一 Config Path 可能导致 gateway 配置冲突。建议在「Launcher 设置」中为此窗口指定独立的 Config Path。{{suggestion}}",
+        "suggestion": "\n\n建议改用路径：\n{{path}}",
+        "ok": "知道了"
+      }
+    },
+    "shell": {
+      "terminal": {
+        "footer": "程序结束。\\n按 Enter 键关闭窗口..."
+      }
+    },
+    "activity": {
+      "task": {
+        "timeout": "{{title}} 超时未更新，已标记为 blocked。"
+      },
+      "approvals": {
+        "pending": "目前有 {{count}} 笔待审批。"
+      },
+      "errors": {
+        "summary": "Blocked {{blocked}} / Error {{error}}。"
+      },
+      "budget": {
+        "summary": "Over {{over}} / Warn {{warn}}。"
+      },
+      "risk": {
+        "noRisks": "目前未检测到高优先风险事件。"
+      },
+      "skills": {
+        "created": "新技能建立",
+        "updated": "技能更新",
+        "codeAdded": "技能代码新增",
+        "codeModified": "技能代码修改"
+      },
+      "config": {
+        "changed": "配置文件变更"
+      },
+      "tasks": {
+        "updated": "任务清单更新"
+      },
+      "scripts": {
+        "created": "脚本建立",
+        "modified": "脚本修改"
+      },
+      "files": {
+        "createdDeleted": "文件建立/删除",
+        "modified": "文件修改"
+      },
+      "agent": {
+        "exec": "执行指令",
+        "createSkillFile": "Agent 建立技能文件",
+        "writeFile": "Agent 写入文件",
+        "modifySkill": "Agent 修改技能",
+        "editFile": "Agent 编辑文件",
+        "webSearch": "网络搜索",
+        "webScrape": "网络抓取"
+      },
+      "cron": {
+        "success": "排程执行成功",
+        "failure": "排程执行失败"
+      }
+    },
+    "repair": {
+      "reauth": "重新执行授权流程，确保 agent/auth-profiles.json 有有效 token。",
+      "onboardSync": "目前只有 global profile，请执行一次 onboarding/auth set 同步 agent 层。",
+      "agentOnly": "目前只有 agent profile，请补齐 openclaw.json 的 auth.profiles。"
+    },
+    "ipc": {
+      "errors": {
+        "skillMissingMd": "错误：所选文件夹内缺少 SKILL.md，不是有效的技能。",
+        "missingPath": "未提供路径",
+        "securityDenied": "安全性拒绝：该技能路径不在允许的 skills 目录内",
+        "minimaxFormat": "MiniMax Coding Plan Token 格式异常：目前内容看起来像说明文字或无效字符串。",
+        "gatewayAuthMissing": "已指定 Gateway 端口号，但找不到显式 token/password，请检查 openclaw.json 的 gateway.auth 设置。",
+        "forceGateway": "核心对话已启用强制 Gateway 模式，请先启动核心（Gateway）后再送出。",
+        "coreNotStarted": "核心尚未启动，请先启动 Gateway（Core）后再送出对话。"
+      },
+      "success": {
+        "skillImported": "成功导入技能：{{name}}",
+        "skillRemoved": "技能已成功移除"
+      }
+    },
+    "titles": {
+      "selectSkillFolder": "选择 OpenClaw 技能文件夹"
+    },
+    "constants": {
+      "initialPurpose": "最初目的",
+      "finalGoal": "最终目标",
+      "description": "描述",
+      "noDetails": "无详细说明",
+      "workspaceExtension": "工作区扩充技能"
+    }
+  },
+  "common": {
+    "time": {
+      "every": "每 {{val}}",
+      "soon": "即将",
+      "ago": "{{val}} 前",
+      "later": "{{val}} 后",
+      "pending": "待执行"
+    },
+    "status": {
+      "todo": "待处理",
+      "in_progress": "运行中",
+      "blocked": "锁定中",
+      "done": "已完成",
+      "success": "成功",
+      "failure": "失败",
+      "exec": "执行",
+      "completed": "完成"
+    },
+    "source": {
+      "fs": "文件系统",
+      "agent": "Agent 作业",
+      "cron": "计划",
+      "system": "系统"
+    },
+    "agent": {
+      "running": "运行 · {{pid}}",
+      "loaded": "已载入",
+      "unloaded": "未载入",
+      "notInstalled": "未安装"
+    },
+    "labels": {
+      "notParsed": "未解析到",
+      "oauthFlow": "OAuth 流程",
+      "noKeyRequired": "无须密钥",
+      "executing": "执行中",
+      "execute": "执行",
+      "static": "静态",
+      "dynamic": "动态"
+    },
+    "punctuation": {
+      "comma": "、"
+    }
+  },
+  "launcher": {
+    "autoRestart": {
+      "label": "自动重启 Gateway（崩溃时）",
+      "desc": "套用于非 daemon 模式；异常退出时会依启动模式进行自动重启。"
+    }
+  },
+  "onboarding": {
+    "logs": {
+      "skipAuthCheck": "ℹ️ 略过双层凭证检查：此授权类型不需要 token/profile。",
+      "globalProfileConfirmed": "✅ 已确认全域层 auth.profiles profile 指向。",
+      "agentProfileAvailable": "✅ 已确认 agent 凭证层 ({{id}}) 可用。",
+      "dualLayerConfirmed": "✅ 已确认现有授权符合双层可验证（global + agent）。",
+      "minimaxTokenConfirmed": "✅ 已确认 MiniMax Coding Plan Token 设置 ({{url}})。",
+      "securityModeEnabled": "🧪 启用安全验证模式：不会自动启动/覆写既有 Gateway。",
+      "checkingCli": "🔍 正在检查 CLI 可用性...",
+      "cliReady": "✅ OpenClaw CLI 可正常执行。",
+      "pulseCheck": "🔍 正在进行被动网关探测 (Gateway Pulse Check)...",
+      "gatewaySignatureMismatchWarning": "⚠️ 侦测到既有 Gateway 与目前设置的装置签章不一致（不影响既有服务，略过阻断）。",
+      "gatewayConnected": "✅ 网关服务连通性正常。",
+      "runningDoctor": "🩺 正在执行导引前置检查 (doctor --non-interactive)...",
+      "doctorPassed": "✅ Doctor 前置检查完成，未发现群组授权风险。",
+      "doctorRiskDetected": "⚠️ Doctor 侦测到群组授权风险：{{channels}}",
+      "oauthConfigUpdating": "⚠️ OAuth 配置文件仍在更新中，稍後会自动重试解析。",
+      "migrateConfigFailed": "⚠️ 配置文件修正失败，将继续尝试执行。",
+      "isolatedAgentEnabled": "🔒 已启用项目隔离 agent store：{{path}}",
+      "verifyingExistingAuth": "🧠 正在验证现有模型授权设置...",
+      "credentiallessSkip": "ℹ️ 目前模型为免凭证模式，略过双层凭证检查。",
+      "verifyingExistingChannels": "📡 正在验证现有通讯频道设置...",
+      "channelTokenEmpty": "⚠️ 通讯频道 {{platform}} 的 {{key}} 为空，可能尚未完成设置。",
+      "finalVerification": "🚀 启动最终发射检查程序 (Final Verification)...",
+      "cliReadyManualGateway": "✅ OpenClaw CLI 可正常执行，Gateway 将于仪表板手动启动。",
+      "existingSkillsNoChange": "🛠️ 现有用户技能设置维持不变。",
+      "executionSuccess": "✅ 执行顺利完成。",
+      "aligningSoul": "🧠 正在对齐灵魂频率 ({{choice}})...",
+      "oauthInteractiveNeeded": "🔐 OAuth 授权需要互动式模式，将开启终端机与浏览器流程。",
+      "cleanupOAuth": "🧹 启动前清理残留 OAuth 流程 ({{provider}}/{{method}})...",
+      "cleanupOpenAICallback": "🧹 额外清理 OpenAI callback 埠 (127.0.0.1:1455)...",
+      "oauthStarted": "🌐 已启动 OAuth 流程，等待授权完成...",
+      "oauthCompleted": "✅ OAuth 授权已完成，已写入核心设置。",
+      "whitespaceRemoved": "ℹ️ 侦测到授权字串包含空白，已自动移除空白字元再写入。",
+      "aligningChannels": "📡 正在封装通讯波段 ({{platform}})...",
+      "channelNormalized": "ℹ️ Channel ID {{raw}} 已正規化为 {{canonical}}。",
+      "enableChannelFailed": "⚠️ 无法预先启用 channels.{{platform}}.enabled=true，将直接尝试绑定频道。",
+      "channelEnabled": "✅ 已启用 channels.{{platform}}.enabled=true",
+      "legacyChannelFallback": "ℹ️ 侦测到旧版 Channel ID，兼容回退为 {{id}}。",
+      "channelAddFailed": "⚠️ channels add 失败 ({{summary}})",
+      "unsupportedChannelRetry": "↻ Channel ID {{id}} 不被支持，尝试兼容别名...",
+      "pluginRegistryFallback": "⚠️ channels add 遭遇 plugin registry 问题（Unknown channel），改以 config set 直接写入...",
+      "configSetDirectSuccess": "✅ 已透过 config set 直接写入 channels.{{platform}}.{{key}}（绕过 plugin registry 问题）",
+      "configSetFallbackFailed": "config-set fallback 失败 stderr: {{err}}",
+      "applyingGroupPolicy": "🛡️ 套用 {{platform}} 群组授权預设策略 (groupPolicy=open)...",
+      "applyGroupPolicyFailed": "⚠️ 无法自动套用 {{platform}}.groupPolicy=open，将改由 doctor 前置检查拦截。",
+      "groupPolicyApplied": "✅ 已套用 channels.{{platform}}.groupPolicy=\"open\"。",
+      "noSkillsNeeded": "✨ 无需启用额外技能。",
+      "enablingSkills": "🛠️ 正在启用技能设置 ({{count}} 项模块)...",
+      "enablingSkill": "> 正在启用: {{id}}...",
+      "unsafeSkillId": "⚠️ 跳过不安全的技能 ID: {{id}}",
+      "skillEnableFailed": "⚠️ 模块 {{id}} 启用回报异常: {{err}}",
+      "daemonDisabled": "ℹ️ 已停用 daemon 安装流程，Gateway 将于仪表板手动启动。",
+      "executionException": "❌ 执行回报异常: {{msg}}"
+    },
+    "errors": {
+      "globalProfileNotFound": "授权设置未完成：openclaw.json 的 auth.profiles 找不到 {{providers}} profile。",
+      "agentAuthNotFound": "授权设置未完成：找不到 agents/*/agent/auth-profiles.json，请重新执行模型授权。",
+      "agentProfileNotFound": "授权设置未完成：已写入全域 profile，但 agent 凭证层 ({{path}}) 找不到 {{providers}} 的有效 profile。",
+      "tokenWhitespace": "授权设置异常：agent 凭证层 ({{id}}) 的 token 含有空白字符，请重新贴上 API Key/Token。",
+      "tokenMissing": "授权设置未完成：agent 凭证层 ({{id}}) 缺少 token/access，请重新执行授权流程。",
+      "globalProfilesEmpty": "授权设置未完成：openclaw.json 的 auth.profiles 为空。",
+      "agentAuthNotFoundShort": "授权设置未完成：找不到 agents/*/agent/auth-profiles.json。",
+      "dualLayerMismatch": "授权设置未完成：存在全域 auth.profiles，但在 {{path}} 找不到对应且可用的 agent 凭证。",
+      "minimaxApiKeyEmpty": "MiniMax Coding Plan 设置失败：models.providers.minimax-portal.apiKey 为空。",
+      "minimaxBaseUrlMismatch": "MiniMax Coding Plan 设置失败：minimax-portal.baseUrl 应为 {{expected}}，目前为 {{current}}",
+      "readConfigFailed": "读取 openclaw.json 失败，请确认设置路径正确",
+      "gatewaySignatureInvalid": "Gateway 验证失败：侦测到装置签章不一致 (1008 / device signature invalid)。请先执行 {{hint}} 检查服务与配对状态，必要时重启 gateway 并重新配对装置。",
+      "gatewayTokenMismatch": "Gateway 验证失败：Token 不一致或已漂移。请确认 gateway.auth.token 并在控制台重新输入，或依序执行 devices rotate/remove/approve 修复。",
+      "gatewayStatusCheckFailed": "Gateway 状态检查失败",
+      "cliNotStarted": "OpenClaw CLI 无法启动",
+      "doctorCheckFailed": "Doctor 检查失败",
+      "channelSetupIncomplete": "频道设置尚未完成：channels.{{channel}}.groupPolicy=allowlist 但 groupAllowFrom 为空。请设置 groupAllowFrom，或改为 groupPolicy=open。",
+      "corePathMissing": "缺少核心路径 (Core Path missing)",
+      "unsupportedAuthType": "不支持或不安全的授权类型: {{type}}",
+      "configPathMissing": "缺少 Config Path，无法验证模型设置",
+      "configPathMissingForChannels": "缺少 Config Path，无法验证频道设置",
+      "noChannelsConfigured": "找不到可用的通讯频道设置",
+      "channelNotConfigured": "目前选择的通讯频道未配置: {{platform}}",
+      "channelDisabled": "通讯频道 {{platform}} 已配置但 enabled=false，请先启用或重新设置。",
+      "unsupportedOAuthType": "不支持的 OAuth 授权类型: {{type}}",
+      "configPathMissingForOAuth": "找不到 Config Path，无法验证 OAuth 授权状态",
+      "oauthFailed": "OAuth 授权失败",
+      "oauthTimeout": "OAuth 授权逾时或未完成，请在弹出的终端机完成登录后重试",
+      "setupTokenMissing": "缺少 Setup-Token，请先贴上由 claude setup-token 产生的 Token",
+      "coreAuthFailed": "核心授权失败",
+      "configPathMissingForVerification": "缺少 Config Path，无法验证授权写入结果",
+      "unsafeChannelId": "不安全的 channel id: {{id}}",
+      "channelBindingFailed": "频道绑定失败",
+      "unsupportedChannelDeep": "目前 OpenClaw 不支持 channel: {{id}}。请确认 Core Path 指向正确且可用的 OpenClaw（目前：{{path}}），并先在该目录执行：pnpm openclaw channels add --help 检查支持清单。若清单没有 telegram，代表该安装版本尚未支持 Telegram，需切换/升级 OpenClaw。",
+      "lastAttempt": "最后一次尝试：{{summary}}",
+      "cliError": "CLI 原始错误：{{err}}",
+      "channelBindingFailedShort": "频道绑定失败。"
+    },
+    "oauthTitle": "OpenClaw OAuth 授权流程 (models auth login)",
+    "initPathActual": "实际初始化将使用：",
+    "initTarget": "将初始化至："
+  },
+  "miniView": {
+    "tokenBudget": "Token 预算",
+    "trend7d": "Trend (7d)",
+    "security": "Security",
+    "logs": "Logs"
   }
 }

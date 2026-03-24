@@ -118,7 +118,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
     const res = await window.electronAPI.exec(`config:write ${JSON.stringify(launcherConfig)}`);
     if ((res.code ?? res.exitCode) !== 0) {
-      throw new Error(res.stderr || '保存 Launcher 設定失敗');
+      throw new Error(res.stderr || t('runtime.errors.saveLauncherFailed'));
     }
   };
 
@@ -133,7 +133,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     if (workspacePathRaw) {
       const checkWs = await window.electronAPI.exec(`test -d ${shellQuote(workspacePathRaw)}`);
       if ((checkWs.code ?? checkWs.exitCode) !== 0) {
-        addLog(`警告: Workspace Path 目錄不存在：${workspacePathRaw}。儲存將繼續，但請確認路徑正確，否則 Agent 可能無法存取工作區。`, 'stderr');
+        addLog(t('runtime.errors.workspaceNotFound', { path: workspacePathRaw }), 'stderr');
       }
     }
 
@@ -169,16 +169,16 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       const portChanged = portDraft !== effectiveRuntimeGatewayPort;
 
       if (portDraft && !/^\d+$/.test(portDraft)) {
-        throw new Error('Gateway Port 格式不正確，請填入正整數或留空（移除設定）。');
+        throw new Error(t('runtime.errors.invalidPort'));
       }
 
       if (modelChanged || tokenChanged || portChanged) {
         const corePath = String(config.corePath || '').trim();
         if (!corePath) {
-          throw new Error('缺少 Core Path，無法更新 OpenClaw 動態設定');
+          throw new Error(t('runtime.errors.missingCorePathAction'));
         }
         if (!resolvedConfigDir) {
-          throw new Error('缺少 Config Path，無法更新 OpenClaw 動態設定');
+          throw new Error(t('runtime.errors.missingConfigPathAction'));
         }
 
         const envPrefix = buildOpenClawEnvPrefix();
@@ -187,15 +187,15 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         if (modelChanged) {
           const nextModel = runtimeDraftModel.trim();
           if (!nextModel) {
-            throw new Error('Model 不能是空值');
+            throw new Error(t('runtime.errors.emptyModel'));
           }
           if (!isModelAuthorizedByProvider(nextModel)) {
-            throw new Error('所選模型與目前授權 provider 不相符，請改用授權清單中的模型。');
+            throw new Error(t('runtime.errors.unauthorizedModel'));
           }
           const setModelCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set agents.defaults.model.primary ${shellQuote(JSON.stringify(nextModel))} --json`;
           const setModelRes = await window.electronAPI.exec(setModelCmd);
           if ((setModelRes.code ?? setModelRes.exitCode) !== 0) {
-            throw new Error(setModelRes.stderr || '更新模型設定失敗');
+            throw new Error(setModelRes.stderr || t('runtime.errors.updateModelFailed'));
           }
         }
 
@@ -203,7 +203,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
           const setTokenCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set channels.telegram.botToken ${shellQuote(JSON.stringify(runtimeDraftBotToken))} --json`;
           const setTokenRes = await window.electronAPI.exec(setTokenCmd);
           if ((setTokenRes.code ?? setTokenRes.exitCode) !== 0) {
-            throw new Error(setTokenRes.stderr || '更新 Telegram Bot Token 失敗');
+            throw new Error(setTokenRes.stderr || t('runtime.errors.updateTokenFailed'));
           }
         }
 
@@ -212,7 +212,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
             const setPortCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set gateway.port ${Number(portDraft)} --json`;
             const setPortRes = await window.electronAPI.exec(setPortCmd);
             if ((setPortRes.code ?? setPortRes.exitCode) !== 0) {
-              throw new Error(setPortRes.stderr || '更新 Gateway Port 失敗');
+              throw new Error(setPortRes.stderr || t('runtime.errors.updatePortFailed'));
             }
           }
         }
@@ -226,7 +226,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       setRuntimeSaveState('saved');
       scheduleSaveStateReset(runtimeResetTimerRef, setRuntimeSaveState);
       addLog(t('logs.configSaved'), 'system');
-      addLog('>>> Runtime 設定已寫入 openclaw.json。', 'system');
+      addLog(t('runtime.errors.configApplied'), 'system');
     } catch (e: any) {
       setRuntimeSaveState('error');
       scheduleSaveStateReset(runtimeResetTimerRef, setRuntimeSaveState);
@@ -236,11 +236,11 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
   const handleLaunchFullOnboarding = async () => {
     if (!config.corePath?.trim()) {
-      setAuthAddError('缺少 Core Path，無法啟動完整導引。');
+      setAuthAddError(t('auth.errors.missingCorePath'));
       return;
     }
     if (!resolvedConfigDir) {
-      setAuthAddError('缺少 Config Path，無法啟動完整導引。');
+      setAuthAddError(t('auth.errors.missingConfigPath'));
       return;
     }
 
@@ -248,14 +248,14 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       const envPrefix = buildOpenClawEnvPrefix();
       const cmd = `${envPrefix}pnpm openclaw onboard`;
       await execInTerminal(cmd, {
-        title: 'OpenClaw 完整授權導引',
+        title: t('runtime.actions.onboardTitle'),
         holdOpen: true,
         cwd: config.corePath,
       });
-      addLog('已啟動完整導引，完成後可回設定頁刷新授權清單。', 'system');
+      addLog(t('auth.onboardLaunched'), 'system');
       await loadAuthProfiles();
     } catch (e: any) {
-      const msg = e?.message || '啟動完整導引失敗';
+      const msg = e?.message || t('auth.errors.onboardFailed');
       setAuthAddError(msg);
       addLog(msg, 'stderr');
     }
@@ -263,39 +263,39 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
   const handleOpenClawDoctor = async () => {
     if (!config.corePath?.trim()) {
-      addLog('缺少 Core Path，無法執行 doctor 診斷。', 'stderr');
+      addLog(t('runtime.actions.doctorMissingCore'), 'stderr');
       return;
     }
     try {
       const envPrefix = buildOpenClawEnvPrefix();
       const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw doctor --fix`;
       await execInTerminal(cmd, {
-        title: 'OpenClaw Doctor — 系統診斷（--fix）',
+        title: t('runtime.actions.doctorTitle'),
         holdOpen: true,
         cwd: config.corePath,
       });
-      addLog('已啟動 openclaw doctor --fix 診斷視窗。', 'system');
+      addLog(t('runtime.actions.doctorStarted'), 'system');
     } catch (e: any) {
-      addLog(`啟動 doctor 診斷失敗：${e?.message || e}`, 'stderr');
+      addLog(t('runtime.actions.doctorFailed', { msg: e?.message || e }), 'stderr');
     }
   };
 
   const handleSecurityCheck = async () => {
     if (!config.corePath?.trim()) {
-      addLog('缺少 Core Path，無法執行資安稽核。', 'stderr');
+      addLog(t('runtime.actions.auditMissingCore'), 'stderr');
       return;
     }
     try {
       const envPrefix = buildOpenClawEnvPrefix();
       const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw security audit --fix --deep`;
       await execInTerminal(cmd, {
-        title: 'OpenClaw 資安稽核 (security audit --fix --deep)',
+        title: t('runtime.actions.auditTitle'),
         holdOpen: true,
         cwd: config.corePath,
       });
-      addLog('已啟動資安稽核視窗（--fix 自動收緊設定，--deep 探測 Gateway）。', 'system');
+      addLog(t('runtime.actions.auditStarted'), 'system');
     } catch (e: any) {
-      addLog(`啟動資安稽核失敗：${e?.message || e}`, 'stderr');
+      addLog(t('runtime.actions.auditFailed', { msg: e?.message || e }), 'stderr');
     }
   };
 
@@ -306,16 +306,16 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     try {
       const res = await window.electronAPI.exec(`auth:remove-profile ${JSON.stringify({ configPath: resolvedConfigDir, profileId })}`);
       if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || '移除授權失敗');
+        throw new Error(res.stderr || t('auth.errors.removeFailed'));
       }
-      addLog(`已取消授權：${profileId}`, 'system');
+      addLog(t('runtime.actions.authRemoved', { id: profileId }), 'system');
       await loadAuthProfiles();
       const probeRes = await window.electronAPI.exec(`config:probe ${shellQuote(resolvedConfigDir)}`);
       if (probeRes.code === 0 && probeRes.stdout) {
         setRuntimeProfile(JSON.parse(probeRes.stdout));
       }
     } catch (e: any) {
-      const msg = e?.message || '移除授權失敗';
+      const msg = e?.message || t('auth.errors.removeFailed');
       setAuthAddError(msg);
       addLog(msg, 'stderr');
     } finally {
@@ -328,11 +328,11 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     setAuthAddError('');
 
     if (!resolvedConfigDir) {
-      setAuthAddError('缺少 Config Path，無法新增授權。');
+      setAuthAddError(t('auth.errors.addAuthMissingConfig'));
       return;
     }
     if (!config.corePath?.trim()) {
-      setAuthAddError('缺少 Core Path，無法新增授權。');
+      setAuthAddError(t('auth.errors.addAuthMissingCore'));
       return;
     }
 
@@ -345,7 +345,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
     const requiresSecret = curChoice?.reqKey ?? !['ollama', 'vllm'].includes(authAddChoice);
     if (requiresSecret && !authAddSecret.trim()) {
-      setAuthAddError('此授權方式需要輸入憑證。');
+      setAuthAddError(t('auth.errors.credentialRequired'));
       return;
     }
 
@@ -360,9 +360,9 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       };
       const res = await window.electronAPI.exec(`auth:add-profile ${JSON.stringify(payload)}`);
       if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || '新增授權失敗');
+        throw new Error(res.stderr || t('auth.errors.addFailed'));
       }
-      addLog(`新增授權成功：${authAddChoice}`, 'system');
+      addLog(t('runtime.actions.authAdded', { choice: authAddChoice }), 'system');
       setAuthAddSecret('');
       await loadAuthProfiles();
       const probeRes = await window.electronAPI.exec(`config:probe ${shellQuote(resolvedConfigDir)}`);
@@ -370,7 +370,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         setRuntimeProfile(JSON.parse(probeRes.stdout));
       }
     } catch (e: any) {
-      const msg = e?.message || '新增授權失敗';
+      const msg = e?.message || t('auth.errors.addFailed');
       setAuthAddError(msg);
       addLog(msg, 'stderr');
     } finally {
@@ -381,23 +381,23 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   const handleRunAuthTokenCommand = async () => {
     const command = (authAddTokenCommand || '').trim();
     if (!command) {
-      setAuthAddTokenError('請先輸入要執行的指令');
+      setAuthAddTokenError(t('auth.errors.emptyCommand'));
       return;
     }
     setAuthAddTokenRunning(true);
     setAuthAddTokenError('');
     try {
       const res = await execInTerminal(command, {
-        title: 'Claude Token 授權流程',
+        title: t('runtime.actions.tokenAuthTitle'),
         holdOpen: true,
         cwd: config.corePath || undefined,
       });
       const code = (res as any)?.code ?? (res as any)?.exitCode;
       if (typeof code === 'number' && code !== 0) {
-        throw new Error((res as any)?.stderr || '指令執行失敗');
+        throw new Error((res as any)?.stderr || t('auth.errors.commandExecError'));
       }
     } catch (err: any) {
-      setAuthAddTokenError(err?.message || '執行指令時發生錯誤');
+      setAuthAddTokenError(err?.message || t('auth.errors.commandExecError'));
     } finally {
       setAuthAddTokenRunning(false);
     }
@@ -494,11 +494,11 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     if (!window.electronAPI) return;
     const corePath = String(config.corePath || '').trim();
     if (!corePath) {
-      addLog('缺少 Core Path，無法更新通道 Token。', 'stderr');
+      addLog(t('runtime.errors.missingCorePathToken'), 'stderr');
       return;
     }
     if (!resolvedConfigDir) {
-      addLog('缺少 Config Path，無法更新通道 Token。', 'stderr');
+      addLog(t('runtime.errors.missingConfigPathToken'), 'stderr');
       return;
     }
     try {
@@ -507,15 +507,15 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       const cmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw config set channels.${safeChannelId}.botToken ${shellQuote(JSON.stringify(token))} --json`;
       const res = await window.electronAPI.exec(cmd);
       if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || `更新 ${channelId} Token 失敗`);
+        throw new Error(res.stderr || t('runtime.errors.updateChannelTokenFailed', { channel: channelId, msg: '' }));
       }
-      addLog(`>>> ${channelId} Bot Token 已更新。`, 'system');
+      addLog(t('runtime.actions.channelTokenUpdated', { id: channelId }), 'system');
       const probeRes = await window.electronAPI.exec(`config:probe ${shellQuote(resolvedConfigDir)}`);
       if (probeRes.code === 0 && probeRes.stdout) {
         setRuntimeProfile(JSON.parse(probeRes.stdout));
       }
     } catch (e: any) {
-      addLog(`更新 ${channelId} Token 失敗：${e?.message || e}`, 'stderr');
+      addLog(t('runtime.errors.updateChannelTokenFailed', { channel: channelId, msg: e?.message || e }), 'stderr');
     }
   };
 

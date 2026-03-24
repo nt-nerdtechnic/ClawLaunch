@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle, Clock,
@@ -92,47 +94,46 @@ interface ControlCenterPageProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatSchedule(s: CronSchedule): string {
+function formatInterval(s: CronSchedule, t: TFunction): string {
   if (s.kind === 'cron' && s.expr) return s.expr + (s.tz ? ` · ${s.tz}` : '');
   if (s.kind === 'every' && s.everyMs) {
     const m = s.everyMs / 60000;
-    if (m < 1) return `每 ${s.everyMs / 1000}s`;
-    if (m < 60) return `每 ${m.toFixed(0)}m`;
-    return `每 ${(m / 60).toFixed(0)}h`;
+    if (m < 1) return t('common.time.every', { val: `${s.everyMs / 1000}s` });
+    if (m < 60) return t('common.time.every', { val: `${m.toFixed(0)}m` });
+    return t('common.time.every', { val: `${(m / 60).toFixed(0)}h` });
   }
   return '—';
 }
 
-function relTime(ms?: number): string {
+function relTime(ms: number | undefined, t: TFunction): string {
   if (!ms) return '—';
   const d = Date.now() - ms;
-  if (d < 0) return '即將';
-  if (d < 60000) return `${Math.floor(d / 1000)}s 前`;
-  if (d < 3600000) return `${Math.floor(d / 60000)}m 前`;
-  if (d < 86400000) return `${Math.floor(d / 3600000)}h 前`;
-  return `${Math.floor(d / 86400000)}d 前`;
+  if (d < 0) return t('common.time.soon');
+  if (d < 60000) return t('common.time.ago', { val: `${Math.floor(d / 1000)}s` });
+  if (d < 3600000) return t('common.time.ago', { val: `${Math.floor(d / 60000)}m` });
+  if (d < 86400000) return t('common.time.ago', { val: `${Math.floor(d / 3600000)}h` });
+  return t('common.time.ago', { val: `${Math.floor(d / 86400000)}d` });
 }
 
-function nextTime(ms?: number): string {
+function nextTime(ms: number | undefined, t: TFunction): string {
   if (!ms) return '—';
   const d = ms - Date.now();
-  if (d <= 0) return '待執行';
-  if (d < 60000) return `${Math.floor(d / 1000)}s 後`;
-  if (d < 3600000) return `${Math.floor(d / 60000)}m 後`;
-  if (d < 86400000) return `${Math.floor(d / 3600000)}h 後`;
-  return `${Math.floor(d / 86400000)}d 後`;
+  if (d <= 0) return t('common.time.pending');
+  if (d < 60000) return t('common.time.later', { val: `${Math.floor(d / 1000)}s` });
+  if (d < 3600000) return t('common.time.later', { val: `${Math.floor(d / 60000)}m` });
+  if (d < 86400000) return t('common.time.later', { val: `${Math.floor(d / 3600000)}h` });
+  return t('common.time.later', { val: `${Math.floor(d / 86400000)}d` });
 }
 
 const TASK_STATUS_CFG: Record<TaskStatus, { label: string; dot: string; badge: string; bar: string }> = {
-  todo:        { label: '待處理', dot: 'bg-slate-400',   badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500',         bar: 'bg-slate-400' },
-  in_progress: { label: '執行中', dot: 'bg-blue-500',    badge: 'bg-blue-50 dark:bg-blue-950/50 text-blue-600',          bar: 'bg-blue-500' },
-  blocked:     { label: '封鎖中', dot: 'bg-rose-500',    badge: 'bg-rose-50 dark:bg-rose-950/50 text-rose-600',          bar: 'bg-rose-500' },
-  done:        { label: '已完成', dot: 'bg-emerald-500', badge: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600', bar: 'bg-emerald-500' },
+  todo:        { label: '', dot: 'bg-slate-400',   badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500',         bar: 'bg-slate-400' },
+  in_progress: { label: '', dot: 'bg-blue-500',    badge: 'bg-blue-50 dark:bg-blue-950/50 text-blue-600',          bar: 'bg-blue-500' },
+  blocked:     { label: '', dot: 'bg-rose-500',    badge: 'bg-rose-50 dark:bg-rose-950/50 text-rose-600',          bar: 'bg-rose-500' },
+  done:        { label: '', dot: 'bg-emerald-500', badge: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600', bar: 'bg-emerald-500' },
 };
 
-// ── Component ──────────────────────────────────────────────────────────────────
-
 export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshSnapshot, stateDir }) => {
+  const { t } = useTranslation();
   const [cronJobs, setCronJobs]       = useState<CronJob[]>([]);
   const [tasks, setTasks]             = useState<ManualTask[]>([]);
   const [crontabEntries, setCrontabEntries] = useState<CrontabEntry[]>([]);
@@ -143,6 +144,16 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [scanning, setScanning]       = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [error, setError]             = useState('');
+  const [view, setView]               = useState<'all' | 'cron' | 'task' | 'obs'>('all');
+  const { i18n } = useTranslation();
+
+  // Update TASK_STATUS_CFG to use t after useTranslation is available
+  useMemo(() => {
+    TASK_STATUS_CFG.todo.label = t('common.status.todo');
+    TASK_STATUS_CFG.in_progress.label = t('common.status.in_progress');
+    TASK_STATUS_CFG.blocked.label = t('common.status.blocked');
+    TASK_STATUS_CFG.done.label = t('common.status.done');
+  }, [t]);
 
   const execCmd = useCallback(async (cmd: string) => {
     const res = await window.electronAPI.exec(cmd);
@@ -220,9 +231,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       if (onRefreshSnapshot) await onRefreshSnapshot();
       setLastRefreshed(new Date());
     } catch (e: any) {
-      setError(e?.message || '載入失敗');
+      setError(e?.message || t('controlCenter.errors.genericLoadFailed'));
     } finally { setLoading(false); }
-  }, [loadCron, loadTasks, loadSystem, loadObservedEvents, onRefreshSnapshot]);
+  }, [loadCron, loadTasks, loadSystem, loadObservedEvents, onRefreshSnapshot, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -284,8 +295,15 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         event: e,
       }));
 
-    return [...cronItems, ...taskItems, ...observedItems].sort((a, b) => b.time - a.time);
-  }, [cronJobs, tasks, observedEvents]);
+    const allItems = [...cronItems, ...taskItems, ...observedItems];
+
+    return allItems
+      .filter(item => {
+        if (view === 'all') return true;
+        return item.type === view;
+      })
+      .sort((a, b) => b.time - a.time);
+  }, [cronJobs, tasks, observedEvents, view]);
 
   // ── KPI ────────────────────────────────────────────────────────────────────
 
@@ -313,10 +331,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: '24h 排程執行', value: kpi.recentRuns,   color: 'text-blue-600 dark:text-blue-400' },
-          { label: '成功 / 異常',  value: `${kpi.successCount} / ${kpi.errorCount}`, color: kpi.errorCount > 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400' },
-          { label: '24h 開發事件', value: kpi.devEvents,    color: 'text-indigo-600 dark:text-indigo-400' },
-          { label: '執行中 / 待辦', value: `${kpi.activeTasks} / ${kpi.pendingTasks}`, color: 'text-amber-500 dark:text-amber-400' },
+          { label: t('controlCenter.kpi.scheduledRuns'), value: kpi.recentRuns,   color: 'text-blue-600 dark:text-blue-400' },
+          { label: t('controlCenter.kpi.successError'),  value: `${kpi.successCount} / ${kpi.errorCount}`, color: kpi.errorCount > 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400' },
+          { label: t('controlCenter.kpi.devEvents'), value: kpi.devEvents,    color: 'text-indigo-600 dark:text-indigo-400' },
+          { label: t('controlCenter.kpi.activePending'), value: `${kpi.activeTasks} / ${kpi.pendingTasks}`, color: 'text-amber-500 dark:text-amber-400' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[22px] p-4 shadow-sm text-center">
             <div className={`text-2xl font-black ${color}`}>{value}</div>
@@ -336,29 +354,29 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity size={13} className="text-indigo-500" />
-                <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 dark:text-slate-100">作業時間軸</h3>
-                <span className="text-[10px] text-slate-400">{activityFeed.length} 項</span>
+                <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 dark:text-slate-100">{t('controlCenter.timeline.title')}</h3>
+                <span className="text-[10px] text-slate-400">{t('controlCenter.timeline.count', { count: activityFeed.length })}</span>
               </div>
               <div className="flex items-center gap-2">
                 {/* Legend */}
                 <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                  <CalendarClock size={9} className="text-violet-400" />排程
+                  <CalendarClock size={9} className="text-violet-400" />{t('controlCenter.timeline.legend.cron')}
                 </span>
                 <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                  <ClipboardList size={9} className="text-amber-400" />任務
+                  <ClipboardList size={9} className="text-amber-400" />{t('controlCenter.timeline.legend.task')}
                 </span>
                 <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                  <ScanLine size={9} className="text-indigo-400" />觀察
+                  <ScanLine size={9} className="text-indigo-400" />{t('controlCenter.timeline.legend.observed')}
                 </span>
                 <div className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
                 {lastRefreshed && (
                   <span className="text-[10px] text-slate-400 tabular-nums">
-                    {lastRefreshed.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    {lastRefreshed.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </span>
                 )}
                 <button
                   onClick={() => void triggerScan()}
-                  title="立即掃描 Agent 作業"
+                  title={t('controlCenter.timeline.scanBtn')}
                   className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
                 >
                   <ScanLine size={10} className={scanning ? 'animate-pulse' : ''} />
@@ -372,12 +390,28 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               </div>
             </div>
 
+            {/* Timeline filter buttons */}
+            <div className="flex items-center gap-2">
+                <button onClick={() => setView('all')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'all' ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
+                  <Activity size={9} className={view === 'all' ? 'text-white' : 'text-indigo-400'} />{t('controlCenter.timeline.tabs.all')}
+                </button>
+                <button onClick={() => setView('cron')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'cron' ? 'bg-violet-500 text-white border-violet-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
+                  <CalendarClock size={9} className={view === 'cron' ? 'text-white' : 'text-violet-400'} />{t('controlCenter.timeline.tabs.cron')}
+                </button>
+                <button onClick={() => setView('task')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'task' ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
+                  <ClipboardList size={9} className={view === 'task' ? 'text-white' : 'text-amber-400'} />{t('controlCenter.timeline.tabs.task')}
+                </button>
+                <button onClick={() => setView('obs')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'obs' ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
+                  <ScanLine size={9} className={view === 'obs' ? 'text-white' : 'text-indigo-400'} />{t('controlCenter.timeline.tabs.observation')}
+                </button>
+            </div>
+
             {/* Timeline list */}
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-0.5">
               {activityFeed.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                   <Activity size={28} className="mb-2 opacity-25" />
-                  <span className="text-sm">尚無作業紀錄</span>
+                  <span className="text-sm">{t('controlCenter.timeline.empty')}</span>
                 </div>
               ) : activityFeed.map((item, i) => {
                 if (item.type === 'cron') {
@@ -400,13 +434,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
                           {item.name}
                         </span>
-                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time)}</span>
+                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time, t)}</span>
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 pl-7 text-[10px] flex-wrap">
                         {/* Status */}
                         <span className={`flex items-center gap-0.5 font-medium ${isOk ? 'text-emerald-600 dark:text-emerald-400' : isErr ? 'text-rose-500' : 'text-slate-400'}`}>
                           {isOk ? <CheckCircle size={9} /> : isErr ? <AlertTriangle size={9} /> : <Clock size={9} />}
-                          {isOk ? '成功' : isErr ? '失敗' : '執行'}
+                          {isOk ? t('common.status.success') : isErr ? t('common.status.failure') : t('common.status.exec')}
                         </span>
                         {item.duration !== undefined && (
                           <>
@@ -415,7 +449,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           </>
                         )}
                         <span className="text-slate-300 dark:text-slate-700">·</span>
-                        <span className="text-violet-400/80 font-mono">{formatSchedule(item.schedule)}</span>
+                        <span className="text-violet-400/80 font-mono">{formatInterval(item.schedule, t)}</span>
                         {item.hasError && item.error && (
                           <>
                             <span className="text-slate-300 dark:text-slate-700">·</span>
@@ -450,7 +484,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg ${cfg.badge}`}>
                           {cfg.label}
                         </span>
-                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time)}</span>
+                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time, t)}</span>
                       </div>
                       {/* Progress bar */}
                       {progress > 0 && (
@@ -489,10 +523,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     : ev.category === 'alert'
                     ? 'border-rose-200 dark:border-rose-800/40'
                     : 'border-slate-100 dark:border-slate-800';
-                  const srcLabel = ev.source === 'fs' ? '檔案系統'
-                    : ev.source === 'jsonl' ? 'Agent 作業'
-                    : ev.source === 'cron' ? '排程'
-                    : '系統';
+                  const srcLabel = ev.source === 'fs' ? t('common.source.fs')
+                    : ev.source === 'jsonl' ? t('common.source.agent')
+                    : ev.source === 'cron' ? t('common.source.cron')
+                    : t('common.source.system');
                   return (
                     <div
                       key={`obs-${item.id}-${i}`}
@@ -508,7 +542,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         <span className="shrink-0 text-[9px] text-slate-400 font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
                           {srcLabel}
                         </span>
-                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time)}</span>
+                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time, t)}</span>
                       </div>
                       {ev.detail && (
                         <div className="mt-1 pl-7 text-[10px] text-slate-400 truncate max-w-full">
@@ -532,11 +566,11 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             <div className="p-5 space-y-2">
               <div className="flex items-center gap-2 mb-3">
                 <Server size={12} className="text-emerald-500" />
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">系統服務</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.services.title')}</span>
                 <span className="text-[9px] text-slate-400">LaunchAgents</span>
               </div>
               {launchAgents.length === 0 ? (
-                <p className="text-[11px] text-slate-400 py-1">未偵測到系統服務</p>
+                <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
               ) : launchAgents.map(agent => (
                 <div key={agent.label} className="flex items-center gap-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 px-3 py-2">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${agent.running ? 'bg-emerald-500' : agent.loaded ? 'bg-amber-400' : 'bg-slate-400'}`} />
@@ -549,7 +583,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     : agent.loaded ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                   }`}>
-                    {agent.running ? `運行 · ${agent.pid}` : agent.loaded ? '已載入' : agent.plistExists ? '未載入' : '未安裝'}
+                    {agent.running ? t('common.agent.running', { pid: agent.pid }) : agent.loaded ? t('common.agent.loaded') : agent.plistExists ? t('common.agent.unloaded') : t('common.agent.notInstalled')}
                   </span>
                 </div>
               ))}
@@ -562,11 +596,11 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             <div className="p-5 space-y-2">
               <div className="flex items-center gap-2 mb-3">
                 <Terminal size={12} className="text-amber-500" />
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">系統排程</span>
-                <span className="text-[9px] text-slate-400">crontab · {crontabEntries.length} 項</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.crontab.title')}</span>
+                <span className="text-[9px] text-slate-400">{t('controlCenter.crontab.count', { count: crontabEntries.length })}</span>
               </div>
               {crontabEntries.length === 0 ? (
-                <p className="text-[11px] text-slate-400 py-1">無 crontab 項目</p>
+                <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
               ) : crontabEntries.map((entry, i) => (
                 <div key={i} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 px-3 py-2">
                   <div className="flex items-center gap-2">
@@ -589,8 +623,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                   <CalendarClock size={12} className="text-violet-500" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">應用排程</span>
-                  <span className="text-[9px] text-slate-400">OpenClaw · {cronJobs.length} 個</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.cronJobs.title')}</span>
+                  <span className="text-[9px] text-slate-400">{t('controlCenter.cronJobs.count', { count: cronJobs.length })}</span>
                 </div>
                 <button
                   onClick={async () => { setCronLoading(true); await loadCron(); setCronLoading(false); }}
@@ -604,7 +638,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 {cronJobs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-slate-400">
                     <CalendarClock size={22} className="mb-2 opacity-30" />
-                    <span className="text-sm">沒有排程任務</span>
+                    <span className="text-sm">{t('controlCenter.cronJobs.empty')}</span>
                   </div>
                 ) : [...cronJobs].sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
                   const hasError = (job.state?.consecutiveErrors ?? 0) > 0;
@@ -619,7 +653,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
                         {hasError && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
                         <div className="flex items-center gap-0.5 shrink-0">
-                          <button onClick={() => void toggleCron(job.id)} title={job.enabled ? '暫停' : '啟動'}
+                          <button onClick={() => void toggleCron(job.id)} title={job.enabled ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
                             className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}>
                             {job.enabled ? <Pause size={10} /> : <Play size={10} />}
                           </button>
@@ -630,7 +664,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         </div>
                       </div>
                       <div className="mt-1 flex items-center gap-2 pl-3.5 text-[9px] text-slate-400 flex-wrap">
-                        <span className="font-mono">{formatSchedule(job.schedule)}</span>
+                        <span className="font-mono">{formatInterval(job.schedule, t)}</span>
                         {job.state?.lastRunAtMs && (
                           <>
                             <span className="opacity-40">·</span>
@@ -638,14 +672,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                               {job.state.lastStatus === 'ok'
                                 ? <CheckCircle size={8} className="text-emerald-500" />
                                 : <AlertTriangle size={8} className="text-rose-400" />}
-                              {relTime(job.state.lastRunAtMs)}
+                              {relTime(job.state.lastRunAtMs, t)}
                             </span>
                           </>
                         )}
                         {job.enabled && job.state?.nextRunAtMs && (
                           <>
                             <span className="opacity-40">·</span>
-                            <span className="text-violet-400">{nextTime(job.state.nextRunAtMs)}</span>
+                            <span className="text-violet-400">{nextTime(job.state.nextRunAtMs, t)}</span>
                           </>
                         )}
                       </div>

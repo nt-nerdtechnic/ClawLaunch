@@ -7,6 +7,7 @@ export interface ExecOptions {
   cwd?: string;
   holdOpen?: boolean;
   title?: string;
+  waitMsg?: string;
 }
 
 const NT_CLAW_TERMINAL_MARKER_PREFIX = '__NT_CLAWLAUNCH_MANAGED__';
@@ -22,10 +23,10 @@ function shellSingleQuote(value: string): string {
 /**
  * Executes a command in a new MacOS Terminal window.
  * @param command The shell command to execute
- * @param options Execution options (cwd, holdOpen, title)
+ * @param options Execution options (cwd, holdOpen, title, waitMsg)
  */
 export async function execInTerminal(command: string, options: ExecOptions = {}) {
-  const { cwd, holdOpen = true, title = 'OpenClaw Action' } = options;
+  const { cwd, holdOpen = true, title = 'OpenClaw Action', waitMsg = 'Process Finished. Press Enter to close...' } = options;
   const marker = `${NT_CLAW_TERMINAL_MARKER_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
   
   // 1. Prepare the command string
@@ -38,7 +39,7 @@ export async function execInTerminal(command: string, options: ExecOptions = {})
   finalCmd += command;
   
   if (holdOpen) {
-    finalCmd += `; printf "\\n程序結束。\\n按 Enter 鍵關閉視窗..."; read -r _`;
+    finalCmd += `; printf "\\n${waitMsg}\\n"; read -r _`;
   }
   
   // 2. Build osascript with separate -e arguments to avoid parser breakage.

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export type AuthProfileRow = {
   profileId: string;
@@ -22,6 +23,7 @@ export function useAuthProfiles(
   activeTab: string,
   _onAuthChange?: () => void
 ) {
+  const { t } = useTranslation();
   const [authProfiles, setAuthProfiles] = useState<AuthProfileRow[]>([]);
   const [authProfileSummary, setAuthProfileSummary] = useState<{
     total: number;
@@ -57,7 +59,7 @@ export function useAuthProfiles(
         `auth:list-profiles ${JSON.stringify({ configPath: resolvedConfigDir })}`
       );
       if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || '讀取授權清單失敗');
+        throw new Error(res.stderr || t('auth.errors.loadProfilesFailed'));
       }
       const parsed = JSON.parse(res.stdout || '{}');
       const rows = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
@@ -66,7 +68,7 @@ export function useAuthProfiles(
     } catch (e: any) {
       setAuthProfiles([]);
       setAuthProfileSummary(null);
-      setAuthProfilesError(e?.message || '讀取授權清單失敗');
+      setAuthProfilesError(e?.message || t('auth.errors.loadProfilesFailed'));
     } finally {
       setAuthProfilesLoading(false);
     }

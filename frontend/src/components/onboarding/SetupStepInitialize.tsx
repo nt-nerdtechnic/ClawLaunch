@@ -142,12 +142,12 @@ const SetupStepInitialize = ({ onNext }) => {
                 if (!data.isEmpty && !data.notExist) {
                     let warnMsg = '';
                     if (key === 'configPath') {
-                        warnMsg = `${t('setupInitialize.configPathWarning')} 實際初始化將使用：${checkTarget}`;
+                        warnMsg = `${t('setupInitialize.configPathWarning')} ${t('onboarding.initPathActual')}${checkTarget}`;
                     } else {
                         let subDir = '';
                         if (key === 'corePath') subDir = 'openclaw';
                         if (key === 'workspacePath') subDir = 'openclaw-workspace';
-                        warnMsg = `${t('setupInitialize.pathWarning', { name: subDir })} 實際初始化將使用：${checkTarget}`;
+                        warnMsg = `${t('setupInitialize.pathWarning', { name: subDir })} ${t('onboarding.initPathActual')}${checkTarget}`;
                     }
                     setWarnings(prev => ({ ...prev, [key]: warnMsg }));
                     setInfos(prev => ({ ...prev, [key]: '' }));
@@ -155,7 +155,7 @@ const SetupStepInitialize = ({ onNext }) => {
                 } else {
                     setErrors(prev => ({ ...prev, [key]: '' }));
                     setWarnings(prev => ({ ...prev, [key]: '' }));
-                    setInfos(prev => ({ ...prev, [key]: `將初始化至：${checkTarget}` }));
+                    setInfos(prev => ({ ...prev, [key]: `${t('onboarding.initTarget')}${checkTarget}` }));
                 }
             }
         } catch (e) {
@@ -401,13 +401,13 @@ const SetupStepInitialize = ({ onNext }) => {
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
                             <div className="w-full py-5 bg-indigo-50 rounded-2xl flex flex-col items-center justify-center gap-3 border border-indigo-100 shadow-inner">
                                 <div className="flex items-center gap-3 text-indigo-600 font-black uppercase tracking-widest text-sm">
-                                    {progress.includes('完成') ? <CheckCircle2 size={20} className="text-emerald-500" /> : <Loader2 className="animate-spin" size={20} />}
+                                    {initialized ? <CheckCircle2 size={20} className="text-emerald-500" /> : <Loader2 className="animate-spin" size={20} />}
                                     {progress}
                                 </div>
                             </div>
 
                             {/* Cancel button */}
-                            {!progress.includes('完成') && (
+                            {!initialized && (
                                 <button 
                                     onClick={handleCancel}
                                     className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[11px] font-black uppercase tracking-widest border border-red-100 transition-all flex items-center justify-center gap-2"

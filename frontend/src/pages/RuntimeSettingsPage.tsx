@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Key, Loader2, ShieldCheck, AlertCircle, Plus, Trash2, Brain, Cpu, Globe, Zap, Network, Database, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -28,6 +28,9 @@ interface TelegramPairingRequest {
   };
 }
 
+interface AuthChoiceDef { id: string; name: string; desc: string; reqKey: boolean; oauthFlow?: boolean; isTokenFlow?: boolean; placeholder?: string; link?: string | null; helpText?: string; }
+interface ProviderGroupDef { id: string; label: string; desc: string; icon: React.ReactNode; choices: AuthChoiceDef[]; }
+
 interface ChannelOption {
   id: string;
   name: string;
@@ -38,17 +41,8 @@ interface ChannelOption {
   reqKey?: false;
 }
 
-const CHANNEL_OPTIONS: ChannelOption[] = [
-  { id: 'telegram',   name: 'Telegram',    icon: <MessageSquare size={14} />, desc: '透過 Bot 接收與傳送訊息',           placeholder: '輸入 Telegram Bot Token',              keyLabel: 'Bot Token' },
-  { id: 'whatsapp',   name: 'WhatsApp',    icon: <Phone size={14} />,         desc: '官方 Business API 整合',           placeholder: '',                                    keyLabel: '',                    reqKey: false },
-  { id: 'discord',    name: 'Discord',     icon: <Bot size={14} />,           desc: '伺服器 Bot 整合',                  placeholder: '輸入 Discord Bot Token',               keyLabel: 'Bot Token' },
-  { id: 'irc',        name: 'IRC',         icon: <Server size={14} />,        desc: '舊式聊天室協議串接',               placeholder: '',                                    keyLabel: '',                    reqKey: false },
-  { id: 'googlechat', name: 'Google Chat', icon: <Mails size={14} />,         desc: 'Google Workspace 訊息整合',        placeholder: '輸入 Webhook URL',                     keyLabel: 'Webhook URL' },
-  { id: 'slack',      name: 'Slack',       icon: <Hash size={14} />,          desc: '工作區 Bot 整合',                  placeholder: '輸入 Slack Bot Token（xoxb-...）',     keyLabel: 'Bot Token' },
-  { id: 'signal',     name: 'Signal',      icon: <Shield size={14} />,        desc: '高加密私訊（手機號碼關聯）',       placeholder: '',                                    keyLabel: '',                    reqKey: false },
-  { id: 'imessage',   name: 'iMessage',    icon: <MessageCircle size={14} />, desc: 'Apple ID 原生整合',                placeholder: '',                                    keyLabel: '',                    reqKey: false },
-  { id: 'line',       name: 'LINE',        icon: <Waves size={14} />,         desc: 'Channel Access Token 整合',        placeholder: '輸入 LINE Channel Access Token',       keyLabel: 'Channel Access Token' },
-];
+// Channel option interface moved to top level
+// Instances moved inside component to support t()
 
 interface RuntimeSettingsPageProps {
   config: any;
@@ -172,7 +166,88 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   saveState = 'idle',
 }) => {
   const { t } = useTranslation();
-  const dynamicModelSource = dynamicModelOptions.length > 0 ? '動態' : '靜態';
+
+  const CHANNEL_OPTIONS = useMemo<ChannelOption[]>(() => [
+    { id: 'telegram',   name: 'Telegram',    icon: <MessageSquare size={14} />, desc: t('runtime.providers.telegram.desc'),           placeholder: t('runtime.providers.telegram.placeholder'),              keyLabel: 'Bot Token' },
+    { id: 'whatsapp',   name: 'WhatsApp',    icon: <Phone size={14} />,         desc: t('runtime.providers.whatsapp.desc'),           placeholder: '',                                    keyLabel: '',                    reqKey: false },
+    { id: 'discord',    name: 'Discord',     icon: <Bot size={14} />,           desc: t('runtime.providers.discord.desc'),                  placeholder: t('runtime.providers.discord.placeholder'),               keyLabel: 'Bot Token' },
+    { id: 'irc',        name: 'IRC',         icon: <Server size={14} />,        desc: t('runtime.providers.irc.desc'),               placeholder: '',                                    keyLabel: '',                    reqKey: false },
+    { id: 'googlechat', name: 'Google Chat', icon: <Mails size={14} />,         desc: t('runtime.providers.googlechat.desc'),        placeholder: t('runtime.providers.googlechat.placeholder'),                     keyLabel: 'Webhook URL' },
+    { id: 'slack',      name: 'Slack',       icon: <Hash size={14} />,          desc: t('runtime.providers.slack.desc'),                  placeholder: t('runtime.providers.slack.placeholder'),     keyLabel: 'Bot Token' },
+    { id: 'signal',     name: 'Signal',      icon: <Shield size={14} />,        desc: t('runtime.providers.signal.desc'),       placeholder: '',                                    keyLabel: '',                    reqKey: false },
+    { id: 'imessage',   name: 'iMessage',    icon: <MessageCircle size={14} />, desc: t('runtime.providers.imessage.desc'),                placeholder: '',                                    keyLabel: '',                    reqKey: false },
+    { id: 'line',       name: 'LINE',        icon: <Waves size={14} />,         desc: t('runtime.providers.line.desc'),        placeholder: t('runtime.providers.line.placeholder'),       keyLabel: 'Channel Access Token' },
+  ], [t]);
+
+  const AUTH_PROVIDER_GROUPS = useMemo<ProviderGroupDef[]>(() => [
+    {
+      id: 'anthropic', label: 'Anthropic', desc: 'Claude 3.7 / 3.5 Sonnet', icon: <Brain size={14} />,
+      choices: [
+        { id: 'apiKey', name: 'API Key', desc: t('runtime.providers.anthropic.desc'), reqKey: true, placeholder: 'sk-ant-...', link: 'https://console.anthropic.com/' },
+        { id: 'token', name: 'Setup Token (CLI)', desc: t('runtime.providers.anthropicCli.desc'), reqKey: true, isTokenFlow: true, placeholder: t('runtime.providers.anthropicCli.placeholder'), link: null, helpText: t('runtime.providers.anthropicCli.help') },
+      ],
+    },
+    {
+      id: 'openai', label: 'OpenAI', desc: 'GPT-4o / Codex', icon: <Cpu size={14} />,
+      choices: [
+        { id: 'openai-api-key', name: 'API Key', desc: t('runtime.providers.openai.desc'), reqKey: true, placeholder: 'sk-...', link: 'https://platform.openai.com/' },
+        { id: 'openai-codex', name: 'Codex OAuth', desc: t('runtime.providers.openaiCodex.desc'), reqKey: false, oauthFlow: true, link: null },
+      ],
+    },
+    {
+      id: 'google', label: 'Google', desc: 'Gemini 2.0 Flash / Pro', icon: <Globe size={14} />,
+      choices: [
+        { id: 'gemini-api-key', name: 'API Key', desc: t('runtime.providers.gemini.desc'), reqKey: true, placeholder: 'AIzaSy...', link: 'https://aistudio.google.com/app/apikey' },
+        { id: 'google-gemini-cli', name: 'Gemini OAuth', desc: t('runtime.providers.geminiCli.desc'), reqKey: false, oauthFlow: true, link: null },
+      ],
+    },
+    {
+      id: 'openrouter', label: 'OpenRouter', desc: t('runtime.providers.openrouter.desc'), icon: <Globe size={14} />,
+      choices: [
+        { id: 'openrouter-api-key', name: 'API Key', desc: t('runtime.providers.openrouter.desc'), reqKey: true, placeholder: 'sk-or-...', link: 'https://openrouter.ai/keys' },
+      ],
+    },
+    {
+      id: 'minimax', label: 'MiniMax', desc: 'MiniMax M2.5', icon: <Zap size={14} />,
+      choices: [
+        { id: 'minimax-api', name: 'API Key', desc: t('runtime.providers.minimax.desc'), reqKey: true, placeholder: '...', link: 'https://platform.minimaxi.com/' },
+        { id: 'minimax-coding-plan-global-token', name: 'Coding Plan Token (Global)', desc: t('runtime.providers.minimaxOauthGlobal.desc'), reqKey: true, placeholder: 'MINIMAX_OAUTH_TOKEN', link: 'https://platform.minimax.io/' },
+        { id: 'minimax-coding-plan-cn-token', name: 'Coding Plan Token (CN)', desc: t('runtime.providers.minimaxOauthCn.desc'), reqKey: true, placeholder: 'MINIMAX_OAUTH_TOKEN', link: 'https://platform.minimaxi.com/' },
+      ],
+    },
+    {
+      id: 'moonshot', label: 'Moonshot', desc: 'Kimi K2.5', icon: <Zap size={14} />,
+      choices: [
+        { id: 'moonshot-api-key', name: 'Kimi API Key', desc: t('runtime.providers.moonshot.desc'), reqKey: true, placeholder: 'sk-...', link: 'https://platform.moonshot.cn/console/api-keys' },
+      ],
+    },
+    {
+      id: 'xai', label: 'xAI', desc: 'Grok-4 / Grok-2', icon: <Cpu size={14} />,
+      choices: [
+        { id: 'xai-api-key', name: 'Grok API Key', desc: t('runtime.providers.xai.desc'), reqKey: true, placeholder: 'xai-...', link: 'https://console.x.ai/' },
+      ],
+    },
+    {
+      id: 'chutes', label: 'Chutes', desc: 'Decentralized AI', icon: <Network size={14} />,
+      choices: [
+        { id: 'chutes', name: 'OAuth', desc: t('runtime.providers.chutes.desc'), reqKey: false, oauthFlow: true, link: null },
+      ],
+    },
+    {
+      id: 'local', label: 'Local', desc: 'Ollama / vLLM', icon: <Database size={14} />,
+      choices: [
+        { id: 'ollama', name: 'Ollama', desc: t('runtime.providers.ollama.desc'), reqKey: false, link: null },
+        { id: 'vllm', name: 'vLLM', desc: t('runtime.providers.vllm.desc'), reqKey: false, link: null },
+      ],
+    },
+    {
+      id: 'qwen', label: 'Qwen', desc: t('runtime.providers.qwen.desc'), icon: <Cpu size={14} />,
+      choices: [
+        { id: 'qwen-portal', name: 'Qwen Portal', desc: t('runtime.providers.qwen.desc'), reqKey: true, placeholder: '...', link: null },
+      ],
+    },
+  ], [t]);
+  const dynamicModelSource = dynamicModelOptions.length > 0 ? t('common.labels.dynamic') : t('common.labels.static');
 
   // Model list expanded/collapsed state
   const [expandedModelGroups, setExpandedModelGroups] = useState<Set<string>>(new Set());
@@ -228,76 +303,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     chId === 'telegram' ? runtimeDraftBotToken : (localChannelTokens[chId] || '');
 
   // Definitions for authorization providers and verification methods (matches onboarding SetupStepModel)
-  type AuthChoiceDef = { id: string; name: string; desc: string; reqKey: boolean; oauthFlow?: boolean; isTokenFlow?: boolean; placeholder?: string; link?: string | null; helpText?: string };
-  type ProviderGroupDef = { id: string; label: string; desc: string; icon: React.ReactNode; choices: AuthChoiceDef[] };
-  const AUTH_PROVIDER_GROUPS: ProviderGroupDef[] = [
-    {
-      id: 'anthropic', label: 'Anthropic', desc: 'Claude 3.7 / 3.5 Sonnet', icon: <Brain size={14} />,
-      choices: [
-        { id: 'apiKey', name: 'API Key', desc: 'Anthropic 官方密鑰', reqKey: true, placeholder: 'sk-ant-...', link: 'https://console.anthropic.com/' },
-        { id: 'token', name: 'Setup Token (CLI)', desc: 'CLI 指令產生的驗證 Token', reqKey: true, isTokenFlow: true, placeholder: 'claude setup-token 後取得的 Token', link: null, helpText: '執行下方指令後，將產生的 Token 貼入欄位中。' },
-      ],
-    },
-    {
-      id: 'openai', label: 'OpenAI', desc: 'GPT-4o / Codex', icon: <Cpu size={14} />,
-      choices: [
-        { id: 'openai-api-key', name: 'API Key', desc: 'OpenAI sk-... 密鑰', reqKey: true, placeholder: 'sk-...', link: 'https://platform.openai.com/' },
-        { id: 'openai-codex', name: 'Codex OAuth', desc: '瀏覽器 OAuth 授權，無須 Key', reqKey: false, oauthFlow: true, link: null },
-      ],
-    },
-    {
-      id: 'google', label: 'Google', desc: 'Gemini 2.0 Flash / Pro', icon: <Globe size={14} />,
-      choices: [
-        { id: 'gemini-api-key', name: 'API Key', desc: 'Gemini 官方密鑰', reqKey: true, placeholder: 'AIzaSy...', link: 'https://aistudio.google.com/app/apikey' },
-        { id: 'google-gemini-cli', name: 'Gemini OAuth', desc: 'CLI OAuth 非官方授權', reqKey: false, oauthFlow: true, link: null },
-      ],
-    },
-    {
-      id: 'openrouter', label: 'OpenRouter', desc: '統一 AI 閘道', icon: <Globe size={14} />,
-      choices: [
-        { id: 'openrouter-api-key', name: 'API Key', desc: 'OpenRouter 統一閘道密鑰', reqKey: true, placeholder: 'sk-or-...', link: 'https://openrouter.ai/keys' },
-      ],
-    },
-    {
-      id: 'minimax', label: 'MiniMax', desc: 'MiniMax M2.5', icon: <Zap size={14} />,
-      choices: [
-        { id: 'minimax-api', name: 'API Key', desc: 'MiniMax 官方密鑰', reqKey: true, placeholder: '...', link: 'https://platform.minimaxi.com/' },
-        { id: 'minimax-coding-plan-global-token', name: 'Coding Plan Token (Global)', desc: '全球區平台 Token', reqKey: true, placeholder: 'MINIMAX_OAUTH_TOKEN', link: 'https://platform.minimax.io/' },
-        { id: 'minimax-coding-plan-cn-token', name: 'Coding Plan Token (CN)', desc: '中國區平台 Token', reqKey: true, placeholder: 'MINIMAX_OAUTH_TOKEN', link: 'https://platform.minimaxi.com/' },
-      ],
-    },
-    {
-      id: 'moonshot', label: 'Moonshot', desc: 'Kimi K2.5', icon: <Zap size={14} />,
-      choices: [
-        { id: 'moonshot-api-key', name: 'Kimi API Key', desc: 'Moonshot 平台密鑰', reqKey: true, placeholder: 'sk-...', link: 'https://platform.moonshot.cn/console/api-keys' },
-      ],
-    },
-    {
-      id: 'xai', label: 'xAI', desc: 'Grok-4 / Grok-2', icon: <Cpu size={14} />,
-      choices: [
-        { id: 'xai-api-key', name: 'Grok API Key', desc: 'xAI 平台密鑰', reqKey: true, placeholder: 'xai-...', link: 'https://console.x.ai/' },
-      ],
-    },
-    {
-      id: 'chutes', label: 'Chutes', desc: 'Decentralized AI', icon: <Network size={14} />,
-      choices: [
-        { id: 'chutes', name: 'OAuth', desc: '去中心化平台授權，無須 Key', reqKey: false, oauthFlow: true, link: null },
-      ],
-    },
-    {
-      id: 'local', label: 'Local', desc: 'Ollama / vLLM', icon: <Database size={14} />,
-      choices: [
-        { id: 'ollama', name: 'Ollama', desc: '本地 Ollama 服務，無須密鑰', reqKey: false, link: null },
-        { id: 'vllm', name: 'vLLM', desc: '自定義本地伺服器', reqKey: false, link: null },
-      ],
-    },
-    {
-      id: 'qwen', label: 'Qwen', desc: '通義千問', icon: <Cpu size={14} />,
-      choices: [
-        { id: 'qwen-portal', name: 'Qwen Portal', desc: 'Qwen 通義千問密鑰', reqKey: true, placeholder: '...', link: null },
-      ],
-    },
-  ];
+// AUTH_PROVIDER_GROUPS instances removed from top level and moved inside component
 
   // Sync to the first choice of the provider when it is selected
   const handleAuthProviderSelect = (pid: string) => {
@@ -323,10 +329,10 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
       {/* Quick Diagnostics Section */}
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-          快捷診斷工具
+          {t('settings.diag.title')}
         </div>
         <div className="text-xs text-slate-500 dark:text-slate-400">
-          以下指令將在獨立 Terminal 視窗中執行，完成後按 Enter 關閉。
+          {t('settings.diag.terminalHelp')}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
@@ -345,7 +351,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-violet-700 dark:bg-violet-950/30 dark:hover:bg-violet-950/50 dark:text-violet-300"
           >
             <span>🔍</span>
-            <span>資安稽核（自動修復）</span>
+            <span>{t('runtime.diag.securityAudit')}</span>
           </button>
         </div>
       </div>
@@ -369,13 +375,13 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
 
           <div className="mb-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 space-y-4">
             <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-              認證管理
+              {t('runtime.auth.management')}
             </div>
 
             {authProfilesLoading && (
               <div className="flex items-center gap-2 text-slate-500">
                 <Loader2 size={16} className="animate-spin" />
-                <span className="text-sm">加載授權清單...</span>
+                <span className="text-sm">{t('runtime.auth.loadingProfiles')}</span>
               </div>
             )}
 
@@ -388,7 +394,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             {!authProfilesLoading && authProfiles.length > 0 && (
               <div className="space-y-3">
                 <div className="text-xs text-slate-600 dark:text-slate-300">
-                  已配置 {authProfiles.length} 個授權，其中 {authProfiles.filter((p) => p.credentialHealthy).length} 個健康
+                  {t('runtime.auth.profileStats', { total: authProfiles.length, healthy: authProfiles.filter((p) => p.credentialHealthy).length })}
                 </div>
                 <div className="grid gap-3">
                   {authProfiles.map((profile) => (
@@ -406,14 +412,13 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                           </span>
                           {profile.credentialHealthy && (
                             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-                              <ShieldCheck size={11} />
-                              Healthy
+                              {t('app.online')}
                             </span>
                           )}
                           {!profile.credentialHealthy && (
                             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                               <AlertCircle size={11} />
-                              需要修復
+                              {t('runtime.auth.repairNeeded')}
                             </span>
                           )}
                         </div>
@@ -422,7 +427,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                         onClick={() => onHandleRemoveAuthProfile(profile.profileId)}
                         disabled={authRemovingId === profile.profileId}
                         className="ml-4 p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
-                        title="移除授權"
+                        title={t('settings.auth.removeTitle')}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -433,7 +438,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             )}
 
             <div>
-              <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-4">新增授權</div>
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-4">{t('runtime.auth.addAuth')}</div>
               {authAddError && (
                 <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
                   {authAddError}
@@ -445,7 +450,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
                     <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px]">1</span>
-                    選擇 Provider
+                    {t('runtime.auth.selectProvider')}
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 xl:grid-cols-5">
                     {AUTH_PROVIDER_GROUPS.map((pg) => (
@@ -478,7 +483,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
                       <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px]">2</span>
-                      驗證方式
+                      {t('runtime.auth.verifyMethod')}
                     </div>
                     <div className="grid grid-cols-1 gap-2">
                       {currentAuthProviderGroup.choices.map((choice) => (
@@ -513,13 +518,13 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                 {/* Step 3: Credentials input / OAuth guide / No key required */}
                 {currentAuthChoice.oauthFlow ? (
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-700/60 dark:bg-emerald-950/20 px-4 py-3 space-y-1">
-                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">OAuth 流程</p>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">無須輸入密鑰。點擊「新增授權」後將自動啟動瀏覽器 OAuth 授權流程。</p>
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{t('settings.auth.oauthFlow')}</p>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t('settings.auth.oauthGuide')}</p>
                   </div>
                 ) : !currentAuthChoice.reqKey ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40 px-4 py-3 space-y-1">
-                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">無須密鑰</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">此本地服務直接新增即可，無需 API 密鑰。</p>
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{t('settings.auth.noKeyRequired')}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{t('settings.auth.localServiceGuide')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -527,7 +532,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                       <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px]">
                         {currentAuthProviderGroup.choices.length > 1 ? '3' : '2'}
                       </span>
-                      憑證
+                      {t('runtime.auth.credentials')}
                     </div>
                     <div className="flex items-center justify-between mb-1">
                       {currentAuthChoice.link ? (
@@ -537,7 +542,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                           rel="noreferrer"
                           className="text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 font-black uppercase tracking-tighter ml-auto"
                         >
-                          取得密鑰 ↗
+                          {t('runtime.auth.getApiKey')}
                         </a>
                       ) : <span />}
                     </div>
@@ -549,7 +554,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                         type="password"
                         value={authAddSecret}
                         onChange={(e) => setAuthAddSecret(e.target.value)}
-                        placeholder={currentAuthChoice.placeholder || '輸入密鑰'}
+                        placeholder={currentAuthChoice.placeholder || t('runtime.auth.inputKey')}
                         className="w-full pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-black/40 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors disabled:opacity-50"
                       />
                     </div>
@@ -565,7 +570,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                     {/* Token CLI command executor (shown only during isTokenFlow) */}
                     {currentAuthChoice.isTokenFlow && (
                       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2">
-                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Token 產生指令</div>
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('runtime.auth.tokenCmdLabel')}</div>
                         <div className="flex gap-2">
                           <input
                             type="text"
@@ -582,12 +587,12 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                             className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 transition-all flex items-center gap-1.5"
                           >
                             {authAddTokenRunning ? (
-                              <><Loader2 size={11} className="animate-spin" /> 執行中</>
-                            ) : '執行'}
+                              <><Loader2 size={11} className="animate-spin" /> {t('common.labels.executing')}</>
+                            ) : t('common.labels.execute')}
                           </button>
                         </div>
                         <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                          在新終端機視窗中執行上述指令，取得 Token 後貼入上方欄位。
+                          {t('runtime.auth.tokenCmdHelp')}
                         </p>
                         {authAddTokenError && (
                           <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">{authAddTokenError}</p>
@@ -603,7 +608,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-colors disabled:opacity-60"
                 >
                   <Plus size={16} />
-                  {authAdding ? '新增中...' : '新增授權'}
+                  {authAdding ? t('common.labels.executing') : t('runtime.auth.addAuth')}
                 </button>
 
 
@@ -635,7 +640,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                 type="text"
                 value={runtimeDraftModel}
                 onChange={(e) => setRuntimeDraftModel(e.target.value)}
-                placeholder="選擇或輸入模型"
+                placeholder={t('runtime.auth.inputKey')}
                 className={`w-full rounded-2xl border px-4 py-3 font-mono text-xs outline-none transition-colors ${
                   selectedModelAuthorized
                     ? 'bg-white dark:bg-black/40 border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 focus:border-blue-400 dark:focus:border-blue-500/50'
@@ -645,17 +650,17 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
               {/* Currently saved default models */}
               {runtimeProfile?.model && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
-                  <span>已儲存預設：</span>
+                  <span>{t('settings.savedDefault')}：</span>
                   <button
                     type="button"
                     onClick={() => setRuntimeDraftModel(String(runtimeProfile.model))}
                     className="font-mono text-blue-600 dark:text-blue-400 hover:underline truncate max-w-[260px]"
-                    title={`點擊還原為已儲存值：${runtimeProfile.model}`}
+                    title={t('settings.auth.restoreSaved', { val: runtimeProfile.model })}
                   >
                     {runtimeProfile.model}
                   </button>
                   {runtimeDraftModel !== runtimeProfile.model && (
-                    <span className="text-amber-500 dark:text-amber-400 font-bold">(已修改，未儲存)</span>
+                    <span className="text-amber-500 dark:text-amber-400 font-bold">({t('settings.auth.modifiedUnsaved')})</span>
                   )}
                 </div>
               )}
@@ -671,28 +676,28 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   type="text"
                   value={runtimeDraftGatewayPort}
                   onChange={(e) => setRuntimeDraftGatewayPort(e.target.value)}
-                  placeholder="留空 = 使用 openclaw 預設值"
+                  placeholder={t('settings.gatewayPortPlaceholder')}
                   className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
                 />
               </div>
               {runtimeProfile?.gateway?.port && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
-                  <span>已儲存：</span>
+                  <span>{t('settings.savedDefault')}：</span>
                   <button
                     type="button"
                     onClick={() => setRuntimeDraftGatewayPort(String(runtimeProfile.gateway.port))}
                     className="font-mono text-blue-600 dark:text-blue-400 hover:underline"
-                    title={`點擊還原為已儲存值：${runtimeProfile.gateway.port}`}
+                    title={t('settings.auth.restoreSaved', { val: runtimeProfile.gateway.port })}
                   >
                     {runtimeProfile.gateway.port}
                   </button>
                   {runtimeDraftGatewayPort !== String(runtimeProfile.gateway.port) && (
-                    <span className="text-amber-500 dark:text-amber-400 font-bold">(已修改，未儲存)</span>
+                    <span className="text-amber-500 dark:text-amber-400 font-bold">({t('settings.modifiedUnsaved')})</span>
                   )}
                 </div>
               )}
               <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                寫入 openclaw.json 的 gateway.port，Gateway 啟動時使用此端口。留空則使用 openclaw 預設值。
+                {t('settings.gateway.portHelp')}
               </div>
             </div>
           </div>
@@ -704,7 +709,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
               {authorizedProviderBadges.length > 0 ? (
                 <>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mr-1">
-                    已授權篩選：
+                    {t('settings.authorizedFilter')}：
                   </span>
                   {authorizedProviderBadges.map((provider) => (
                     <span
@@ -718,7 +723,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                 </>
               ) : (
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  尚未偵測到已授權帳號，顯示全部可選模型目錄（授權後將自動篩選）。
+                  {t('settings.noAccountDetected')}
                 </span>
               )}
               {dynamicModelLoading && (
@@ -741,7 +746,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                         <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">
                           {getProviderDisplayLabel(provider, group)}
                         </div>
-                        <div className="text-[10px] text-slate-400 dark:text-slate-500">{models.length} models</div>
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500">{t('settings.modelsCount', { count: models.length })}</div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {displayedModels.map((model: string) => {
@@ -769,9 +774,9 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                           className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-[10px] text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
                         >
                           {isGroupExpanded ? (
-                            <><ChevronUp size={11} /> 收合</>
+                            <><ChevronUp size={11} /> {t('common.labels.collapse')}</>
                           ) : (
-                            <><ChevronDown size={11} /> 展開全部（共 {models.length} 個）</>
+                            <><ChevronDown size={11} /> {t('common.labels.expandAll', { count: models.length })}</>
                           )}
                         </button>
                       )}
@@ -781,17 +786,17 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-300">
-                尚未從目前授權狀態取得可選模型。請先確認授權 profile 健康，或重新整理設定頁。
+                {t('settings.noModelsFromAuth')}
               </div>
             )}
 
             <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
               <span>
-                模型來源：{dynamicModelLoading ? '載入中...' : dynamicModelSource}
+                {t('settings.modelSource')}：{dynamicModelLoading ? t('common.labels.executing') : dynamicModelSource}
               </span>
               {!selectedModelAuthorized && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300">
-                  目前模型不在已授權 provider 範圍
+                  {t('settings.modelNotInAuthScope')}
                 </span>
               )}
             </div>
@@ -804,10 +809,10 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-            通道 Bot Token 管理
+            {t('runtime.channel.management')}
           </div>
           <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            為每個通訊頻道設定 Bot Token。Telegram 同時支援配對管理。
+            {t('runtime.channel.desc')}
           </div>
         </div>
 
@@ -818,7 +823,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           return (
             <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/60 dark:border-emerald-700/40 dark:bg-emerald-950/20 px-4 py-3 flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mr-1 shrink-0">
-                已設定 Token：
+                {t('runtime.channel.configuredTokens')}：
               </span>
               {configured.map(ch => {
                 const tok = getSavedChannelToken(ch.id);
@@ -886,10 +891,10 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
               <CheckCircle2 size={16} className="text-emerald-500 mt-0.5 shrink-0" />
               <div>
                 <div className="text-xs font-black text-emerald-700 dark:text-emerald-400">
-                  {selectedChannel.name} 無須設定 Token
+                  {t('runtime.channel.noKeyNeeded', { name: selectedChannel.name })}
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  此通道採用帳號綁定方式整合，不需要 Bot Token。請參閱官方文件完成帳號授權。
+                  {t('runtime.channel.noKeyDesc')}
                 </div>
               </div>
             </div>
@@ -921,15 +926,15 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   }`}
                 >
                   {channelSaving === selectedChannelId ? (
-                    <span className="flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" />套用中...</span>
+                    <span className="flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" />{t('runtime.channel.applyingToken')}</span>
                   ) : channelSaved === selectedChannelId ? (
-                    <span className="flex items-center gap-1.5"><CheckCircle2 size={11} />已套用</span>
+                    <span className="flex items-center gap-1.5"><CheckCircle2 size={11} />{t('runtime.channel.appliedToken')}</span>
                   ) : (
-                    '套用 Token'
+                    t('runtime.channel.applyToken')
                   )}
                 </button>
                 {selectedChannelId === 'telegram' && (
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Telegram Token 亦可透過下方「儲存」按鈕一起寫入</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">{t('runtime.channel.telegramTokenHelp')}</span>
                 )}
               </div>
             </>
@@ -941,10 +946,10 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Telegram 配對管理
+                  {t('runtime.telegram.management')}
                 </div>
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                  Telegram 專屬
+                  {t('runtime.telegram.pairingLabel')}
                 </span>
               </div>
               <button
@@ -953,7 +958,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                 disabled={telegramPairingClearing || telegramPairingLoading || telegramPairingRequests.length === 0}
                 className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                {telegramPairingClearing ? '清空中...' : '清空待配對'}
+                {telegramPairingClearing ? t('common.labels.executing') : t('runtime.telegram.clearPairing')}
               </button>
             </div>
 
@@ -965,15 +970,15 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <div className="space-y-3">
-                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">等待配對清單</div>
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('monitor.telegramPairing.title')}</div>
                 {telegramPairingLoading ? (
                   <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <Loader2 size={14} className="animate-spin" />
-                    讀取中...
+                    {t('runtime.telegram.pairingLoading')}
                   </div>
                 ) : telegramPairingRequests.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                    目前沒有待審核配對。
+                    {t('runtime.telegram.noPairing')}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1000,7 +1005,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                             disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
                             className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-60"
                           >
-                            {telegramPairingApprovingCode === request.code ? '核准中...' : '核准'}
+                            {telegramPairingApprovingCode === request.code ? t('runtime.telegram.approving') : t('controlCenter.actions.approve')}
                           </button>
                           <button
                             type="button"
@@ -1008,7 +1013,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                             disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
                             className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-rose-500 disabled:opacity-60"
                           >
-                            {telegramPairingRejectingCode === request.code ? '拒絕中...' : '拒絕'}
+                            {telegramPairingRejectingCode === request.code ? t('runtime.telegram.rejecting') : t('controlCenter.actions.reject')}
                           </button>
                         </div>
                       </div>
@@ -1018,10 +1023,10 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
               </div>
 
               <div className="space-y-3">
-                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">已授權使用者</div>
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('runtime.telegram.authorizedUsers')}</div>
                 {telegramAuthorizedUsers.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                    尚無已授權 Telegram 帳號。
+                    {t('runtime.telegram.noAuthorizedUsers')}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">

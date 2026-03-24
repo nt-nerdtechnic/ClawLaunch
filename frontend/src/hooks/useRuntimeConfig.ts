@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Runtime configuration hook
@@ -11,6 +12,7 @@ export function useRuntimeConfig(
   fallbackCorePath?: string,
   fallbackWorkspacePath?: string
 ) {
+  const { t } = useTranslation();
   const [runtimeProfile, setRuntimeProfile] = useState<any>(null);
   const [runtimeProfileError, setRuntimeProfileError] = useState('');
   const [runtimeDraftModel, setRuntimeDraftModel] = useState('');
@@ -30,7 +32,7 @@ export function useRuntimeConfig(
 
       if (!resolvedConfigDir) {
         setRuntimeProfile(null);
-        setRuntimeProfileError('尚未設定 Config Path，無法讀取 openclaw.json。');
+        setRuntimeProfileError(t('runtime.errors.missingConfigPath'));
         return;
       }
 
@@ -59,7 +61,7 @@ export function useRuntimeConfig(
       // Not found in any of the three zones
       setRuntimeProfile(null);
       const checkedPaths = candidates.map(p => `${p}/openclaw.json`).join('、');
-      setRuntimeProfileError(`找不到 openclaw.json：已搜尋 ${checkedPaths}，均不存在或無法讀取。`);
+      setRuntimeProfileError(t('runtime.errors.configNotFound', { path: checkedPaths }));
     };
 
     probeRuntimeConfig();
@@ -97,7 +99,7 @@ export function useRuntimeConfig(
       };
       const res = await window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`);
       if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || '讀取動態模型清單失敗');
+        throw new Error(res.stderr || t('runtime.errors.loadDynamicModelsFailed'));
       }
       const parsed = JSON.parse(res.stdout || '{}');
       const groups = Array.isArray(parsed?.groups)

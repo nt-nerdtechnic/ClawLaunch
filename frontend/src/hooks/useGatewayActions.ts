@@ -101,12 +101,12 @@ export function useGatewayActions({
     }
 
     if (!config.corePath || !config.corePath.trim()) {
-      addLog('錯誤: 尚未設定 Core Path，請至「配置編輯」填入 OpenClaw 主核心區絕對路徑後再試。', 'stderr');
+      addLog(t('logs.errors.missingCorePath'), 'stderr');
       return;
     }
 
     if (!config.configPath?.trim()) {
-      addLog('錯誤: 未設定 Config Path，無法安全識別目標實例，拒絕停止以避免誤停其他並行服務。', 'stderr');
+      addLog(t('logs.errors.missingConfigPath'), 'stderr');
       return;
     }
 
@@ -123,11 +123,11 @@ export function useGatewayActions({
             if (killRes.success) {
               const allKilled = [...(killRes.killed || []), ...(killRes.forceKilled || [])];
               if (allKilled.length > 0) {
-                addLog(`已先行關閉 Port ${port} 相關程序（PID: ${Array.from(new Set(allKilled)).join(', ')}）`, 'system');
+                addLog(t('logs.portKilled', { port, pids: Array.from(new Set(allKilled)).join(', ') }), 'system');
               }
             }
           } catch (e: any) {
-            addLog(`關閉 Port ${port} 相關程序時發生錯誤：${e?.message || e}`, 'stderr');
+            addLog(t('logs.errors.killPortError', { port, msg: e?.message || e }), 'stderr');
           }
         }
 
@@ -169,12 +169,12 @@ export function useGatewayActions({
     }
 
     if (!config.corePath || !config.corePath.trim()) {
-      addLog('錯誤: 尚未設定 Core Path，請至「配置編輯」填入 OpenClaw 主核心區絕對路徑後再試。', 'stderr');
+      addLog(t('logs.errors.missingCorePath'), 'stderr');
       return;
     }
 
     if (!config.configPath || !config.configPath.trim()) {
-      addLog('警告: 未設定 Config Path，Gateway 將使用預設 ~/.openclaw 設定。若同時執行多個 OpenClaw 實例，可能導致設定衝突。建議在「Launcher 設定」中明確指定 Config Path。', 'stderr');
+      addLog(t('logs.warnings.missingConfigPath'), 'stderr');
     }
 
     if (running) {
@@ -196,7 +196,7 @@ export function useGatewayActions({
         const precheckCode = precheckRes.code ?? precheckRes.exitCode;
         const precheckOutput = String(precheckRes.stdout || '').trim();
         if (precheckCode === 0 && precheckOutput) {
-          const message = `錯誤: 啟動前檢查到 Port ${port} 已被占用，請在 openclaw.json 配置頁面改用其他 Gateway Port。`;
+          const message = t('logs.errors.portOccupied', { port });
           addLog(message, 'stderr');
           addLog(precheckOutput, 'stderr');
           setGatewayConflictActionMessage('');
@@ -208,7 +208,7 @@ export function useGatewayActions({
 
       const checkDir = await window.electronAPI.exec(`test -d ${shellQuote(config.corePath)}`);
       if ((checkDir.code ?? checkDir.exitCode) !== 0) {
-        addLog(`錯誤: Core Path 目錄不存在：${config.corePath}`, 'stderr');
+        addLog(t('logs.errors.corePathNotExist', { path: config.corePath }), 'stderr');
         return;
       }
 
@@ -283,16 +283,16 @@ export function useGatewayActions({
           if (wdCode === 0) {
             addLog(
               config.autoRestartGateway
-                ? '已啟用外部 Terminal 模式 Gateway watchdog（HTTP 健康檢查 + 自動重啟）'
-                : '外部 Terminal 模式 watchdog 已停用（依設定）',
+                ? t('logs.watchdogEnabled')
+                : t('logs.watchdogDisabled'),
               'system',
             );
           } else {
-            addLog(`watchdog 設定失敗：${wdRes.stderr || `exit ${wdCode}`}`, 'stderr');
+            addLog(t('logs.errors.watchdogFailed', { msg: wdRes.stderr || `exit ${wdCode}` }), 'stderr');
           }
         }
       } else {
-        addLog(t('logs.startGatewayFailed', { msg: '目標埠未進入 LISTEN 狀態' }), 'stderr');
+        addLog(t('logs.errors.portNotListen'), 'stderr');
       }
     } catch (e: any) {
       addLog(t('logs.startGatewayFailed', { msg: e.message }), 'stderr');
@@ -314,20 +314,24 @@ export function useGatewayActions({
         const uniqueKilled = Array.from(new Set(allKilled));
         const partialFailed = (result.failed || []).length > 0;
         const successMsg = uniqueKilled.length > 0
-          ? `已強制關閉 Port ${gatewayConflictModal.port} 占用程序（PID: ${uniqueKilled.join(', ')}）${partialFailed ? '，但仍有部分 PID 關閉失敗。' : '。'}`
-          : `已嘗試強制關閉 Port ${gatewayConflictModal.port} 占用程序。`;
+          ? t('logs.portForceKilled', {
+              port: gatewayConflictModal.port,
+              pids: uniqueKilled.join(', '),
+              suffix: partialFailed ? t('logs.partialKillFailed') : ''
+            })
+          : t('logs.portKillAttempted', { port: gatewayConflictModal.port });
         setGatewayConflictActionMessage(successMsg);
         addLog(successMsg, partialFailed ? 'stderr' : 'system');
         window.setTimeout(() => {
           closeGatewayConflictModal();
         }, 350);
       } else {
-        const errorMsg = result.error || `無法關閉 Port ${gatewayConflictModal.port} 的占用程序`;
+        const errorMsg = result.error || t('logs.errors.portKillFailed', { port: gatewayConflictModal.port });
         setGatewayConflictActionMessage(errorMsg);
         addLog(errorMsg, 'stderr');
       }
     } catch (e: any) {
-      const errorMsg = e?.message || `關閉 Port ${gatewayConflictModal.port} 占用程序時發生錯誤`;
+      const errorMsg = e?.message || t('logs.errors.portKillError', { port: gatewayConflictModal.port });
       setGatewayConflictActionMessage(errorMsg);
       addLog(errorMsg, 'stderr');
     } finally {

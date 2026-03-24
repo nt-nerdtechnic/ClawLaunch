@@ -314,7 +314,7 @@ export function Analytics() {
       {/* Period Selector + Pace Badge */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{t('analytics.window.title', '時窗')}</span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{t('analytics.window.title')}</span>
           {paceStatus && (
             <div className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-widest ${paceStatus.color}`}>
               {paceStatus.state === 'rising' ? <TrendingUp size={12} /> : paceStatus.state === 'cooling' ? <TrendingDown size={12} /> : <Minus size={12} />}
@@ -340,7 +340,7 @@ export function Analytics() {
                 <div className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-100">{period.tokens.toLocaleString()} {t('analytics.window.tokensUnit')}</div>
                 <div className="text-xs text-slate-500">
                   ${period.cost.toFixed(3)}
-                  {period.requestCount > 0 && <span className="ml-2 opacity-60">· {period.requestCount} {t('analytics.window.requests', '次')}</span>}
+                  {period.requestCount > 0 && <span className="ml-2 opacity-60">· {period.requestCount} {t('analytics.window.requests')}</span>}
                 </div>
               </button>
             );
@@ -359,7 +359,7 @@ export function Analytics() {
               <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.labels.dailyTotalStacked')}</p>
             </div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              {runtimeUsageEvents.length > 0 ? t('analytics.labels.jsonlSource', 'JSONL 自算') : t('analytics.labels.readModel')}
+              {runtimeUsageEvents.length > 0 ? t('analytics.labels.jsonlSource') : t('analytics.labels.readModel')}
             </div>
           </div>
 
@@ -463,8 +463,8 @@ export function Analytics() {
         {providerBreakdown.length > 0 && (
           <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
             <div className="mb-6">
-              <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.providerBreakdown.title', '提供者分布')}</h3>
-              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.providerBreakdown.subtitle', '來自 JSONL session 事件，按費用排序')}</p>
+              <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.providerBreakdown.title')}</h3>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.providerBreakdown.subtitle')}</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {providerBreakdown.map((row) => (
@@ -483,7 +483,7 @@ export function Analytics() {
           <div className="mb-6">
             <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.costHotspots.title')}</h3>
             <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">
-              {runtimeUsageEvents.length > 0 ? t('analytics.costHotspots.subtitleRuntime', 'by model · JSONL 自算') : t('analytics.costHotspots.subtitle')}
+              {runtimeUsageEvents.length > 0 ? t('analytics.costHotspots.subtitleRuntime') : t('analytics.costHotspots.subtitle')}
             </p>
           </div>
           <div className="space-y-2">
@@ -503,7 +503,7 @@ export function Analytics() {
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-pink-500/50 to-transparent"></div>
 
           <div className="mb-8">
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.agentAttribution', 'Agent 消耗歸因')}</h3>
+            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.agentAttribution')}</h3>
             <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.labels.byAgent')}</p>
           </div>
 
@@ -536,7 +536,7 @@ export function Analytics() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-slate-700 italic">{t('analytics.noAgentData', '暫無 Agent 消耗數據')}</div>
+              <div className="h-full flex items-center justify-center text-slate-700 italic">{t('analytics.noAgentData')}</div>
             )}
           </div>
         </div>

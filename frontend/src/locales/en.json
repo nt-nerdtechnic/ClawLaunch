@@ -26,7 +26,27 @@
       "runtimeSettings": "openclaw.json Configuration"
     },
     "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
-    "logoutTooltip": "Logout & Reconfigure"
+    "logoutTooltip": "Logout & Reconfigure",
+    "gatewayConflict": {
+      "title": "Gateway Port Occupied",
+      "goToSettings": "Modify Port in Settings",
+      "forceClose": "Force Kill Process",
+      "killing": "Killing..."
+    },
+    "stopService": {
+      "title": "Stop & Cleanup",
+      "desc": "Stops Gateway processes and closes terminal windows.",
+      "stopping": "Stopping processes and windows, please wait...",
+      "stopped": "Service stopped and cleaned up.",
+      "failed": "Failed to stop: {{msg}}"
+    },
+    "workspace": {
+      "error": "Workspace Config Error",
+      "missingPaths": "Paths not set: {{paths}}.",
+      "reRunWizard": "If paths are set but this persists, please re-run setup or onboarding.",
+      "fixInSettings": "Fix in Settings",
+      "reLogout": "Logout"
+    }
   },
   "controlCenter": {
     "kpi": {
@@ -35,7 +55,11 @@
       "projects": "Projects",
       "pendingQueue": "Pending Queue",
       "pendingApprovals": "Pending Approvals",
-      "budgetRisk": "Budget Risk"
+      "budgetRisk": "Budget Risk",
+      "scheduledRuns": "24h Scheduled Runs",
+      "successError": "Success / Error",
+      "devEvents": "24h Dev Events",
+      "activePending": "Running / To Do"
     },
     "actions": {
       "refresh": "Refresh",
@@ -98,7 +122,35 @@
     "errors": {
       "loadFailed": "Failed to load control center data",
       "mutationFailed": "Control center action failed",
-      "tokenUpdateFailed": "Failed to update token settings"
+      "tokenUpdateFailed": "Failed to update token settings",
+      "genericLoadFailed": "Load failed"
+    },
+    "timeline": {
+      "title": "Activity Timeline",
+      "count": "{{count}} items",
+      "tabs": {
+        "cron": "Cron",
+        "task": "Tasks",
+        "observation": "Obs"
+      },
+      "scanBtn": "Scan Agent Activities",
+      "empty": "No activity records"
+    },
+    "services": {
+      "title": "System Services",
+      "empty": "No system services detected"
+    },
+    "crontab": {
+      "title": "System Crontab",
+      "count": "crontab · {{count}} items",
+      "empty": "No crontab entries"
+    },
+    "cronJobs": {
+      "title": "App Schedule",
+      "count": "OpenClaw · {{count}} jobs",
+      "empty": "No scheduled jobs",
+      "pause": "Pause",
+      "start": "Start"
     }
   },
   "chat": {
@@ -117,7 +169,8 @@
     "fallbackLocal": "External channel is offline, switched to local core command path",
     "errorGeneric": "Chat request failed, please retry",
     "unavailable": "Chat IPC is unavailable in this environment",
-    "coreRequired": "Core is not running. Start Gateway (Core) before sending a chat message"
+    "coreRequired": "Core is not running. Start Gateway (Core) before sending a chat message",
+    "inputHint": "Enter to send, Shift+Enter for newline"
   },
   "monitor": {
     "gatewayTitle": "Gateway Hub",
@@ -223,8 +276,8 @@
       "taskHeartbeat": "Config Audit Log",
       "connectionHealth": "Connection Health",
       "checkedToday": "Writes Today",
-      "eligibleToday": "Changed Paths Today",
-      "startedToday": "Suspicious Changes Today",
+      "eligibleToday": "Paths Changed",
+      "startedToday": "Suspicious Changes",
       "heartbeatConnected": "Config audit log connected",
       "heartbeatLoading": "Loading config audit log",
       "heartbeatDegraded": "Config audit log is unavailable",
@@ -235,11 +288,11 @@
         "degraded": "degraded"
       },
       "health": {
-        "gatewayRunning": "Gateway is connected and running.",
-        "gatewayStopped": "Gateway is offline or not started.",
-        "configState": "{{count}} / 3 core paths are aligned.",
-        "runtimeFreshness": "Snapshot updated {{sec}} seconds ago.",
-        "runtimeMissing": "Runtime snapshot is not available yet."
+        "gatewayRunning": "Gateway connected and running.",
+        "gatewayStopped": "Gateway disconnected or not started.",
+        "configState": "{{count}} / 3 core paths configured.",
+        "runtimeFreshness": "Snapshot updated {{sec}}s ago.",
+        "runtimeMissing": "No runtime snapshot yet."
       },
       "filters": {
         "all": "All",
@@ -263,7 +316,7 @@
         "workspacePath": "Workspace Path",
         "sessions": "Session Feed",
         "approvals": "Approvals Feed",
-        "approvalsCount": "{{count}} item(s)",
+        "approvalsCount": "{{count}} items",
         "taskStore": "Task Store",
         "budget": "Budget Summary",
         "heartbeat": "Config Audit Log"
@@ -280,8 +333,16 @@
         "budgetRisk": "Budget risk",
         "budgetRiskDesc": "Over {{over}} / Warn {{warn}}.",
         "allClear": "No high-priority alerts",
-        "allClearDesc": "System signals are stable. Continue monitoring."
+        "allClearDesc": "System signals are stable. Continue monitoring.",
+        "taskBlockedByHeartbeat": "Task Heartbeat Timeout",
+        "taskBlockedByHeartbeatDesc": "{{count}} tasks blocked due to inactivity."
       }
+    },
+    "access": {
+      "title": "OpenClaw Access Not Configured",
+      "desc": "Gateway reports access not configured. Please complete 'Config Path' and auth in Runtime Settings before starting.",
+      "goToRuntime": "Go to Runtime Settings",
+      "openConfigDir": "Open Config Directory"
     }
   },
   "settings": {
@@ -293,7 +354,7 @@
     "configPath": "OpenClaw Config Path",
     "configPathPlaceholder": "Leave empty for default path",
     "gatewayPort": "Gateway Port",
-    "gatewayPortPlaceholder": "Enter the Launcher-defined Gateway Port (required)",
+    "gatewayPortPlaceholder": "Leave empty to use openclaw default",
     "externalTerminalTitle": "External Terminal Visual Launch",
     "externalTerminalDesc": "When enabled, start/stop Gateway always opens an external Terminal window; when disabled, commands run in background.",
     "workspacePath": "Workspace Path",
@@ -306,11 +367,37 @@
     "checkUpdateCurrentVersion": "Current version",
     "checkUpdateBtn": "Check for Updates",
     "checkUpdateChecking": "Checking...",
-    "checkUpdateUpToDate": "You are on the latest version",
+    "checkUpdateUpToDate": "You are on the latest version: {{version}}",
     "checkUpdateNoReleases": "No releases published yet",
-    "checkUpdateAvailable": "New version available",
+    "checkUpdateAvailable": "New version available: {{version}}",
     "checkUpdateDownload": "Download",
-    "checkUpdateError": "Failed to check for updates"
+    "checkUpdateError": "Failed to check for updates",
+    "autoRestartGatewayTitle": "Auto-Restart Gateway (on crash)",
+    "autoRestartGatewayDesc": "Applied to non-daemon mode; auto-restarts on crash.",
+    "savedDefault": "Saved Default",
+    "modifiedUnsaved": "Modified, Unsaved",
+    "authorizedFilter": "Auth Filter",
+    "noAccountDetected": "No authorized accounts detected.",
+    "modelsCount": "{{count}} models",
+    "noModelsFromAuth": "No models retrieved from current auth status.",
+    "modelSource": "Model Source",
+    "modelNotInAuthScope": "Model not in authorized provider scope",
+    "diag": {
+      "title": "Quick Diagnostics",
+      "terminalHelp": "The following commands will run in independent Terminal windows. Press Enter to close when finished."
+    },
+    "auth": {
+      "removeTitle": "Remove Authorization",
+      "oauthFlow": "OAuth Flow",
+      "oauthGuide": "No key required. Clicking \"Add Authorization\" will automatically start the browser OAuth flow.",
+      "noKeyRequired": "No Key Required",
+      "localServiceGuide": "Add this local service directly; no API key needed.",
+      "restoreSaved": "Click to restore to saved value: {{val}}",
+      "modifiedUnsaved": "Modified, unsaved"
+    },
+    "gateway": {
+      "portHelp": "Writes to gateway.port in openclaw.json; Gateway uses this port on startup. Leave empty for openclaw default."
+    }
   },
   "logs": {
     "autoDetectSuccess": ">>> Auto detection complete: Connected to Mecha Core",
@@ -325,7 +412,27 @@
     "savingConfig": ">>> Saving configuration...",
     "configSaved": ">>> Configuration saved to local disk successfully",
     "saveConfigFailed": "Error: Failed to save configuration - {{msg}}",
-    "commFailed": "Error: Communication failure - {{msg}}"
+    "commFailed": "Error: Communication failure - {{msg}}",
+    "errors": {
+      "missingCorePath": "Error: Core Path not set. Please fill in the absolute path to OpenClaw core in \"Edit Config\" and try again.",
+      "missingConfigPath": "Error: Config Path not set. Cannot safely identify target instance; stopping rejected to avoid affecting other parallel services.",
+      "killPortError": "Error occurred while closing processes related to Port {{port}}: {{msg}}",
+      "portOccupied": "Error: Port {{port}} is already occupied. Please use a different Gateway Port in openclaw.json configuration.",
+      "corePathNotExist": "Error: Core Path directory does not exist: {{path}}",
+      "watchdogFailed": "Watchdog setup failed: {{msg}}",
+      "portNotListen": "Target port did not enter LISTEN state",
+      "portKillFailed": "Unable to close processes occupying Port {{port}}",
+      "portKillError": "Error occurred while closing processes related to Port {{port}}"
+    },
+    "warnings": {
+      "missingConfigPath": "Warning: Config Path not set. Gateway will use default ~/.openclaw settings. Running multiple OpenClaw instances simultaneously may cause conflicts. It's recommended to specify Config Path in \"Launcher Settings\"."
+    },
+    "portKilled": "Processes related to Port {{port}} have been closed (PIDs: {{pids}})",
+    "watchdogEnabled": "External Terminal mode Gateway watchdog enabled (HTTP health check + auto-restart)",
+    "watchdogDisabled": "External Terminal mode watchdog disabled (as configured)",
+    "portForceKilled": "Forcibly closed processes related to Port {{port}} (PIDs: {{pids}}){{suffix}}",
+    "portKillAttempted": "Attempted to forcibly close processes related to Port {{port}}.",
+    "partialKillFailed": ", but some PIDs failed to close."
   },
   "wizard": {
     "steps": {
@@ -520,9 +627,9 @@
         "setupTokenCli": "使用 Anthropic CLI 產生的 Setup Token 授權。流程：執行指令取得 Token → 複製 Token → 貼入下方 API 密鑰欄位。"
       },
       "providerDesc": {
-        "moonshot": "Kimi K2.5 / 長文本專家",
-        "openrouter": "統一 API 閘道",
-        "qwen": "Qwen / 阿里雲通義系列"
+        "moonshot": "Kimi K2.5 / Long-text expert",
+        "openrouter": "Unified API Gateway",
+        "qwen": "Qwen / Alibaba Cloud Tongyi Series"
       },
       "tokenFlowTitle": "Claude Token 授權流程",
       "neuralLinking": "「神經連結建立中，請保持頻率一致...」",
@@ -904,5 +1011,436 @@
       "title": "System Update Core Logs",
       "start": "🚀 啟動系統更新程序..."
     }
+  },
+  "auth": {
+    "errors": {
+      "loadProfilesFailed": "Failed to load auth profiles",
+      "missingCorePath": "Missing Core Path, cannot start full setup",
+      "missingConfigPath": "Missing Config Path, cannot start full setup",
+      "addAuthMissingConfig": "Missing Config Path, cannot add authorization",
+      "addAuthMissingCore": "Missing Core Path, cannot add authorization",
+      "credentialRequired": "Credentials are required for this authorization method",
+      "emptyCommand": "Please enter the command to execute",
+      "commandExecError": "An error occurred while executing the command",
+      "removeFailed": "Failed to remove authorization",
+      "addFailed": "Failed to add authorization",
+      "onboardFailed": "Failed to launch full onboarding",
+      "onboardLaunched": "Full onboarding launched. Refresh the auth list after completion."
+    }
+  },
+  "runtime": {
+    "errors": {
+      "missingConfigPath": "Config Path not set, cannot read openclaw.json.",
+      "configNotFound": "openclaw.json not found: searched {{path}}, but none exist or are readable.",
+      "loadDynamicModelsFailed": "Failed to load dynamic model list",
+      "missingCorePathAction": "Missing Core Path, cannot update OpenClaw dynamic settings",
+      "missingConfigPathAction": "Missing Config Path, cannot update OpenClaw dynamic settings",
+      "invalidPort": "Invalid Gateway Port format, please enter a positive integer or leave empty.",
+      "emptyModel": "Model cannot be empty",
+      "unauthorizedModel": "Selected model does not match the current authorized provider. Please use a model from the auth list.",
+      "updateModelFailed": "Failed to update model settings",
+      "updateTokenFailed": "Failed to update Telegram Bot Token",
+      "updatePortFailed": "Failed to update Gateway Port",
+      "saveLauncherFailed": "Failed to save Launcher settings",
+      "workspaceNotFound": "Warning: Workspace Path directory does not exist: {{path}}. Saving will continue, but please verify the path.",
+      "configApplied": ">>> Runtime settings have been written to openclaw.json.",
+      "doctorFailed": "Failed to launch doctor diagnosis: {{msg}}",
+      "securityAuditFailed": "Failed to launch security audit: {{msg}}",
+      "missingCorePathToken": "Missing Core Path, cannot update channel token.",
+      "missingConfigPathToken": "Missing Config Path, cannot update channel token.",
+      "updateChannelTokenFailed": "Failed to update {{channel}} token: {{msg}}"
+    },
+    "auth": {
+      "management": "Auth Management",
+      "loadingProfiles": "Loading profiles...",
+      "profileStats": "{{total}} profiles configured, {{healthy}} healthy",
+      "repairNeeded": "Repair Needed",
+      "removeAuth": "Remove Auth",
+      "addAuth": "Add Auth",
+      "selectProvider": "Select Provider",
+      "verifyMethod": "Verify Method",
+      "credentials": "Credentials",
+      "getApiKey": "Get Key ↗",
+      "inputKey": "Input Key",
+      "tokenCmdLabel": "Token Command",
+      "tokenCmdHelp": "Run in terminal, then paste result here.",
+      "oauthDesc": "No key needed. Browser OAuth will start after clicking 'Add Auth'.",
+      "localSvcDesc": "Local service, no API key needed."
+    },
+    "diag": {
+      "title": "Diag Tools",
+      "desc": "Commands will run in a separate terminal. Press Enter to close.",
+      "securityAudit": "Security Audit (Autofix)"
+    },
+    "providers": {
+      "telegram": {
+        "desc": "Send/Receive via Bot",
+        "placeholder": "Enter Telegram Bot Token"
+      },
+      "whatsapp": {
+        "desc": "Official Business API"
+      },
+      "discord": {
+        "desc": "Server Bot Integration",
+        "placeholder": "Enter Discord Bot Token"
+      },
+      "irc": {
+        "desc": "Legacy Chat Protocol"
+      },
+      "googlechat": {
+        "desc": "Google Workspace Chat",
+        "placeholder": "Enter Webhook URL"
+      },
+      "slack": {
+        "desc": "Workspace Bot",
+        "placeholder": "Enter Slack Bot Token (xoxb-...)"
+      },
+      "signal": {
+        "desc": "Encrypted Messaging"
+      },
+      "imessage": {
+        "desc": "Apple ID Integration"
+      },
+      "line": {
+        "desc": "Line Messaging API",
+        "placeholder": "Enter LINE Channel Access Token"
+      },
+      "anthropic": {
+        "desc": "Anthropic Official"
+      },
+      "anthropicCli": {
+        "desc": "CLI Generated Token",
+        "help": "Run the command below, then paste the generated token.",
+        "placeholder": "Token obtained after 'claude setup-token'"
+      },
+      "openai": {
+        "desc": "OpenAI API Key"
+      },
+      "openaiCodex": {
+        "desc": "Browser OAuth, no key"
+      },
+      "gemini": {
+        "desc": "Gemini API Key"
+      },
+      "geminiCli": {
+        "desc": "CLI OAuth"
+      },
+      "openrouter": {
+        "desc": "OpenRouter API Key"
+      },
+      "minimax": {
+        "desc": "MiniMax Official Key"
+      },
+      "minimaxOauthGlobal": {
+        "desc": "Global Platform Token"
+      },
+      "minimaxOauthCn": {
+        "desc": "CN Platform Token"
+      },
+      "moonshot": {
+        "desc": "Moonshot API Key"
+      },
+      "xai": {
+        "desc": "xAI API Key"
+      },
+      "chutes": {
+        "desc": "Decentralized OAuth"
+      },
+      "ollama": {
+        "desc": "Local Ollama"
+      },
+      "vllm": {
+        "desc": "Custom Local vLLM"
+      },
+      "qwen": {
+        "desc": "Qwen API Key"
+      }
+    },
+    "channel": {
+      "management": "Channel Bot Token Management",
+      "desc": "Set Bot Tokens for each channel. Telegram also supports pairing management.",
+      "configuredTokens": "Configured Tokens",
+      "noKeyNeeded": "{{name}} does not require a token",
+      "noKeyDesc": "This channel uses account binding. Please refer to official docs.",
+      "applyingToken": "Applying...",
+      "appliedToken": "Applied",
+      "applyToken": "Apply Token",
+      "telegramTokenHelp": "Telegram token can also be saved via Save button"
+    },
+    "telegram": {
+      "management": "Telegram Pairing Management",
+      "pairingLabel": "Telegram Exclusive",
+      "clearPairing": "Clear Pending",
+      "pairingLoading": "Loading...",
+      "noPairing": "No pending pairing requests.",
+      "approving": "Approving...",
+      "rejecting": "Rejecting...",
+      "authorizedUsers": "Authorized Users",
+      "noAuthorizedUsers": "No authorized Telegram accounts yet."
+    },
+    "actions": {
+      "onboardTitle": "OpenClaw Full Onboarding Guide",
+      "doctorMissingCore": "Core Path missing, cannot execute doctor diagnostics.",
+      "doctorTitle": "OpenClaw Doctor — System Diagnostics (--fix)",
+      "doctorStarted": "OpenClaw doctor --fix window launched.",
+      "doctorFailed": "Failed to launch doctor: {{msg}}",
+      "auditMissingCore": "Core Path missing, cannot execute security audit.",
+      "auditTitle": "OpenClaw Security Audit (security audit --fix --deep)",
+      "auditStarted": "Security audit window launched (--fix for auto-hardening, --deep for Gateway probing).",
+      "auditFailed": "Failed to launch security audit: {{msg}}",
+      "authRemoved": "Authorization removed: {{id}}",
+      "authAdded": "Authorization added successfully: {{choice}}",
+      "tokenAuthTitle": "Claude Token Auth Flow",
+      "channelTokenUpdated": ">>> {{id}} Bot Token updated.",
+      "terminalWaitMsg": "Process finished. Press Enter to close window..."
+    }
+  },
+  "main": {
+    "dialogs": {
+      "configPathConflict": {
+        "title": "Config Path Conflict Warning",
+        "message": "Another NT-ClawLaunch instance (PID {{pid}}) is already using this Config Path:\n\n{{path}}\n\nMultiple instances sharing the same Config Path may lead to gateway configuration conflicts. It is recommended to specify an independent Config Path for this window in \"Launcher Settings\". {{suggestion}}",
+        "suggestion": "\n\nSuggested path:\n{{path}}",
+        "ok": "OK"
+      }
+    },
+    "shell": {
+      "terminal": {
+        "footer": "Process finished.\\nPress Enter to close window..."
+      }
+    },
+    "activity": {
+      "task": {
+        "timeout": "{{title}} timeout without update, marked as blocked."
+      },
+      "approvals": {
+        "pending": "There are currently {{count}} pending approvals."
+      },
+      "errors": {
+        "summary": "Blocked {{blocked}} / Error {{error}}."
+      },
+      "budget": {
+        "summary": "Over {{over}} / Warn {{warn}}."
+      },
+      "risk": {
+        "noRisks": "No high-priority risk events detected."
+      },
+      "skills": {
+        "created": "New Skill Created",
+        "updated": "Skill Updated",
+        "codeAdded": "Skill Code Added",
+        "codeModified": "Skill Code Modified"
+      },
+      "config": {
+        "changed": "Configuration Changed"
+      },
+      "tasks": {
+        "updated": "Task List Updated"
+      },
+      "scripts": {
+        "created": "Script Created",
+        "modified": "Script Modified"
+      },
+      "files": {
+        "createdDeleted": "File Created/Deleted",
+        "modified": "File Modified"
+      },
+      "agent": {
+        "exec": "Executing Command",
+        "createSkillFile": "Agent Creating Skill File",
+        "writeFile": "Agent Writing File",
+        "modifySkill": "Agent Modifying Skill",
+        "editFile": "Agent Editing File",
+        "webSearch": "Web Search",
+        "webScrape": "Web Scrape"
+      },
+      "cron": {
+        "success": "Cron Job Success",
+        "failure": "Cron Job Failure"
+      }
+    },
+    "repair": {
+      "reauth": "Re-run the authorization flow to ensure agent/auth-profiles.json has a valid token.",
+      "onboardSync": "Currently only global profile exists; run onboarding/auth set to sync to the agent layer.",
+      "agentOnly": "Currently only agent profile exists; please complete auth.profiles in openclaw.json."
+    },
+    "ipc": {
+      "errors": {
+        "skillMissingMd": "Error: Selected folder is missing SKILL.md, not a valid skill.",
+        "missingPath": "Path not provided",
+        "securityDenied": "Security Denied: Skill path is not in the allowed skills directory",
+        "minimaxFormat": "MiniMax Coding Plan Token format anomaly: Content appears to be descriptive text or an invalid string.",
+        "gatewayAuthMissing": "Gateway port specified but no explicit token/password found; check gateway.auth in openclaw.json.",
+        "forceGateway": "Core chat has mandatory Gateway mode enabled; please start the Gateway first.",
+        "coreNotStarted": "Core not started; please start the Gateway (Core) before sending messages."
+      },
+      "success": {
+        "skillImported": "Skill imported successfully: {{name}}",
+        "skillRemoved": "Skill removed successfully"
+      }
+    },
+    "titles": {
+      "selectSkillFolder": "Select OpenClaw Skill Folder"
+    },
+    "constants": {
+      "initialPurpose": "Initial Purpose",
+      "finalGoal": "Final Goal",
+      "description": "Description",
+      "noDetails": "No details",
+      "workspaceExtension": "Workspace Extension Skill"
+    }
+  },
+  "common": {
+    "time": {
+      "every": "Every {{val}}",
+      "soon": "Soon",
+      "ago": "{{val}} ago",
+      "later": "in {{val}}",
+      "pending": "Pending"
+    },
+    "status": {
+      "todo": "To Do",
+      "in_progress": "Running",
+      "blocked": "Blocked",
+      "done": "Done",
+      "success": "Success",
+      "failure": "Failure",
+      "exec": "Exec",
+      "completed": "Completed"
+    },
+    "source": {
+      "fs": "FS",
+      "agent": "Agent",
+      "cron": "Cron",
+      "system": "System"
+    },
+    "agent": {
+      "running": "Running · {{pid}}",
+      "loaded": "Loaded",
+      "unloaded": "Unloaded",
+      "notInstalled": "Not Installed"
+    },
+    "labels": {
+      "notParsed": "N/A",
+      "oauthFlow": "OAuth Flow",
+      "noKeyRequired": "No Key Required",
+      "executing": "Executing",
+      "execute": "Run",
+      "static": "Static",
+      "dynamic": "Dynamic"
+    },
+    "punctuation": {
+      "comma": ", "
+    }
+  },
+  "launcher": {
+    "autoRestart": {
+      "label": "Auto Restart Gateway",
+      "desc": "Applies to non-daemon mode; auto-restarts on crash."
+    }
+  },
+  "onboarding": {
+    "logs": {
+      "skipAuthCheck": "ℹ️ Skipping dual-layer credential check: this auth type doesn't require token/profile.",
+      "globalProfileConfirmed": "✅ Global layer auth.profiles profile pointer confirmed.",
+      "agentProfileAvailable": "✅ Agent credential layer ({{id}}) is confirmed available.",
+      "dualLayerConfirmed": "✅ Existing auth confirmed to match dual-layer verification (global + agent).",
+      "minimaxTokenConfirmed": "✅ MiniMax Coding Plan Token configuration confirmed ({{url}}).",
+      "securityModeEnabled": "🧪 Security verification mode enabled: will not auto-start/overwrite existing Gateway.",
+      "checkingCli": "🔍 Checking CLI availability...",
+      "cliReady": "✅ OpenClaw CLI is running normally.",
+      "pulseCheck": "🔍 Performing passive gateway probe (Gateway Pulse Check)...",
+      "gatewaySignatureMismatchWarning": "⚠️ Detected device signature mismatch with existing Gateway (doesn't affect existing services, skipping block).",
+      "gatewayConnected": "✅ Gateway service connectivity normal.",
+      "runningDoctor": "🩺 Running preflight check (doctor --non-interactive)...",
+      "doctorPassed": "✅ Doctor preflight check complete, no group authorization risks found.",
+      "doctorRiskDetected": "⚠️ Doctor detected group authorization risks: {{channels}}",
+      "oauthConfigUpdating": "⚠️ OAuth config file is still updating, will retry parsing shortly.",
+      "migrateConfigFailed": "⚠️ Config file correction failed, continuing execution anyway.",
+      "isolatedAgentEnabled": "🔒 Project-isolated agent store enabled: {{path}}",
+      "verifyingExistingAuth": "🧠 Verifying existing model auth settings...",
+      "credentiallessSkip": "ℹ️ Current model is credentialless, skipping dual-layer check.",
+      "verifyingExistingChannels": "📡 Verifying existing communication channel settings...",
+      "channelTokenEmpty": "⚠️ Communication channel {{platform}}'s {{key}} is empty, setup might be incomplete.",
+      "finalVerification": "🚀 Starting final verification procedure...",
+      "cliReadyManualGateway": "✅ OpenClaw CLI is running normally; Gateway will be manually started from the dashboard.",
+      "existingSkillsNoChange": "🛠️ Existing user skill settings remain unchanged.",
+      "executionSuccess": "✅ Execution completed successfully.",
+      "aligningSoul": "🧠 Aligning soul frequency ({{choice}})...",
+      "oauthInteractiveNeeded": "🔐 OAuth authorization requires interactive mode; opening terminal and browser flow.",
+      "cleanupOAuth": "🧹 Cleaning up residual OAuth flows ({{provider}}/{{method}})...",
+      "cleanupOpenAICallback": "🧹 Extra cleanup for OpenAI callback port (127.0.0.1:1455)...",
+      "oauthStarted": "🌐 OAuth flow started, waiting for authorization...",
+      "oauthCompleted": "✅ OAuth authorization completed and written to core settings.",
+      "whitespaceRemoved": "ℹ️ Detected whitespace in auth string; automatically removed before writing.",
+      "aligningChannels": "📡 Encapsulating communication bands ({{platform}})...",
+      "channelNormalized": "ℹ️ Channel ID {{raw}} normalized to {{canonical}}.",
+      "enableChannelFailed": "⚠️ Unable to pre-enable channels.{{platform}}.enabled=true, will attempt direct binding.",
+      "channelEnabled": "✅ Enabled channels.{{platform}}.enabled=true",
+      "legacyChannelFallback": "ℹ️ Detected legacy Channel ID, falling back to {{id}}.",
+      "channelAddFailed": "⚠️ channels add failed ({{summary}})",
+      "unsupportedChannelRetry": "↻ Channel ID {{id}} not supported, trying compatible alias...",
+      "pluginRegistryFallback": "⚠️ channels add encountered plugin registry issue (Unknown channel), using direct config set instead...",
+      "configSetDirectSuccess": "✅ Directly wrote channels.{{platform}}.{{key}} via config set (bypassing registry issue)",
+      "configSetFallbackFailed": "config-set fallback failed stderr: {{err}}",
+      "applyingGroupPolicy": "🛡️ Applying {{platform}} group policy default (groupPolicy=open)...",
+      "applyGroupPolicyFailed": "⚠️ Unable to auto-apply {{platform}}.groupPolicy=open, doctor preflight will intercept instead.",
+      "groupPolicyApplied": "✅ Applied channels.{{platform}}.groupPolicy=\"open\".",
+      "noSkillsNeeded": "✨ No additional skills needed.",
+      "enablingSkills": "🛠️ Enabling skill configurations ({{count}} modules)...",
+      "enablingSkill": "> Enabling: {{id}}...",
+      "unsafeSkillId": "⚠️ Skipping unsafe skill ID: {{id}}",
+      "skillEnableFailed": "⚠️ Module {{id}} activation reported anomaly: {{err}}",
+      "daemonDisabled": "ℹ️ Daemon installation disabled, Gateway will be manually started from dashboard.",
+      "executionException": "❌ Execution reported anomaly: {{msg}}"
+    },
+    "errors": {
+      "globalProfileNotFound": "Auth setup incomplete: auth.profiles in openclaw.json missing {{providers}} profile.",
+      "agentAuthNotFound": "Auth setup incomplete: agents/*/agent/auth-profiles.json not found, please re-run model auth.",
+      "agentProfileNotFound": "Auth setup incomplete: Global profile written, but valid profile for {{providers}} not found in agent credential layer ({{path}}).",
+      "tokenWhitespace": "Auth setup error: Token in agent layer ({{id}}) contains whitespace, please re-paste API Key/Token.",
+      "tokenMissing": "Auth setup incomplete: Token/access missing in agent layer ({{id}}), please re-run auth flow.",
+      "globalProfilesEmpty": "Auth setup incomplete: auth.profiles in openclaw.json is empty.",
+      "agentAuthNotFoundShort": "Auth setup incomplete: agents/*/agent/auth-profiles.json not found.",
+      "dualLayerMismatch": "Auth setup incomplete: Global auth.profiles exists, but no matching available agent credential found at {{path}}.",
+      "minimaxApiKeyEmpty": "MiniMax Coding Plan setup failed: models.providers.minimax-portal.apiKey is empty.",
+      "minimaxBaseUrlMismatch": "MiniMax Coding Plan setup failed: minimax-portal.baseUrl should be {{expected}}, currently {{current}}",
+      "readConfigFailed": "Failed to read openclaw.json, please verify config path is correct.",
+      "gatewaySignatureInvalid": "Gateway verification failed: Device signature mismatch (1008 / device signature invalid). Please run {{hint}} to check service/pairing status, restart gateway and re-pair if needed.",
+      "gatewayTokenMismatch": "Gateway verification failed: Token mismatch or drifted. Please verify gateway.auth.token and re-enter in console, or run devices rotate/remove/approve to fix.",
+      "gatewayStatusCheckFailed": "Gateway status check failed",
+      "cliNotStarted": "OpenClaw CLI failed to start",
+      "doctorCheckFailed": "Doctor check failed",
+      "channelSetupIncomplete": "Channel setup incomplete: channels.{{channel}}.groupPolicy=allowlist but groupAllowFrom is empty. Set groupAllowFrom or change to groupPolicy=open.",
+      "corePathMissing": "Core Path missing",
+      "unsupportedAuthType": "Unsupported or unsafe auth type: {{type}}",
+      "configPathMissing": "Missing Config Path, cannot verify model settings",
+      "configPathMissingForChannels": "Missing Config Path, cannot verify channel settings",
+      "noChannelsConfigured": "No available communication channel settings found",
+      "channelNotConfigured": "Currently selected channel not configured: {{platform}}",
+      "channelDisabled": "Channel {{platform}} configured but enabled=false, please enable or re-configure.",
+      "unsupportedOAuthType": "Unsupported OAuth type: {{type}}",
+      "configPathMissingForOAuth": "Config Path not found, cannot verify OAuth status",
+      "oauthFailed": "OAuth authorization failed",
+      "oauthTimeout": "OAuth timeout or incomplete; please complete login in terminal and retry.",
+      "setupTokenMissing": "Setup-Token missing; please paste token from claude setup-token.",
+      "coreAuthFailed": "Core authorization failed",
+      "configPathMissingForVerification": "Missing Config Path, cannot verify auth persistence.",
+      "unsafeChannelId": "Unsafe channel id: {{id}}",
+      "channelBindingFailed": "Channel binding failed",
+      "unsupportedChannelDeep": "OpenClaw currently does not support channel: {{id}}. Verify Core Path points to a valid OpenClaw (Current: {{path}}), then run pnpm openclaw channels add --help to check support. If not listed, your version doesn't support it.",
+      "lastAttempt": "Last attempt: {{summary}}",
+      "cliError": "CLI Raw error: {{err}}",
+      "channelBindingFailedShort": "Channel binding failed."
+    },
+    "oauthTitle": "OpenClaw OAuth Flow (models auth login)",
+    "initPathActual": "Actual initialization will use: ",
+    "initTarget": "Initializing to: "
+  },
+  "miniView": {
+    "tokenBudget": "Token Budget",
+    "trend7d": "Trend (7d)",
+    "security": "Security",
+    "logs": "Logs"
   }
 }

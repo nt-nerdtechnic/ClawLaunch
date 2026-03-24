@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { execInTerminal } from '../utils/terminal';
 
@@ -76,6 +77,7 @@ interface UseOnboardingActionReturn {
 }
 
 export const useOnboardingAction = (): UseOnboardingActionReturn => {
+  const { t } = useTranslation();
   const { config, userType, setConfig } = useStore();
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +164,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     addLocalLog: (text: string, source?: string) => void;
   }) => {
     if (CREDENTIALLESS_AUTH_CHOICES.has(String(params.authChoice || '').trim())) {
-      params.addLocalLog('ℹ️ 略過雙層憑證檢查：此授權類型不需要 token/profile。', 'system');
+      params.addLocalLog(t('onboarding.logs.skipAuthCheck'), 'system');
       return;
     }
 
@@ -172,14 +174,14 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const globalEntries = Object.entries(globalProfiles) as Array<[string, any]>;
     const hasGlobalProfile = globalEntries.some(([profileId, profile]) => profileMatchesProvider(profileId, profile, aliases));
     if (!hasGlobalProfile) {
-      throw new Error(`授權設定未完成：openclaw.json 的 auth.profiles 找不到 ${aliases.join('/')} profile。`);
+      throw new Error(t('onboarding.errors.globalProfileNotFound', { providers: aliases.join('/') }));
     }
 
-    params.addLocalLog('✅ 已確認全域層 auth.profiles profile 指向。', 'system');
+    params.addLocalLog(t('onboarding.logs.globalProfileConfirmed'), 'system');
 
     const agentAuth = await readAgentAuthProfiles(params.configPath);
     if (!agentAuth) {
-      throw new Error('授權設定未完成：找不到 agents/*/agent/auth-profiles.json，請重新執行模型授權。');
+      throw new Error(t('onboarding.errors.agentAuthNotFound'));
     }
 
     const agentProfiles = agentAuth.parsed?.profiles || {};
@@ -187,7 +189,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const matchedAgentEntry = agentEntries.find(([profileId, profile]) => profileMatchesProvider(profileId, profile, aliases));
     if (!matchedAgentEntry) {
       throw new Error(
-        `授權設定未完成：已寫入全域 profile，但 agent 憑證層 (${agentAuth.profilePath}) 找不到 ${aliases.join('/')} 的有效 profile。`,
+        t('onboarding.errors.agentProfileNotFound', { path: agentAuth.profilePath, providers: aliases.join('/') }),
       );
     }
 
@@ -196,15 +198,15 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     if (!credentialCheck.ok) {
       if (credentialCheck.reason === 'token_whitespace') {
         throw new Error(
-          `授權設定異常：agent 憑證層 (${agentProfileId}) 的 token 含有空白字元，請重新貼上 API Key/Token。`,
+          t('onboarding.errors.tokenWhitespace', { id: agentProfileId }),
         );
       }
       throw new Error(
-        `授權設定未完成：agent 憑證層 (${agentProfileId}) 缺少 token/access，請重新執行授權流程。`,
+        t('onboarding.errors.tokenMissing', { id: agentProfileId }),
       );
     }
 
-    params.addLocalLog(`✅ 已確認 agent 憑證層 (${agentProfileId}) 可用。`, 'system');
+    params.addLocalLog(t('onboarding.logs.agentProfileAvailable', { id: agentProfileId }), 'system');
   };
 
   const verifyAnyDualLayerAuthPersistence = async (params: {
@@ -215,12 +217,12 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const globalProfiles = parsed?.auth?.profiles || {};
     const globalEntries = Object.entries(globalProfiles) as Array<[string, any]>;
     if (globalEntries.length === 0) {
-      throw new Error('授權設定未完成：openclaw.json 的 auth.profiles 為空。');
+      throw new Error(t('onboarding.errors.globalProfilesEmpty'));
     }
 
     const agentAuth = await readAgentAuthProfiles(params.configPath);
     if (!agentAuth) {
-      throw new Error('授權設定未完成：找不到 agents/*/agent/auth-profiles.json。');
+      throw new Error(t('onboarding.errors.agentAuthNotFoundShort'));
     }
 
     const agentProfiles = agentAuth.parsed?.profiles || {};
@@ -241,11 +243,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
     if (!matched) {
       throw new Error(
-        `授權設定未完成：存在全域 auth.profiles，但在 ${agentAuth.profilePath} 找不到對應且可用的 agent 憑證。`,
+        t('onboarding.errors.dualLayerMismatch', { path: agentAuth.profilePath }),
       );
     }
 
-    params.addLocalLog('✅ 已確認現有授權符合雙層可驗證（global + agent）。', 'system');
+    params.addLocalLog(t('onboarding.logs.dualLayerConfirmed'), 'system');
   };
 
   const verifyMiniMaxPortalTokenConfig = async (params: {
@@ -258,7 +260,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const apiKey = String(provider?.apiKey || '').trim();
     const baseUrl = String(provider?.baseUrl || '').trim();
     if (!apiKey) {
-      throw new Error('MiniMax Coding Plan 設定失敗：models.providers.minimax-portal.apiKey 為空。');
+      throw new Error(t('onboarding.errors.minimaxApiKeyEmpty'));
     }
 
     const expectedBaseUrl =
@@ -268,11 +270,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
     if (!baseUrl || baseUrl !== expectedBaseUrl) {
       throw new Error(
-        `MiniMax Coding Plan 設定失敗：minimax-portal.baseUrl 應為 ${expectedBaseUrl}，目前為 ${baseUrl || '(empty)'}`,
+        t('onboarding.errors.minimaxBaseUrlMismatch', { expected: expectedBaseUrl, current: baseUrl || '(empty)' }),
       );
     }
 
-    params.addLocalLog(`✅ 已確認 MiniMax Coding Plan Token 設定 (${expectedBaseUrl})。`, 'system');
+    params.addLocalLog(t('onboarding.logs.minimaxTokenConfirmed', { url: expectedBaseUrl }), 'system');
   };
 
   const resolveExecCmd = async (corePath: string): Promise<string> => {
@@ -354,7 +356,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const configFile = `${configPath}/openclaw.json`;
     const res = await (window as any).electronAPI.exec(`cat ${shellQuote(configFile)}`);
     if (!isCommandSuccess(res) || !res.stdout) {
-      throw new Error('讀取 openclaw.json 失敗，請確認設定路徑正確');
+      throw new Error(t('onboarding.errors.readConfigFailed'));
     }
     return JSON.parse(res.stdout);
   };
@@ -363,31 +365,25 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const message = String(rawError || '');
     const commandHint = 'openclaw gateway status --deep';
     if (/device signature invalid|signature invalid|1008/i.test(message)) {
-      return [
-        'Gateway 驗證失敗：偵測到裝置簽章不一致 (1008 / device signature invalid)。',
-        `請先執行 ${commandHint} 檢查服務與配對狀態，必要時重啟 gateway 並重新配對裝置。`
-      ].join(' ');
+      return t('onboarding.errors.gatewaySignatureInvalid', { hint: commandHint });
     }
     if (/auth_token_mismatch|token mismatch|unauthorized/i.test(message)) {
-      return [
-        'Gateway 驗證失敗：Token 不一致或已漂移。',
-        '請確認 gateway.auth.token 並在控制台重新輸入，或依序執行 devices rotate/remove/approve 修復。'
-      ].join(' ');
+      return t('onboarding.errors.gatewayTokenMismatch');
     }
-    return message || 'Gateway 狀態檢查失敗';
+    return message || t('onboarding.errors.gatewayStatusCheckFailed');
   };
 
   const verifyLaunchReadiness = async (corePath: string, envPrefix: string, execCmd: string, addLocalLog: (text: string, source?: string) => void) => {
-    addLocalLog('🧪 啟用安全驗證模式：不會自動啟動/覆寫既有 Gateway。', 'system');
+    addLocalLog(t('onboarding.logs.securityModeEnabled'), 'system');
 
-    addLocalLog('🔍 正在檢查 CLI 可用性...', 'system');
+    addLocalLog(t('onboarding.logs.checkingCli'), 'system');
     const versionRes = await (window as any).electronAPI.exec(`cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`);
     if (!isCommandSuccess(versionRes)) {
-      throw new Error(versionRes.stderr || 'OpenClaw CLI 無法啟動');
+      throw new Error(versionRes.stderr || t('onboarding.errors.cliNotStarted'));
     }
-    addLocalLog('✅ OpenClaw CLI 可正常執行。', 'system');
+    addLocalLog(t('onboarding.logs.cliReady'), 'system');
 
-    addLocalLog('🔍 正在進行被動網關探測 (Gateway Pulse Check)...', 'system');
+    addLocalLog(t('onboarding.logs.pulseCheck'), 'system');
 
     // Read gateway.port from openclaw.json to dynamically build --url parameter
     const configPath = String(config.configPath || '').trim();
@@ -409,12 +405,12 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     if (!isCommandSuccess(gatewayRes)) {
       const gatewayErr = gatewayRes.stderr || gatewayRes.stdout || '';
       if (/device signature invalid|signature invalid|1008/i.test(gatewayErr)) {
-        addLocalLog('⚠️ 偵測到既有 Gateway 與目前設定的裝置簽章不一致（不影響既有服務，略過阻斷）。', 'stderr');
+        addLocalLog(t('onboarding.logs.gatewaySignatureMismatchWarning'), 'stderr');
         return;
       }
       throw new Error(resolveGatewayStatusError(gatewayErr));
     }
-    addLocalLog('✅ 網關服務連通性正常。', 'system');
+    addLocalLog(t('onboarding.logs.gatewayConnected'), 'system');
   };
 
   const runDoctorPreflight = async (params: {
@@ -424,13 +420,13 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     addLocalLog: (text: string, source?: string) => void;
     expectedChannel?: string;
   }) => {
-    params.addLocalLog('🩺 正在執行導引前置檢查 (doctor --non-interactive)...', 'system');
+    params.addLocalLog(t('onboarding.logs.runningDoctor'), 'system');
     const doctorCmd = `cd ${shellQuote(params.corePath)} && ${params.envPrefix}${params.execCmd} openclaw doctor --non-interactive`;
     const doctorRes = await (window as any).electronAPI.exec(doctorCmd);
     const doctorOutput = `${doctorRes?.stdout || ''}\n${doctorRes?.stderr || ''}`;
 
     if (!isCommandSuccess(doctorRes)) {
-      throw new Error(doctorRes?.stderr || doctorRes?.stdout || 'Doctor 檢查失敗');
+      throw new Error(doctorRes?.stderr || doctorRes?.stdout || t('onboarding.errors.doctorCheckFailed'));
     }
 
     const riskyChannelMatches = Array.from(
@@ -440,7 +436,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     ).map((entry) => String(entry[1] || '').toLowerCase());
 
     if (riskyChannelMatches.length === 0) {
-      params.addLocalLog('✅ Doctor 前置檢查完成，未發現群組授權風險。', 'system');
+      params.addLocalLog(t('onboarding.logs.doctorPassed'), 'system');
       return;
     }
 
@@ -450,13 +446,13 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       : true;
 
     params.addLocalLog(
-      `⚠️ Doctor 偵測到群組授權風險：${uniqueRiskyChannels.join(', ')}`,
+      t('onboarding.logs.doctorRiskDetected', { channels: uniqueRiskyChannels.join(', ') }),
       'stderr',
     );
 
     if (hasExpectedChannelRisk) {
       throw new Error(
-        `頻道設定尚未完成：channels.${params.expectedChannel}.groupPolicy=allowlist 但 groupAllowFrom 為空。請設定 groupAllowFrom，或改為 groupPolicy=open。`,
+        t('onboarding.errors.channelSetupIncomplete', { channel: params.expectedChannel }),
       );
     }
   };
@@ -483,7 +479,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           }
         } catch {
           if (!parseWarningLogged) {
-            params.addLocalLog?.('⚠️ OAuth 設定檔仍在更新中，稍後會自動重試解析。', 'stderr');
+            params.addLocalLog?.(t('onboarding.logs.oauthConfigUpdating'), 'stderr');
             parseWarningLogged = true;
           }
         }
@@ -514,11 +510,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       const corePath = runtimePaths.corePath;
       const configPath = runtimePaths.configPath;
       const workspacePath = runtimePaths.workspacePath;
-      if (!corePath) throw new Error('缺少核心路徑 (Core Path missing)');
+      if (!corePath) throw new Error(t('onboarding.errors.corePathMissing'));
 
       const selectedAuthChoice = String(config.authChoice || '').trim();
       if (step === 'model' && userType !== 'existing' && !SUPPORTED_AUTH_CHOICES.has(selectedAuthChoice)) {
-        throw new Error(`不支援或不安全的授權類型: ${selectedAuthChoice || 'unknown'}`);
+        throw new Error(t('onboarding.errors.unsupportedAuthType', { type: selectedAuthChoice || 'unknown' }));
       }
 
       const execCmd = await resolveExecCmd(corePath);
@@ -543,20 +539,20 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         };
         const migrateRes = await (window as any).electronAPI.exec(`config:migrate-openclaw ${JSON.stringify(migratePayload)}`);
         if (!isCommandSuccess(migrateRes)) {
-          addLocalLog('⚠️ 設定檔修正失敗，將繼續嘗試執行。', 'stderr');
+          addLocalLog(t('onboarding.logs.migrateConfigFailed'), 'stderr');
         }
         if (isolatedAgentDir) {
-          addLocalLog(`🔒 已啟用專案隔離 agent store：${isolatedAgentDir}`, 'system');
+          addLocalLog(t('onboarding.logs.isolatedAgentEnabled', { path: isolatedAgentDir }), 'system');
         }
       }
 
       if (userType === 'existing') {
         switch (step) {
           case 'model': {
-            addLocalLog('🧠 正在驗證現有模型授權設定...', 'system');
-            if (!configPath) throw new Error('缺少 Config Path，無法驗證模型設定');
+            addLocalLog(t('onboarding.logs.verifyingExistingAuth'), 'system');
+            if (!configPath) throw new Error(t('onboarding.errors.configPathMissing'));
             if (CREDENTIALLESS_AUTH_CHOICES.has(selectedAuthChoice)) {
-              addLocalLog('ℹ️ 目前模型為免憑證模式，略過雙層憑證檢查。', 'system');
+              addLocalLog(t('onboarding.logs.credentiallessSkip'), 'system');
               break;
             }
             if (DIRECT_MINIMAX_TOKEN_CHOICES.has(selectedAuthChoice)) {
@@ -567,12 +563,12 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             break;
           }
           case 'messaging': {
-            addLocalLog('📡 正在驗證現有通訊頻道設定...', 'system');
-            if (!configPath) throw new Error('缺少 Config Path，無法驗證頻道設定');
+            addLocalLog(t('onboarding.logs.verifyingExistingChannels'), 'system');
+            if (!configPath) throw new Error(t('onboarding.errors.configPathMissingForChannels'));
             const parsed = await readOpenClawConfig(configPath);
             const channels = parsed?.channels;
             const hasAnyChannel = channels && typeof channels === 'object' && Object.keys(channels).length > 0;
-            if (!hasAnyChannel) throw new Error('找不到可用的通訊頻道設定');
+            if (!hasAnyChannel) throw new Error(t('onboarding.errors.noChannelsConfigured'));
             const selectedPlatform = String(config.platform || '').trim().toLowerCase();
             if (selectedPlatform) {
               const selectedChannel = (channels as any)?.[selectedPlatform];
@@ -580,11 +576,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
                 !!selectedChannel &&
                 (typeof selectedChannel !== 'object' || Object.keys(selectedChannel).length > 0);
               if (!hasSelectedChannel) {
-                throw new Error(`目前選擇的通訊頻道未配置: ${selectedPlatform}`);
+                throw new Error(t('onboarding.errors.channelNotConfigured', { platform: selectedPlatform }));
               }
               // Verify enabled=true
               if (typeof selectedChannel === 'object' && selectedChannel.enabled === false) {
-                throw new Error(`通訊頻道 ${selectedPlatform} 已配置但 enabled=false，請先啟用或重新設定。`);
+                throw new Error(t('onboarding.errors.channelDisabled', { platform: selectedPlatform }));
               }
               // Verify token is non-empty (whatsapp/irc/signal/imessage don't need tokens, skip)
               const tokenlessChannels = new Set(['whatsapp', 'irc', 'signal', 'imessage']);
@@ -592,14 +588,14 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
                 const channelTokenKey = selectedPlatform === 'googlechat' ? 'webhookUrl' : 'botToken';
                 const storedToken = String(selectedChannel[channelTokenKey] || '').trim();
                 if (!storedToken) {
-                  addLocalLog(`⚠️ 通訊頻道 ${selectedPlatform} 的 ${channelTokenKey} 為空，可能尚未完成設定。`, 'stderr');
+                  addLocalLog(t('onboarding.logs.channelTokenEmpty', { platform: selectedPlatform, key: channelTokenKey }), 'stderr');
                 }
               }
             }
             break;
           }
           case 'launch': {
-            addLocalLog('🚀 啟動最終發射檢查程序 (Final Verification)...', 'system');
+            addLocalLog(t('onboarding.logs.finalVerification'), 'system');
             if (config.installDaemon) {
               await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
             } else {
@@ -608,19 +604,19 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
                 `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
               );
               if (!isCommandSuccess(versionRes)) {
-                throw new Error(versionRes.stderr || 'OpenClaw CLI 無法啟動');
+                throw new Error(versionRes.stderr || t('onboarding.errors.cliNotStarted'));
               }
-              addLocalLog('✅ OpenClaw CLI 可正常執行，Gateway 將於儀表板手動啟動。', 'system');
+              addLocalLog(t('onboarding.logs.cliReadyManualGateway'), 'system');
             }
             break;
           }
           case 'skills': {
-            addLocalLog('🛠️ 現有用戶技能設定維持不變。', 'system');
+            addLocalLog(t('onboarding.logs.existingSkillsNoChange'), 'system');
             break;
           }
         }
 
-        addLocalLog('✅ 執行順利完成。', 'system');
+        addLocalLog(t('onboarding.logs.executionSuccess'), 'system');
         setExecuting(false);
         return true;
       }
@@ -628,10 +624,10 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       // [Strategy Pattern]: New project behavior - executing physical CLI commands
       switch (step) {
         case 'model': {
-          addLocalLog(`🧠 正在對齊靈魂頻率 (${selectedAuthChoice})...`, 'system');
+          addLocalLog(t('onboarding.logs.aligningSoul', { choice: selectedAuthChoice }), 'system');
 
           if (oauthAuthChoices.has(selectedAuthChoice)) {
-            addLocalLog('🔐 OAuth 授權需要互動式模式，將開啟終端機與瀏覽器流程。', 'system');
+            addLocalLog(t('onboarding.logs.oauthInteractiveNeeded'), 'system');
             const oauthProviderMap: Record<string, { provider: string; method?: string }> = {
               'openai-codex': { provider: 'openai-codex', method: 'oauth' },
               'google-gemini-cli': { provider: 'google-gemini-cli', method: 'oauth' },
@@ -640,20 +636,20 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             };
             const oauthTarget = oauthProviderMap[selectedAuthChoice];
             if (!oauthTarget) {
-              throw new Error(`不支援的 OAuth 授權類型: ${selectedAuthChoice}`);
+              throw new Error(t('onboarding.errors.unsupportedOAuthType', { type: selectedAuthChoice }));
             }
 
             if (!configPath) {
-              throw new Error('找不到 Config Path，無法驗證 OAuth 授權狀態');
+              throw new Error(t('onboarding.errors.configPathMissingForOAuth'));
             }
 
-            addLocalLog(`🧹 啟動前清理殘留 OAuth 流程 (${oauthTarget.provider}/${oauthTarget.method || 'default'})...`, 'system');
+            addLocalLog(t('onboarding.logs.cleanupOAuth', { provider: oauthTarget.provider, method: oauthTarget.method || 'default' }), 'system');
             await (window as any).electronAPI.exec(
               `pkill -f ${shellQuote(`openclaw models auth login --provider ${oauthTarget.provider}`)} || true`,
             );
 
             if (selectedAuthChoice === 'openai-codex') {
-              addLocalLog('🧹 額外清理 OpenAI callback 埠 (127.0.0.1:1455)...', 'system');
+              addLocalLog(t('onboarding.logs.cleanupOpenAICallback'), 'system');
               await (window as any).electronAPI.exec(`lsof -nP -iTCP:1455 -sTCP:LISTEN -t | xargs -I{} kill -TERM {} 2>/dev/null || true`);
             }
 
@@ -661,23 +657,23 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             const methodFlag = oauthTarget.method ? ` --method ${shellQuote(oauthTarget.method)}` : '';
             const interactiveCmd = `${envPrefix}${execCmd} openclaw models auth login ${providerFlag}${methodFlag}`;
             const resRaw: any = await execInTerminal(interactiveCmd, {
-              title: 'OpenClaw OAuth 授權流程 (models auth login)',
+              title: t('onboarding.oauthTitle'),
               holdOpen: true,
               cwd: corePath
             });
             const code = resRaw.code ?? resRaw.exitCode;
             if (typeof code === 'number' && code !== 0) {
-              throw new Error(resRaw.stderr || 'OAuth 授權失敗');
+              throw new Error(resRaw.stderr || t('onboarding.errors.oauthFailed'));
             }
 
-            addLocalLog('🌐 已啟動 OAuth 流程，等待授權完成...', 'system');
+            addLocalLog(t('onboarding.logs.oauthStarted'), 'system');
             const oauthDone = await waitForOAuthCompletion({
               authChoice: selectedAuthChoice,
               configPath,
               addLocalLog,
             });
             if (!oauthDone) {
-              throw new Error('OAuth 授權逾時或未完成，請在彈出的終端機完成登入後重試');
+              throw new Error(t('onboarding.errors.oauthTimeout'));
             }
 
             await verifyDualLayerAuthPersistence({
@@ -685,18 +681,18 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               configPath,
               addLocalLog,
             });
-            addLocalLog('✅ OAuth 授權已完成，已寫入核心設定。', 'system');
+            addLocalLog(t('onboarding.logs.oauthCompleted'), 'system');
             break;
           }
 
           const sanitizedSecret = sanitizeSecret(config.apiKey || '');
           const secretChanged = Boolean(config.apiKey) && sanitizedSecret !== String(config.apiKey || '');
           if (secretChanged) {
-            addLocalLog('ℹ️ 偵測到授權字串包含空白，已自動移除空白字元再寫入。', 'system');
+            addLocalLog(t('onboarding.logs.whitespaceRemoved'), 'system');
           }
 
           if (selectedAuthChoice === 'token' && !sanitizedSecret) {
-            throw new Error('缺少 Setup-Token，請先貼上由 claude setup-token 產生的 Token');
+            throw new Error(t('onboarding.errors.setupTokenMissing'));
           }
 
           const addProfilePayload = {
@@ -708,7 +704,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           };
           const addProfileRes = await (window as any).electronAPI.exec(`auth:add-profile ${JSON.stringify(addProfilePayload)}`);
           if (!isCommandSuccess(addProfileRes)) {
-            throw new Error(addProfileRes.stderr || '核心授權失敗');
+            throw new Error(addProfileRes.stderr || t('onboarding.errors.coreAuthFailed'));
           }
 
           // New version of OpenClaw has removed `openclaw auth set`.
@@ -716,7 +712,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           // and finally verified via dual-layer check for global/agent consistency.
 
           if (!configPath) {
-            throw new Error('缺少 Config Path，無法驗證授權寫入結果');
+            throw new Error(t('onboarding.errors.configPathMissingForVerification'));
           }
 
           if (DIRECT_MINIMAX_TOKEN_CHOICES.has(selectedAuthChoice)) {
@@ -737,7 +733,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         }
 
         case 'messaging': {
-          addLocalLog(`📡 正在封裝通訊波段 (${config.platform})...`, 'system');
+          addLocalLog(t('onboarding.logs.aligningChannels', { platform: config.platform }), 'system');
           const rawPlatform = (config.platform || '').trim().toLowerCase();
           const platformCanonicalMap: Record<string, string> = {
             tg: 'telegram',
@@ -748,7 +744,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           };
           const platform = platformCanonicalMap[rawPlatform] || rawPlatform;
           if (rawPlatform && rawPlatform !== platform) {
-            addLocalLog(`ℹ️ Channel ID ${rawPlatform} 已正規化為 ${platform}。`, 'system');
+            addLocalLog(t('onboarding.logs.channelNormalized', { raw: rawPlatform, canonical: platform }), 'system');
           }
 
           let channelFlags = '';
@@ -787,9 +783,9 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               const enableChannelCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.enabled true --json`;
               const enableRes = await (window as any).electronAPI.exec(enableChannelCmd);
               if (!isCommandSuccess(enableRes)) {
-                addLocalLog(`⚠️ 無法預先啟用 channels.${platform}.enabled=true，將直接嘗試綁定頻道。`, 'stderr');
+                addLocalLog(t('onboarding.logs.enableChannelFailed', { platform }), 'stderr');
               } else {
-                addLocalLog(`✅ 已啟用 channels.${platform}.enabled=true`, 'system');
+                addLocalLog(t('onboarding.logs.channelEnabled', { platform }), 'system');
               }
             }
 
@@ -799,7 +795,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           for (let i = 0; i < candidates.length; i++) {
             const channelId = candidates[i];
             if (!/^[a-z0-9-]+$/i.test(channelId)) {
-              lastErr = `不安全的 channel id: ${channelId}`;
+              lastErr = t('onboarding.errors.unsafeChannelId', { id: channelId });
               break;
             }
             const channelCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw channels add --channel ${shellQuote(channelId)} ${channelFlags}`;
@@ -807,7 +803,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             if (isCommandSuccess(res)) {
               success = true;
               if (channelId !== platform) {
-                addLocalLog(`ℹ️ 偵測到舊版 Channel ID，相容回退為 ${channelId}。`, 'system');
+                addLocalLog(t('onboarding.logs.legacyChannelFallback', { id: channelId }), 'system');
               }
               break;
             }
@@ -817,14 +813,14 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               const stderrText = shortenText(String(res?.stderr || ''));
               const stdoutText = shortenText(String(res?.stdout || ''));
               const detailErr = stderrText || stdoutText || errText;
-              lastErr = detailErr || '頻道繫結失敗';
+              lastErr = detailErr || t('onboarding.errors.channelBindingFailed');
               lastAttemptSummary = `channel=${channelId}, exitCode=${String(exitCode ?? 'unknown')}`;
-              addLocalLog(`⚠️ channels add 失敗 (${lastAttemptSummary})`, 'stderr');
+              addLocalLog(t('onboarding.logs.channelAddFailed', { summary: lastAttemptSummary }), 'stderr');
               if (stderrText) addLocalLog(`stderr: ${stderrText}`, 'stderr');
               if (stdoutText && stdoutText !== stderrText) addLocalLog(`stdout: ${stdoutText}`, 'stderr');
               const unknownChannel = /unknown channel/i.test(detailErr);
             if (unknownChannel && i < candidates.length - 1) {
-              addLocalLog(`↻ Channel ID ${channelId} 不被支援，嘗試相容別名...`, 'system');
+              addLocalLog(t('onboarding.logs.unsupportedChannelRetry', { id: channelId }), 'system');
               continue;
             }
             break;
@@ -841,16 +837,16 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             const directKey = directConfigKeyMap[platform];
             const hadUnknownChannel = /unknown channel/i.test(lastErr || '');
             if (directKey && hadUnknownChannel) {
-              addLocalLog(`⚠️ channels add 遭遇 plugin registry 問題（Unknown channel），改以 config set 直接寫入...`, 'system');
+              addLocalLog(t('onboarding.logs.pluginRegistryFallback'), 'system');
               const safeToken = shellQuote(JSON.stringify(config.botToken));
               const configSetCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.${directKey} ${safeToken} --json`;
               const configSetRes = await (window as any).electronAPI.exec(configSetCmd);
               if (isCommandSuccess(configSetRes)) {
                 success = true;
-                addLocalLog(`✅ 已透過 config set 直接寫入 channels.${platform}.${directKey}（繞過 plugin registry 問題）`, 'system');
+                addLocalLog(t('onboarding.logs.configSetDirectSuccess', { platform, key: directKey }), 'system');
               } else {
                 const fbErr = shortenText(String(configSetRes?.stderr || configSetRes?.stdout || ''));
-                if (fbErr) addLocalLog(`config-set fallback 失敗 stderr: ${fbErr}`, 'stderr');
+                if (fbErr) addLocalLog(t('onboarding.logs.configSetFallbackFailed', { err: fbErr }), 'stderr');
                 lastErr = fbErr || lastErr;
                 lastAttemptSummary += ' (config-set-fallback-failed)';
               }
@@ -863,35 +859,33 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               const unknownId = unknownMsg[1];
               throw new Error(
                 [
-                  `目前 OpenClaw 不支援 channel: ${unknownId}。`,
-                  `請確認 Core Path 指向正確且可用的 OpenClaw（目前：${corePath}），並先在該目錄執行：pnpm openclaw channels add --help 檢查支援清單。`,
-                  '若清單沒有 telegram，代表該安裝版本尚未支援 Telegram，需切換/升級 OpenClaw。',
-                  `最後一次嘗試：${lastAttemptSummary || 'unknown'}`,
-                  `CLI 原始錯誤：${lastErr || 'unknown channel'}`
+                  t('onboarding.errors.unsupportedChannelDeep', { id: unknownId, path: corePath }),
+                  t('onboarding.errors.lastAttempt', { summary: lastAttemptSummary || 'unknown' }),
+                  t('onboarding.errors.cliError', { err: lastErr || 'unknown channel' })
                 ].join(' ')
               );
             }
             throw new Error(
               [
-                '頻道繫結失敗。',
-                `最後一次嘗試：${lastAttemptSummary || 'unknown'}`,
-                `CLI 原始錯誤：${lastErr || 'no stderr/stdout returned'}`
+                t('onboarding.errors.channelBindingFailedShort'),
+                t('onboarding.errors.lastAttempt', { summary: lastAttemptSummary || 'unknown' }),
+                t('onboarding.errors.cliError', { err: lastErr || 'no stderr/stdout returned' })
               ].join(' ')
             );
           }
 
           const channelsRequireSafeGroupDefault = new Set(['whatsapp', 'irc', 'signal', 'imessage']);
           if (channelsRequireSafeGroupDefault.has(platform)) {
-            addLocalLog(`🛡️ 套用 ${platform} 群組授權預設策略 (groupPolicy=open)...`, 'system');
+            addLocalLog(t('onboarding.logs.applyingGroupPolicy', { platform }), 'system');
             const setPolicyCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.groupPolicy ${shellQuote('"open"')} --json`;
             const setPolicyRes = await (window as any).electronAPI.exec(setPolicyCmd);
             if (!isCommandSuccess(setPolicyRes)) {
               addLocalLog(
-                `⚠️ 無法自動套用 ${platform}.groupPolicy=open，將改由 doctor 前置檢查攔截。`,
+                t('onboarding.logs.applyGroupPolicyFailed', { platform }),
                 'stderr',
               );
             } else {
-              addLocalLog(`✅ 已套用 channels.${platform}.groupPolicy="open"。`, 'system');
+              addLocalLog(t('onboarding.logs.groupPolicyApplied', { platform }), 'system');
             }
           }
 
@@ -908,50 +902,50 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         case 'skills': {
           const selectedSkills = config.enabledSkills || [];
           if (selectedSkills.length === 0) {
-            addLocalLog('✨ 無需啟用額外技能。', 'system');
+            addLocalLog(t('onboarding.logs.noSkillsNeeded'), 'system');
             setExecuting(false);
             return true;
           }
-          addLocalLog(`🛠️ 正在啟用技能設定 (${selectedSkills.length} 項模組)...`, 'system');
+          addLocalLog(t('onboarding.logs.enablingSkills', { count: selectedSkills.length }), 'system');
 
           for (const skillId of selectedSkills) {
-            addLocalLog(`> 正在啟用: ${skillId}...`, "system");
+            addLocalLog(t('onboarding.logs.enablingSkill', { id: skillId }), "system");
             if (!/^[a-z0-9_-]+$/i.test(skillId)) {
-              addLocalLog(`⚠️ 跳過不安全的技能 ID: ${skillId}`, 'stderr');
+              addLocalLog(t('onboarding.logs.unsafeSkillId', { id: skillId }), 'stderr');
               continue;
             }
             const cmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set skills.entries.${skillId}.enabled true`;
             const res = await (window as any).electronAPI.exec(cmd);
             if (!isCommandSuccess(res)) {
-              addLocalLog(`⚠️ 模組 ${skillId} 啟用回報異常: ${res.stderr}`, "stderr");
+              addLocalLog(t('onboarding.logs.skillEnableFailed', { id: skillId, err: res.stderr }), "stderr");
             }
           }
           break;
         }
 
         case 'launch': {
-          addLocalLog(`🚀 啟動最終發射檢查程序 (Final Verification)...`, 'system');
+          addLocalLog(t('onboarding.logs.finalVerification'), 'system');
 
           // The final step doesn't install a daemon; Gateway is manually started from the dashboard.
-          addLocalLog('ℹ️ 已停用 daemon 安裝流程，Gateway 將於儀表板手動啟動。', 'system');
+          addLocalLog(t('onboarding.logs.daemonDisabled'), 'system');
           const versionRes = await (window as any).electronAPI.exec(
             `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
           );
           if (!isCommandSuccess(versionRes)) {
-            throw new Error(versionRes.stderr || 'OpenClaw CLI 無法啟動');
+            throw new Error(versionRes.stderr || t('onboarding.errors.cliNotStarted'));
           }
-          addLocalLog('✅ OpenClaw CLI 可正常執行，請於儀表板手動啟動 Gateway。', 'system');
+          addLocalLog(t('onboarding.logs.cliReadyManualGateway'), 'system');
           break;
         }
       }
 
-      addLocalLog('✅ 執行順利完成。', 'system');
+      addLocalLog(t('onboarding.logs.executionSuccess'), 'system');
       setExecuting(false);
       return true;
 
     } catch (err: any) {
       setError(err.message);
-      addLocalLog(`❌ 執行回報異常: ${err.message}`, 'stderr');
+      addLocalLog(t('onboarding.logs.executionException', { msg: err.message }), 'stderr');
       setExecuting(false);
       return false;
     }

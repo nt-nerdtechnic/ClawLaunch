@@ -211,61 +211,61 @@ function App() {
     {
       id: 'anthropic', label: 'Anthropic', icon: <Brain size={13} />,
       choices: [
-        { id: 'apiKey', name: 'API Key', desc: 'Anthropic 官方密鑰', reqKey: true },
-        { id: 'token', name: 'Setup Token', desc: 'CLI 產生的 Setup-Token', reqKey: true },
+        { id: 'apiKey', name: 'API Key', desc: t('runtime.providers.anthropic.desc'), reqKey: true },
+        { id: 'token', name: 'Setup Token', desc: t('runtime.providers.anthropicCli.desc'), reqKey: true },
       ],
     },
     {
       id: 'openai', label: 'OpenAI', icon: <Cpu size={13} />,
       choices: [
-        { id: 'openai-api-key', name: 'API Key', desc: 'OpenAI sk-... 密鑰', reqKey: true },
-        { id: 'openai-codex', name: 'Codex OAuth', desc: '瀏覽器登入授權，無須 Key', reqKey: false, oauthFlow: true },
+        { id: 'openai-api-key', name: 'API Key', desc: t('runtime.providers.openai.desc'), reqKey: true },
+        { id: 'openai-codex', name: 'Codex OAuth', desc: t('runtime.providers.openaiCodex.desc'), reqKey: false, oauthFlow: true },
       ],
     },
     {
       id: 'google', label: 'Google', icon: <Globe size={13} />,
       choices: [
-        { id: 'gemini-api-key', name: 'API Key', desc: 'AIzaSy... Gemini 密鑰', reqKey: true },
-        { id: 'google-gemini-cli', name: 'Gemini OAuth', desc: 'CLI OAuth 非官方授權', reqKey: false, oauthFlow: true },
+        { id: 'gemini-api-key', name: 'API Key', desc: t('runtime.providers.gemini.desc'), reqKey: true },
+        { id: 'google-gemini-cli', name: 'Gemini OAuth', desc: t('runtime.providers.geminiCli.desc'), reqKey: false, oauthFlow: true },
       ],
     },
     {
       id: 'openrouter', label: 'OpenRouter', icon: <Globe size={13} />,
       choices: [
-        { id: 'openrouter-api-key', name: 'API Key', desc: 'OpenRouter 統一閘道密鑰', reqKey: true },
+        { id: 'openrouter-api-key', name: 'API Key', desc: t('runtime.providers.openrouter.desc'), reqKey: true },
       ],
     },
     {
       id: 'minimax', label: 'MiniMax', icon: <Zap size={13} />,
       choices: [
-        { id: 'minimax-api', name: 'API Key', desc: 'MiniMax 官方密鑰', reqKey: true },
-        { id: 'minimax-coding-plan-global-token', name: 'Coding Plan Token (Global)', desc: '貼上平台 Token，無需 OAuth 瀏覽器流程', reqKey: true },
-        { id: 'minimax-coding-plan-cn-token', name: 'Coding Plan Token (CN)', desc: '貼上中國區平台 Token，無需 OAuth 瀏覽器流程', reqKey: true },
+        { id: 'minimax-api', name: 'API Key', desc: t('runtime.providers.minimax.desc'), reqKey: true },
+        { id: 'minimax-coding-plan-global-token', name: 'Coding Plan Token (Global)', desc: t('runtime.providers.minimaxOauthGlobal.desc'), reqKey: true },
+        { id: 'minimax-coding-plan-cn-token', name: 'Coding Plan Token (CN)', desc: t('runtime.providers.minimaxOauthCn.desc'), reqKey: true },
       ],
     },
     {
       id: 'moonshot', label: 'Moonshot', icon: <Zap size={13} />,
       choices: [
-        { id: 'moonshot-api-key', name: 'Kimi API Key', desc: 'Moonshot 平台密鑰', reqKey: true },
+        { id: 'moonshot-api-key', name: 'Kimi API Key', desc: t('runtime.providers.moonshot.desc'), reqKey: true },
       ],
     },
     {
       id: 'xai', label: 'xAI', icon: <Cpu size={13} />,
       choices: [
-        { id: 'xai-api-key', name: 'Grok API Key', desc: 'xAI 平台密鑰', reqKey: true },
+        { id: 'xai-api-key', name: 'Grok API Key', desc: t('runtime.providers.xai.desc'), reqKey: true },
       ],
     },
     {
       id: 'chutes', label: 'Chutes', icon: <Network size={13} />,
       choices: [
-        { id: 'chutes', name: 'OAuth', desc: 'Chutes 去中心化平台授權', reqKey: false, oauthFlow: true },
+        { id: 'chutes', name: 'OAuth', desc: t('runtime.providers.chutes.desc'), reqKey: false, oauthFlow: true },
       ],
     },
     {
       id: 'local', label: 'Local', icon: <Database size={13} />,
       choices: [
-        { id: 'ollama', name: 'Ollama', desc: '本地 11434 端口，隱私至上', reqKey: false },
-        { id: 'vllm', name: 'vLLM', desc: '自定義本地伺服器', reqKey: false },
+        { id: 'ollama', name: 'Ollama', desc: t('runtime.providers.ollama.desc'), reqKey: false },
+        { id: 'vllm', name: 'vLLM', desc: t('runtime.providers.vllm.desc'), reqKey: false },
       ],
     },
   ];
@@ -487,15 +487,15 @@ function App() {
 
   const handleConfirmStopService = async () => {
     setStoppingServiceWithCleanup(true);
-    setStopServiceActionMessage('正在關閉相關進程與終端機視窗，請稍候...');
+    setStopServiceActionMessage(t('app.stopService.stopping'));
     try {
       await stopGateway({ killTerminalAndPortHolders: true });
-      setStopServiceActionMessage('已停止服務並完成清理。');
+      setStopServiceActionMessage(t('app.stopService.stopped'));
       window.setTimeout(() => {
         closeStopServiceModal();
       }, 350);
     } catch (e: any) {
-      setStopServiceActionMessage(`停止服務失敗：${e?.message || e}`);
+      setStopServiceActionMessage(t('app.stopService.failed', { msg: e?.message || e }));
     } finally {
       setStoppingServiceWithCleanup(false);
     }
@@ -524,7 +524,7 @@ function App() {
     if (running && config.corePath && window.electronAPI) {
       const hasConfigIsolation = !!config.configPath?.trim();
       if (!hasConfigIsolation) {
-        addLog('錯誤: 未設定 Config Path，為避免誤停其他並行服務，本次重設不會主動停止 Gateway。', 'stderr');
+        addLog(t('logs.noConfigPathReset'), 'stderr');
       } else {
         await stopGateway({ killTerminalAndPortHolders: true });
       }
@@ -686,7 +686,7 @@ function App() {
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">Gateway Port 已被占用</h3>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">{t('app.gatewayConflict.title')}</h3>
                   <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                     {gatewayConflictModal.message}
                   </p>
@@ -710,14 +710,14 @@ function App() {
                     onClick={() => setActiveTab('launcherSettings')}
                     className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
                   >
-                    前往設定修改 Port
+                    {t('app.gatewayConflict.goToSettings')}
                   </button>
                   <button
                     onClick={handleKillGatewayPortHolder}
                     disabled={killingGatewayPortHolder}
                     className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/25 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {killingGatewayPortHolder ? '處理中...' : '強制關閉該程序'}
+                    {killingGatewayPortHolder ? t('app.gatewayConflict.killing') : t('app.gatewayConflict.forceClose')}
                   </button>
                 </div>
               </div>
@@ -740,9 +740,9 @@ function App() {
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">停止服務並清理終端機</h3>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">{t('app.stopService.title')}</h3>
                   <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                    將先終止相關 Gateway 進程，再關閉已開啟的 Gateway 終端機視窗，最後切回「啟動服務」。
+                    {t('app.stopService.desc')}
                   </p>
                 </div>
 
@@ -758,14 +758,14 @@ function App() {
                     disabled={stoppingServiceWithCleanup}
                     className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    取消
+                    {t('common.labels.cancel')}
                   </button>
                   <button
                     onClick={handleConfirmStopService}
                     disabled={stoppingServiceWithCleanup}
                     className="flex-1 px-6 py-3.5 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/25 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {stoppingServiceWithCleanup ? '處理中...' : '停止並清理'}
+                    {stoppingServiceWithCleanup ? t('app.stopService.stopping') : t('app.stopService.stopped')}
                   </button>
                 </div>
               </div>
@@ -787,16 +787,16 @@ function App() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-black text-amber-800 dark:text-amber-300 uppercase tracking-widest">
-                    工作空間設定異常
+                    {t('app.workspace.error')}
                   </div>
                   <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
                     {missing.length > 0 && (
-                      <span>以下路徑尚未設定：<span className="font-bold">{missing.join('、')}</span>。</span>
+                      <span>{t('app.workspace.missingPaths', { paths: missing.join(t('common.punctuation.comma', '、')) })}</span>
                     )}
                     {hasPathError && (
                       <span className={missing.length > 0 ? ' ' : ''}>{runtimeProfileError}</span>
                     )}
-                    {' '}若路徑已填入仍出現此提示，請重新執行設定或返回引導流程。
+                    {' '}{t('app.workspace.reRunWizard')}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col gap-2">
@@ -805,14 +805,14 @@ function App() {
                     onClick={() => setActiveTab('launcherSettings')}
                     className="rounded-xl border border-amber-400 bg-amber-100 px-3 py-1.5 text-[11px] font-black text-amber-800 hover:bg-amber-200 transition-colors dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50"
                   >
-                    進行設定
+                    {t('app.workspace.fixInSettings')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowLogoutConfirm(true)}
                     className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-700 hover:bg-rose-100 transition-colors dark:border-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
                   >
-                    重新登出
+                    {t('app.workspace.reLogout')}
                   </button>
                 </div>
               </div>
@@ -834,7 +834,7 @@ function App() {
             <MonitorPage
               running={running}
               onToggleGateway={handleToggleGatewayWithStopModal}
-              onOpenRuntimeSettings={() => setActiveTab('runtimeSettings')}
+              onNavigate={(p: any) => setActiveTab(p)}
               config={config}
               resolvedConfigDir={resolvedConfigDir}
               snapshot={snapshot}

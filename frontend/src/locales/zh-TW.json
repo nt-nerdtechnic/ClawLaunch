@@ -26,7 +26,27 @@
       "runtimeSettings": "openclaw.json 配置"
     },
     "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
-    "logoutTooltip": "登出並重新設定"
+    "logoutTooltip": "登出並重新設定",
+    "gatewayConflict": {
+      "title": "Gateway Port 已被占用",
+      "goToSettings": "前往設定修改 Port",
+      "forceClose": "強制關閉該程序",
+      "killing": "處理中..."
+    },
+    "stopService": {
+      "title": "停止服務並清理終端機",
+      "desc": "將先終止相關 Gateway 進程，再關閉已開啟的 Gateway 終端機視窗，最後切回「啟動服務」。",
+      "stopping": "正在關閉相關進程與終端機視窗，請稍候...",
+      "stopped": "已停止服務並完成清理。",
+      "failed": "停止服務失敗：{{msg}}"
+    },
+    "workspace": {
+      "error": "工作空間設定異常",
+      "missingPaths": "以下路徑尚未設定：{{paths}}。",
+      "reRunWizard": "若路徑已填入仍出現此提示，請重新執行設定或返回引導流程。",
+      "fixInSettings": "進行設定",
+      "reLogout": "重新登出"
+    }
   },
   "controlCenter": {
     "kpi": {
@@ -35,7 +55,11 @@
       "projects": "專案數",
       "pendingQueue": "待介入",
       "pendingApprovals": "待審批",
-      "budgetRisk": "預算風險"
+      "budgetRisk": "預算風險",
+      "scheduledRuns": "24h 排程執行",
+      "successError": "成功 / 異常",
+      "devEvents": "24h 開發事件",
+      "activePending": "執行中 / 待辦"
     },
     "actions": {
       "refresh": "重新整理",
@@ -98,7 +122,35 @@
     "errors": {
       "loadFailed": "控制中心資料載入失敗",
       "mutationFailed": "控制中心操作失敗",
-      "tokenUpdateFailed": "Token 設定更新失敗"
+      "tokenUpdateFailed": "Token 設定更新失敗",
+      "genericLoadFailed": "載入失敗"
+    },
+    "timeline": {
+      "title": "作業時間軸",
+      "count": "{{count}} 項",
+      "tabs": {
+        "cron": "排程",
+        "task": "任務",
+        "observation": "觀察"
+      },
+      "scanBtn": "立即掃描 Agent 作業",
+      "empty": "尚無作業紀錄"
+    },
+    "services": {
+      "title": "系統服務",
+      "empty": "未偵測到系統服務"
+    },
+    "crontab": {
+      "title": "系統排程",
+      "count": "crontab · {{count}} 項",
+      "empty": "無 crontab 項目"
+    },
+    "cronJobs": {
+      "title": "應用排程",
+      "count": "OpenClaw · {{count}} 個",
+      "empty": "沒有排程任務",
+      "pause": "暫停",
+      "start": "啟動"
     }
   },
   "chat": {
@@ -117,7 +169,8 @@
     "fallbackLocal": "外部通訊斷線，已切換本機核心命令",
     "errorGeneric": "聊天請求失敗，請稍後重試",
     "unavailable": "目前環境無法呼叫聊天 IPC",
-    "coreRequired": "核心尚未啟動，請先啟動 Gateway（Core）再送出對話"
+    "coreRequired": "核心尚未啟動，請先啟動 Gateway（Core）再送出對話",
+    "inputHint": "Enter 送出，Shift+Enter 換行"
   },
   "monitor": {
     "gatewayTitle": "Gateway 通訊中樞",
@@ -280,8 +333,16 @@
         "budgetRisk": "Budget 風險",
         "budgetRiskDesc": "Over {{over}} / Warn {{warn}}。",
         "allClear": "目前無高優先告警",
-        "allClearDesc": "系統指標平穩，可持續觀察。"
+        "allClearDesc": "系統指標平穩，可持續觀察。",
+        "taskBlockedByHeartbeat": "任務心跳超時",
+        "taskBlockedByHeartbeatDesc": "有 {{count}} 筆任務因長時間未更新被標記為 blocked。"
       }
+    },
+    "access": {
+      "title": "OpenClaw Access 未設定",
+      "desc": "偵測到 Gateway 回報 access 尚未配置。請先到 Runtime 設定補齊 `Config Path` 與授權設定，之後再啟動服務。",
+      "goToRuntime": "前往 Runtime 設定",
+      "openConfigDir": "打開 Config 目錄"
     }
   },
   "settings": {
@@ -308,9 +369,27 @@
     "checkUpdateChecking": "檢查中...",
     "checkUpdateUpToDate": "已是最新版本",
     "checkUpdateNoReleases": "尚未發布任何版本",
-    "checkUpdateAvailable": "有新版本可用",
+    "checkUpdateAvailable": "有新版本可用: {{version}}",
     "checkUpdateDownload": "前往下載",
-    "checkUpdateError": "無法檢查更新"
+    "checkUpdateError": "無法檢查更新",
+    "autoRestartGatewayTitle": "自動重啟 Gateway（崩潰時）",
+    "autoRestartGatewayDesc": "套用於非 daemon 模式；異常退出時會依啟動模式進行自動重啟。",
+    "diag": {
+      "title": "快捷診斷工具",
+      "terminalHelp": "以下指令將在獨立 Terminal 視窗中執行，完成後按 Enter 關閉。"
+    },
+    "auth": {
+      "removeTitle": "移除授權",
+      "oauthFlow": "OAuth 流程",
+      "oauthGuide": "無須輸入密鑰。點擊「新增授權」後將自動啟動瀏覽器 OAuth 授權流程。",
+      "noKeyRequired": "無須密鑰",
+      "localServiceGuide": "此本地服務直接新增即可，無須 API 密鑰。",
+      "restoreSaved": "點擊還原為已儲存值：{{val}}",
+      "modifiedUnsaved": "已修改，未儲存"
+    },
+    "gateway": {
+      "portHelp": "寫入 openclaw.json 的 gateway.port，Gateway 啟動時使用此端口。留空則使用 openclaw 預設值。"
+    }
   },
   "logs": {
     "autoDetectSuccess": ">>> 自動偵測完成: 已連結至機甲核心",
@@ -325,7 +404,27 @@
     "savingConfig": ">>> 正在保存配置...",
     "configSaved": ">>> 配置已成功保存到本地磁碟",
     "saveConfigFailed": "誤差: 保存配置失敗 - {{msg}}",
-    "commFailed": "誤差: 通訊失敗 - {{msg}}"
+    "commFailed": "誤差: 通訊失敗 - {{msg}}",
+    "errors": {
+      "missingCorePath": "錯誤: 尚未設定 Core Path，請至「配置編輯」填入 OpenClaw 主核心區絕對路徑後再試。",
+      "missingConfigPath": "錯誤: 未設定 Config Path，無法安全識別目標實例，拒絕停止以避免誤停其他並行服務。",
+      "killPortError": "關閉 Port {{port}} 相關程序時發生錯誤：{{msg}}",
+      "portOccupied": "錯誤: 啟動前檢查到 Port {{port}} 已被占用，請在 openclaw.json 配置頁面改用其他 Gateway Port。",
+      "corePathNotExist": "錯誤: Core Path 目錄不存在：{{path}}",
+      "watchdogFailed": "watchdog 設定失敗：{{msg}}",
+      "portNotListen": "目標埠未進入 LISTEN 狀態",
+      "portKillFailed": "無法關閉 Port {{port}} 的占用程序",
+      "portKillError": "關閉 Port {{port}} 相關程序時發生錯誤"
+    },
+    "warnings": {
+      "missingConfigPath": "警告: 未設定 Config Path，Gateway 將使用預設 ~/.openclaw 設定。若同時執行多個 OpenClaw 實例，可能導致設定衝突。建議在「Launcher 設定」中明確指定 Config Path。"
+    },
+    "portKilled": "已先行關閉 Port {{port}} 相關程序（PID: {{pids}}）",
+    "watchdogEnabled": "已啟用外部 Terminal 模式 Gateway watchdog（HTTP 健康檢查 + 自動重啟）",
+    "watchdogDisabled": "外部 Terminal 模式 watchdog 已停用（依設定）",
+    "portForceKilled": "已強制關閉 Port {{port}} 相關程序（PID: {{pids}}）{{suffix}}",
+    "portKillAttempted": "已嘗試強制關閉 Port {{port}} 相關程序。",
+    "partialKillFailed": "，但仍有部分 PID 關閉失敗。"
   },
   "wizard": {
     "steps": {
@@ -904,5 +1003,414 @@
       "title": "System Update Core Logs",
       "start": "🚀 啟動系統更新程序..."
     }
+  },
+  "auth": {
+    "errors": {
+      "loadProfilesFailed": "讀取授權清單失敗",
+      "missingCorePath": "缺少 Core Path，無法啟動完整導引",
+      "missingConfigPath": "缺少 Config Path，無法啟動完整導引",
+      "addAuthMissingConfig": "缺少 Config Path，無法新增授權",
+      "addAuthMissingCore": "缺少 Core Path，無法新增授權",
+      "credentialRequired": "此授權方式需要輸入憑證",
+      "emptyCommand": "請先輸入要執行的指令",
+      "commandExecError": "執行指令時發生錯誤",
+      "removeFailed": "移除授權失敗",
+      "addFailed": "新增授權失敗",
+      "onboardFailed": "啟動完整導引失敗",
+      "onboardLaunched": "已啟動完整導引，完成後可回設定頁刷新授權清單。"
+    }
+  },
+  "runtime": {
+    "errors": {
+      "missingConfigPath": "尚未設定 Config Path，無法讀取 openclaw.json。",
+      "configNotFound": "找不到 openclaw.json：已搜尋 {{path}}，均不存在或無法讀取。",
+      "loadDynamicModelsFailed": "讀取動態模型清單失敗",
+      "missingCorePathAction": "缺少 Core Path，無法更新 OpenClaw 動態設定",
+      "missingConfigPathAction": "缺少 Config Path，無法更新 OpenClaw 動態設定",
+      "invalidPort": "Gateway Port 格式不正確，請填入正整數或留空（移除設定）。",
+      "emptyModel": "Model 不能是空值",
+      "unauthorizedModel": "所選模型與目前授權 provider 不相符，請改用授權清單中的模型。",
+      "updateModelFailed": "更新模型設定失敗",
+      "updateTokenFailed": "更新 Telegram Bot Token 失敗",
+      "updatePortFailed": "更新 Gateway Port 失敗",
+      "saveLauncherFailed": "保存 Launcher 設定失敗",
+      "workspaceNotFound": "警告: Workspace Path 目錄不存在：{{path}}。儲存將繼續，但請確認路徑正確。",
+      "configApplied": ">>> Runtime 設定已寫入 openclaw.json。",
+      "doctorFailed": "啟動 doctor 診斷失敗：{{msg}}",
+      "securityAuditFailed": "啟動資安稽核失敗：{{msg}}",
+      "missingCorePathToken": "缺少 Core Path，無法更新通道 Token。",
+      "missingConfigPathToken": "缺少 Config Path，無法更新通道 Token。",
+      "updateChannelTokenFailed": "更新 {{channel}} Token 失敗：{{msg}}"
+    },
+    "auth": {
+      "management": "認證管理",
+      "loadingProfiles": "加載授權清單...",
+      "profileStats": "已配置 {{total}} 個授權，其中 {{healthy}} 個健康",
+      "repairNeeded": "需要修復",
+      "removeAuth": "移除授權",
+      "addAuth": "新增授權",
+      "selectProvider": "選擇 Provider",
+      "verifyMethod": "驗證方式",
+      "credentials": "憑證",
+      "getApiKey": "取得密鑰 ↗",
+      "inputKey": "輸入密鑰",
+      "tokenCmdLabel": "Token 產生指令",
+      "tokenCmdHelp": "在新終端機視窗中執行上述指令，取得 Token 後貼入上方欄位。",
+      "oauthDesc": "無須輸入密鑰。點擊「新增授權」後將自動啟動瀏覽器 OAuth 授權流程。",
+      "localSvcDesc": "此本地服務直接新增即可，無需 API 密鑰。"
+    },
+    "diag": {
+      "title": "快捷診斷工具",
+      "desc": "以下指令將在獨立 Terminal 視窗中執行，完成後按 Enter 關閉。",
+      "securityAudit": "資安稽核（自動修復）"
+    },
+    "providers": {
+      "telegram": {
+        "desc": "透過 Bot 接收與傳送訊息",
+        "placeholder": "輸入 Telegram Bot Token"
+      },
+      "whatsapp": {
+        "desc": "官方 Business API 整合"
+      },
+      "discord": {
+        "desc": "伺服器 Bot 整合",
+        "placeholder": "輸入 Discord Bot Token"
+      },
+      "irc": {
+        "desc": "舊式聊天室協議串接"
+      },
+      "googlechat": {
+        "desc": "Google Workspace 訊息整合",
+        "placeholder": "輸入 Webhook URL"
+      },
+      "slack": {
+        "desc": "工作區 Bot 整合",
+        "placeholder": "輸入 Slack Bot Token（xoxb-...）"
+      },
+      "signal": {
+        "desc": "高加密私訊（手機號碼關聯）"
+      },
+      "imessage": {
+        "desc": "Apple ID 原生整合"
+      },
+      "line": {
+        "desc": "Channel Access Token 整合",
+        "placeholder": "輸入 LINE Channel Access Token"
+      },
+      "anthropic": {
+        "desc": "Anthropic 官方密鑰"
+      },
+      "anthropicCli": {
+        "desc": "CLI 指令產生的驗證 Token",
+        "help": "執行下方指令後，將產生的 Token 貼入欄位中。",
+        "placeholder": "claude setup-token 後取得的 Token"
+      },
+      "openai": {
+        "desc": "OpenAI sk-... 密鑰"
+      },
+      "openaiCodex": {
+        "desc": "瀏覽器 OAuth 授權，無須 Key"
+      },
+      "gemini": {
+        "desc": "Gemini 官方密鑰"
+      },
+      "geminiCli": {
+        "desc": "CLI OAuth 非官方授權"
+      },
+      "openrouter": {
+        "desc": "OpenRouter 統一閘道密鑰"
+      },
+      "minimax": {
+        "desc": "MiniMax 官方密鑰"
+      },
+      "minimaxOauthGlobal": {
+        "desc": "全球區平台 Token"
+      },
+      "minimaxOauthCn": {
+        "desc": "中國區平台 Token"
+      },
+      "moonshot": {
+        "desc": "Moonshot 平台密鑰"
+      },
+      "xai": {
+        "desc": "xAI 平台密鑰"
+      },
+      "chutes": {
+        "desc": "去中心化平台授權，無須 Key"
+      },
+      "ollama": {
+        "desc": "本地 Ollama 服務，無須密鑰"
+      },
+      "vllm": {
+        "desc": "自定義本地伺服器"
+      },
+      "qwen": {
+        "desc": "Qwen 通義千問密鑰"
+      }
+    },
+    "actions": {
+      "onboardTitle": "OpenClaw 完整授權導引",
+      "doctorMissingCore": "缺少 Core Path，無法執行 doctor 診斷。",
+      "doctorTitle": "OpenClaw Doctor — 系統診斷（--fix）",
+      "doctorStarted": "已啟動 openclaw doctor --fix 診斷視窗。",
+      "doctorFailed": "啟動 doctor 診斷失敗：{{msg}}",
+      "auditMissingCore": "缺少 Core Path，無法執行資安稽核。",
+      "auditTitle": "OpenClaw 資安稽核 (security audit --fix --deep)",
+      "auditStarted": "已啟動資安稽核視窗（--fix 自動收緊設定，--deep 探測 Gateway）。",
+      "auditFailed": "啟動資安稽核失敗：{{msg}}",
+      "authRemoved": "已取消授權：{{id}}",
+      "authAdded": "新增授權成功：{{choice}}",
+      "tokenAuthTitle": "Claude Token 授權流程",
+      "channelTokenUpdated": ">>> {{id}} Bot Token 已更新。",
+      "terminalWaitMsg": "程序結束。按 Enter 鍵關閉視窗..."
+    }
+  },
+  "main": {
+    "dialogs": {
+      "configPathConflict": {
+        "title": "Config Path 衝突警告",
+        "message": "另一個 NT-ClawLaunch 實例（PID {{pid}}）已在使用此 Config Path：\n\n{{path}}\n\n多個實例共用同一 Config Path 可能導致 gateway 設定衝突。建議在「Launcher 設定」中為此視窗指定獨立的 Config Path。{{suggestion}}",
+        "suggestion": "\n\n建議改用路徑：\n{{path}}",
+        "ok": "知道了"
+      }
+    },
+    "shell": {
+      "terminal": {
+        "footer": "程序結束。\\n按 Enter 鍵關閉視窗..."
+      }
+    },
+    "activity": {
+      "task": {
+        "timeout": "{{title}} 超時未更新，已標記為 blocked。"
+      },
+      "approvals": {
+        "pending": "目前有 {{count}} 筆待審批。"
+      },
+      "errors": {
+        "summary": "Blocked {{blocked}} / Error {{error}}。"
+      },
+      "budget": {
+        "summary": "Over {{over}} / Warn {{warn}}。"
+      },
+      "risk": {
+        "noRisks": "目前未檢測到高優先風險事件。"
+      },
+      "skills": {
+        "created": "新技能建立",
+        "updated": "技能更新",
+        "codeAdded": "技能程式碼新增",
+        "codeModified": "技能程式碼修改"
+      },
+      "config": {
+        "changed": "設定檔變更"
+      },
+      "tasks": {
+        "updated": "任務清單更新"
+      },
+      "scripts": {
+        "created": "腳本建立",
+        "modified": "腳本修改"
+      },
+      "files": {
+        "createdDeleted": "檔案建立/刪除",
+        "modified": "檔案修改"
+      },
+      "agent": {
+        "exec": "執行指令",
+        "createSkillFile": "Agent 建立技能檔案",
+        "writeFile": "Agent 寫入檔案",
+        "modifySkill": "Agent 修改技能",
+        "editFile": "Agent 編輯檔案",
+        "webSearch": "網路搜尋",
+        "webScrape": "網路抓取"
+      },
+      "cron": {
+        "success": "排程執行成功",
+        "failure": "排程執行失敗"
+      }
+    },
+    "repair": {
+      "reauth": "重新執行授權流程，確保 agent/auth-profiles.json 有有效 token。",
+      "onboardSync": "目前只有 global profile，請執行一次 onboarding/auth set 同步 agent 層。",
+      "agentOnly": "目前只有 agent profile，請補齊 openclaw.json 的 auth.profiles。"
+    },
+    "ipc": {
+      "errors": {
+        "skillMissingMd": "錯誤：所選資料夾內缺少 SKILL.md，不是有效的技能。",
+        "missingPath": "未提供路徑",
+        "securityDenied": "安全性拒絕：該技能路徑不在允許的 skills 目錄內",
+        "minimaxFormat": "MiniMax Coding Plan Token 格式異常：目前內容看起來像說明文字或無效字串，請重新貼上平台 Token。",
+        "gatewayAuthMissing": "已指定 Gateway 埠號，但找不到顯式 token/password，請檢查 openclaw.json 的 gateway.auth 設定。",
+        "forceGateway": "核心對話已啟用強制 Gateway 模式，請先啟動核心（Gateway）後再送出。",
+        "coreNotStarted": "核心尚未啟動，請先啟動 Gateway（Core）後再送出對話。"
+      },
+      "success": {
+        "skillImported": "成功匯入技能：{{name}}",
+        "skillRemoved": "技能已成功移除"
+      }
+    },
+    "titles": {
+      "selectSkillFolder": "選擇 OpenClaw 技能資料夾"
+    },
+    "constants": {
+      "initialPurpose": "最初目的",
+      "finalGoal": "最終目標",
+      "description": "描述",
+      "noDetails": "無詳細說明",
+      "workspaceExtension": "工作區擴充技能"
+    }
+  },
+  "common": {
+    "time": {
+      "every": "每 {{val}}",
+      "soon": "即將",
+      "ago": "{{val}} 前",
+      "later": "{{val}} 後",
+      "pending": "待執行"
+    },
+    "status": {
+      "todo": "待處理",
+      "in_progress": "執行中",
+      "blocked": "封鎖中",
+      "done": "已完成",
+      "success": "成功",
+      "failure": "失敗",
+      "exec": "執行",
+      "completed": "完成"
+    },
+    "source": {
+      "fs": "檔案系統",
+      "agent": "Agent 作業",
+      "cron": "排程",
+      "system": "系統"
+    },
+    "agent": {
+      "running": "運行 · {{pid}}",
+      "loaded": "已載入",
+      "unloaded": "未載入",
+      "notInstalled": "未安裝"
+    },
+    "labels": {
+      "notParsed": "未解析到",
+      "oauthFlow": "OAuth 流程",
+      "noKeyRequired": "無須密鑰",
+      "executing": "執行中",
+      "execute": "執行",
+      "static": "靜態",
+      "dynamic": "動態"
+    },
+    "punctuation": {
+      "comma": "、"
+    }
+  },
+  "launcher": {
+    "autoRestart": {
+      "label": "自動重啟 Gateway（崩潰時）",
+      "desc": "套用於非 daemon 模式；異常退出時會依啟動模式進行自動重啟。"
+    }
+  },
+  "onboarding": {
+    "logs": {
+      "skipAuthCheck": "ℹ️ 略過雙層憑證檢查：此授權類型不需要 token/profile。",
+      "globalProfileConfirmed": "✅ 已確認全域層 auth.profiles profile 指向。",
+      "agentProfileAvailable": "✅ 已確認 agent 憑證層 ({{id}}) 可用。",
+      "dualLayerConfirmed": "✅ 已確認現有授權符合雙層可驗證（global + agent）。",
+      "minimaxTokenConfirmed": "✅ 已確認 MiniMax Coding Plan Token 設定 ({{url}})。",
+      "securityModeEnabled": "🧪 啟用安全驗證模式：不會自動啟動/覆寫既有 Gateway。",
+      "checkingCli": "🔍 正在檢查 CLI 可用性...",
+      "cliReady": "✅ OpenClaw CLI 可正常執行。",
+      "pulseCheck": "🔍 正在進行被動網關探測 (Gateway Pulse Check)...",
+      "gatewaySignatureMismatchWarning": "⚠️ 偵測到既有 Gateway 與目前設定的裝置簽章不一致（不影響既有服務，略過阻斷）。",
+      "gatewayConnected": "✅ 網關服務連通性正常。",
+      "runningDoctor": "🩺 正在執行導引前置檢查 (doctor --non-interactive)...",
+      "doctorPassed": "✅ Doctor 前置檢查完成，未發現群組授權風險。",
+      "doctorRiskDetected": "⚠️ Doctor 偵測到群組授權風險：{{channels}}",
+      "oauthConfigUpdating": "⚠️ OAuth 設定檔仍在更新中，稍後會自動重試解析。",
+      "migrateConfigFailed": "⚠️ 設定檔修正失敗，將繼續嘗試執行。",
+      "isolatedAgentEnabled": "🔒 已啟用專案隔離 agent store：{{path}}",
+      "verifyingExistingAuth": "🧠 正在驗證現有模型授權設定...",
+      "credentiallessSkip": "ℹ️ 目前模型為免憑證模式，略過雙層憑證檢查。",
+      "verifyingExistingChannels": "📡 正在驗證現有通訊頻道設定...",
+      "channelTokenEmpty": "⚠️ 通訊頻道 {{platform}} 的 {{key}} 為空，可能尚未完成設定。",
+      "finalVerification": "🚀 啟動最終發射檢查程序 (Final Verification)...",
+      "cliReadyManualGateway": "✅ OpenClaw CLI 可正常執行，Gateway 將於儀表板手動啟動。",
+      "existingSkillsNoChange": "🛠️ 現有用戶技能設定維持不變。",
+      "executionSuccess": "✅ 執行順利完成。",
+      "aligningSoul": "🧠 正在對齊靈魂頻率 ({{choice}})...",
+      "oauthInteractiveNeeded": "🔐 OAuth 授權需要互動式模式，將開啟終端機與瀏覽器流程。",
+      "cleanupOAuth": "🧹 啟動前清理殘留 OAuth 流程 ({{provider}}/{{method}})...",
+      "cleanupOpenAICallback": "🧹 額外清理 OpenAI callback 埠 (127.0.0.1:1455)...",
+      "oauthStarted": "🌐 已啟動 OAuth 流程，等待授權完成...",
+      "oauthCompleted": "✅ OAuth 授權已完成，已寫入核心設定。",
+      "whitespaceRemoved": "ℹ️ 偵測到授權字串包含空白，已自動移除空白字元再寫入。",
+      "aligningChannels": "📡 正在封裝通訊波段 ({{platform}})...",
+      "channelNormalized": "ℹ️ Channel ID {{raw}} 已正規化為 {{canonical}}。",
+      "enableChannelFailed": "⚠️ 無法預先啟用 channels.{{platform}}.enabled=true，將直接嘗試綁定頻道。",
+      "channelEnabled": "✅ 已啟用 channels.{{platform}}.enabled=true",
+      "legacyChannelFallback": "ℹ️ 偵測到舊版 Channel ID，相容回退為 {{id}}。",
+      "channelAddFailed": "⚠️ channels add 失敗 ({{summary}})",
+      "unsupportedChannelRetry": "↻ Channel ID {{id}} 不被支援，嘗試相容別名...",
+      "pluginRegistryFallback": "⚠️ channels add 遭遇 plugin registry 問題（Unknown channel），改以 config set 直接寫入...",
+      "configSetDirectSuccess": "✅ 已透過 config set 直接寫入 channels.{{platform}}.{{key}}（繞過 plugin registry 問題）",
+      "configSetFallbackFailed": "config-set fallback 失敗 stderr: {{err}}",
+      "applyingGroupPolicy": "🛡️ 套用 {{platform}} 群組授權預設策略 (groupPolicy=open)...",
+      "applyGroupPolicyFailed": "⚠️ 無法自動套用 {{platform}}.groupPolicy=open，將改由 doctor 前置檢查攔截。",
+      "groupPolicyApplied": "✅ 已套用 channels.{{platform}}.groupPolicy=\"open\"。",
+      "noSkillsNeeded": "✨ 無需啟用額外技能。",
+      "enablingSkills": "🛠️ 正在啟用技能設定 ({{count}} 項模組)...",
+      "enablingSkill": "> 正在啟用: {{id}}...",
+      "unsafeSkillId": "⚠️ 跳過不安全的技能 ID: {{id}}",
+      "skillEnableFailed": "⚠️ 模組 {{id}} 啟用回報異常: {{err}}",
+      "daemonDisabled": "ℹ️ 已停用 daemon 安裝流程，Gateway 將於儀表板手動啟動。",
+      "executionException": "❌ 執行回報異常: {{msg}}"
+    },
+    "errors": {
+      "globalProfileNotFound": "授權設定未完成：openclaw.json 的 auth.profiles 找不到 {{providers}} profile。",
+      "agentAuthNotFound": "授權設定未完成：找不到 agents/*/agent/auth-profiles.json，請重新執行模型授權。",
+      "agentProfileNotFound": "授權設定未完成：已寫入全域 profile，但 agent 憑證層 ({{path}}) 找不到 {{providers}} 的有效 profile。",
+      "tokenWhitespace": "授權設定異常：agent 憑證層 ({{id}}) 的 token 含有空白字元，請重新貼上 API Key/Token。",
+      "tokenMissing": "授權設定未完成：agent 憑證層 ({{id}}) 缺少 token/access，請重新執行授權流程。",
+      "globalProfilesEmpty": "授權設定未完成：openclaw.json 的 auth.profiles 為空。",
+      "agentAuthNotFoundShort": "授權設定未完成：找不到 agents/*/agent/auth-profiles.json。",
+      "dualLayerMismatch": "授權設定未完成：存在全域 auth.profiles，但在 {{path}} 找不到對應且可用的 agent 憑證。",
+      "minimaxApiKeyEmpty": "MiniMax Coding Plan 設定失敗：models.providers.minimax-portal.apiKey 為空。",
+      "minimaxBaseUrlMismatch": "MiniMax Coding Plan 設定失敗：minimax-portal.baseUrl 應為 {{expected}}，目前為 {{current}}",
+      "readConfigFailed": "讀取 openclaw.json 失敗，請確認設定路徑正確",
+      "gatewaySignatureInvalid": "Gateway 驗證失敗：偵測到裝置簽章不一致 (1008 / device signature invalid)。請先執行 {{hint}} 檢查服務與配對狀態，必要時重啟 gateway 並重新配對裝置。",
+      "gatewayTokenMismatch": "Gateway 驗證失敗：Token 不一致或已漂移。請確認 gateway.auth.token 並在控制台重新輸入，或依序執行 devices rotate/remove/approve 修復。",
+      "gatewayStatusCheckFailed": "Gateway 狀態檢查失敗",
+      "cliNotStarted": "OpenClaw CLI 無法啟動",
+      "doctorCheckFailed": "Doctor 檢查失敗",
+      "channelSetupIncomplete": "頻道設定尚未完成：channels.{{channel}}.groupPolicy=allowlist 但 groupAllowFrom 為空。請設定 groupAllowFrom，或改為 groupPolicy=open。",
+      "corePathMissing": "缺少核心路徑 (Core Path missing)",
+      "unsupportedAuthType": "不支援或不安全的授權類型: {{type}}",
+      "configPathMissing": "缺少 Config Path，無法驗證模型設定",
+      "configPathMissingForChannels": "缺少 Config Path，無法驗證頻道設定",
+      "noChannelsConfigured": "找不到可用的通訊頻道設定",
+      "channelNotConfigured": "目前選擇的通訊頻道未配置: {{platform}}",
+      "channelDisabled": "通訊頻道 {{platform}} 已配置但 enabled=false，請先啟用或重新設定。",
+      "unsupportedOAuthType": "不支援的 OAuth 授權類型: {{type}}",
+      "configPathMissingForOAuth": "找不到 Config Path，無法驗證 OAuth 授權狀態",
+      "oauthFailed": "OAuth 授權失敗",
+      "oauthTimeout": "OAuth 授權逾時或未完成，請在彈出的終端機完成登入後重試",
+      "setupTokenMissing": "缺少 Setup-Token，請先貼上由 claude setup-token 產生的 Token",
+      "coreAuthFailed": "核心授權失敗",
+      "configPathMissingForVerification": "缺少 Config Path，無法驗證授權寫入結果",
+      "unsafeChannelId": "不安全的 channel id: {{id}}",
+      "channelBindingFailed": "頻道繫結失敗",
+      "unsupportedChannelDeep": "目前 OpenClaw 不支援 channel: {{id}}。請確認 Core Path 指向正確且可用的 OpenClaw（目前：{{path}}），並先在該目錄執行：pnpm openclaw channels add --help 檢查支援清單。若清單沒有 telegram，代表該安裝版本尚未支援 Telegram，需切換/升級 OpenClaw。",
+      "lastAttempt": "最後一次嘗試：{{summary}}",
+      "cliError": "CLI 原始錯誤：{{err}}",
+      "channelBindingFailedShort": "頻道繫結失敗。"
+    },
+    "oauthTitle": "OpenClaw OAuth 授權流程 (models auth login)",
+    "initPathActual": "實際初始化將使用：",
+    "initTarget": "將初始化至："
+  },
+  "miniView": {
+    "tokenBudget": "Token 預算",
+    "trend7d": "Trend (7d)",
+    "security": "Security",
+    "logs": "Logs"
   }
 }

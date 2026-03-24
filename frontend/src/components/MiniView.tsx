@@ -1,5 +1,6 @@
 import { Play, Square, Settings2, ShieldCheck, Zap, Activity } from 'lucide-react';
 import { useStore } from '../store';
+import { useTranslation } from 'react-i18next';
 
 interface MiniViewProps {
   running: boolean;
@@ -8,6 +9,7 @@ interface MiniViewProps {
 }
 
 export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
+  const { t } = useTranslation();
   const { usage } = useStore();
   
   return (
@@ -29,7 +31,7 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
       <div className="space-y-3">
         <div className="flex justify-between items-end">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center">
-                <Zap size={10} className="mr-1 fill-amber-500 text-amber-500" /> Token 預算
+                <Zap size={10} className="mr-1 fill-amber-500 text-amber-500" /> {t('miniView.tokenBudget')}
             </span>
             <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">{usage.input > 0 ? (usage.input/1000).toFixed(1) : '0'}K / 5.0k</span>
         </div>
@@ -43,7 +45,7 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
 
       {/* Mini Trend Sparkline */}
       <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/50 p-3 rounded-2xl">
-        <div className="text-[8px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest mb-2">Trend (7d)</div>
+        <div className="text-[8px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest mb-2">{t('miniView.trend7d')}</div>
         <div className="h-12 flex items-end space-x-1">
           {usage.history.map((h, i) => (
             <div 
@@ -71,8 +73,8 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
 
       {/* Quick Action Grid */}
       <div className="grid grid-cols-2 gap-3 pb-4">
-          <QuickBtn icon={<ShieldCheck size={16}/>} label="Security" active={true} />
-          <QuickBtn icon={<Activity size={16}/>} label="Logs" onClick={onExpand} />
+          <QuickBtn icon={<ShieldCheck size={16}/>} label={t('miniView.security')} active={true} />
+          <QuickBtn icon={<Activity size={16}/>} label={t('miniView.logs')} onClick={onExpand} />
       </div>
     </div>
   );

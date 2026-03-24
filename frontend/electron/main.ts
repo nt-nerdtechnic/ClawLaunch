@@ -119,6 +119,41 @@ const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
   suppressChecksUntil: 0,
   options: { ...DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS },
 };
+
+// ── i18n support for main process ──────────────────────────────────────────
+let currentLocale = 'zh-TW';
+const localeCache: Record<string, any> = {};
+
+async function loadLocales() {
+  const localesDir = path.join(__dirname, '../src/locales');
+  const langs = ['zh-TW', 'en', 'zh-CN'];
+  for (const lang of langs) {
+    try {
+      const data = await fs.readFile(path.join(localesDir, `${lang}.json`), 'utf-8');
+      localeCache[lang] = JSON.parse(data);
+    } catch (e) {
+      console.error(`[i18n] Failed to load locale ${lang}:`, e);
+    }
+  }
+}
+
+function t(key: string, params: Record<string, any> = {}): string {
+  const parts = key.split('.');
+  let value = localeCache[currentLocale] || localeCache['en'] || {};
+  for (const part of parts) {
+    value = value?.[part];
+    if (value === undefined) break;
+  }
+  if (typeof value !== 'string') return key;
+
+  let result = value;
+  for (const [k, v] of Object.entries(params)) {
+    result = result.replace(new RegExp(`{{${k}}}`, 'g'), String(v));
+  }
+  return result;
+}
+// ───────────────────────────────────────────────────────────────────────────
+
 const shellSingleQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const escapeAppleScriptString = (value: string) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
@@ -140,7 +175,7 @@ const emitShellStdout = (data: string, source: 'stdout' | 'stderr' = 'stdout') =
 
 const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart') => {
   const marker = `${NT_CLAW_TERMINAL_MARKER_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-  const finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; ${command}; printf "\\n程序結束。\\n按 Enter 鍵關閉視窗..."; read -r _`;
+  const finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; ${command}; printf "\\n${t('main.shell.terminal.footer')}"; read -r _`;
   const line1 = `tell application "Terminal" to do script "${escapeAppleScriptString(finalCmd)}"`;
   const line2 = 'tell application "Terminal" to activate';
   return `osascript -e ${shellSingleQuote(line1)} -e ${shellSingleQuote(line2)}`;
@@ -797,7 +832,7 @@ const computeTaskGovernance = (readModel: any, timeoutMs: number, nowIso: string
       id: `task-blocked:${normalizeString(task?.id, 'unknown-task')}`,
       level: 'action-required',
       title: 'Task heartbeat timeout',
-      detail: `${normalizeString(task?.title, 'Task')} 超時未更新，已標記為 blocked。`,
+      detail: t('main.activity.task.timeout', { title: normalizeString(task?.title, 'Task') }),
       source: 'task-heartbeat',
       createdAt: nowIso,
       entityId: normalizeString(task?.id, ''),
@@ -823,7 +858,7 @@ const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[
       id: 'approval-pending',
       level: 'action-required',
       title: 'Pending approvals',
-      detail: `目前有 ${pendingApprovals.length} 筆待審批。`,
+      detail: t('main.activity.approvals.pending', { count: pendingApprovals.length }),
       source: 'approval',
       createdAt: nowIso,
     });
@@ -836,7 +871,7 @@ const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[
       id: 'runtime-risk',
       level: 'action-required',
       title: 'Runtime risk detected',
-      detail: `Blocked ${blockedCount} / Error ${errorCount}。`,
+      detail: t('main.activity.errors.summary', { blocked: blockedCount, error: errorCount }),
       source: 'runtime',
       createdAt: nowIso,
     });
@@ -849,7 +884,7 @@ const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[
       id: 'budget-risk',
       level: overBudget > 0 ? 'action-required' : 'warn',
       title: 'Budget risk',
-      detail: `Over ${overBudget} / Warn ${warnBudget}。`,
+      detail: t('main.activity.budget.summary', { over: overBudget, warn: warnBudget }),
       source: 'budget',
       createdAt: nowIso,
     });
@@ -860,7 +895,7 @@ const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[
       id: 'system-all-clear',
       level: 'info',
       title: 'All clear',
-      detail: '目前未檢測到高優先風險事件。',
+      detail: t('main.activity.risk.noRisks'),
       source: 'system',
       createdAt: nowIso,
     });
@@ -1540,12 +1575,16 @@ async function activateConfigPath(newConfigPath: string): Promise<void> {
   if (lockPath) activeLockFilePath = lockPath;
 
   if (conflictPid !== null) {
-    const suggestionLine = suggestionPath ? `\n\n建議改用路徑：\n${suggestionPath}` : '';
+    const suggestionLine = suggestionPath ? t('main.dialogs.configPathConflict.suggestion', { path: suggestionPath }) : '';
     const dialogOptions = {
       type: 'warning' as const,
-      title: 'Config Path 衝突警告',
-      message: `另一個 NT-ClawLaunch 實例（PID ${conflictPid}）已在使用此 Config Path：\n\n${normalized}\n\n多個實例共用同一 Config Path 可能導致 gateway 設定衝突。建議在「Launcher 設定」中為此視窗指定獨立的 Config Path。${suggestionLine}`,
-      buttons: ['知道了'],
+      title: t('main.dialogs.configPathConflict.title'),
+      message: t('main.dialogs.configPathConflict.message', {
+        pid: conflictPid,
+        path: normalized,
+        suggestion: suggestionLine,
+      }),
+      buttons: [t('main.dialogs.configPathConflict.ok')],
     };
     const parentWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
     if (parentWindow) {
@@ -1769,7 +1808,7 @@ const hasCjkCharacters = (value: string) => /[\u3040-\u30ff\u3400-\u9fff\uf900-\
 const isLikelyNaturalLanguageSentence = (value: string) => {
   const text = String(value || '').trim();
   if (!text) return false;
-  const hasSentencePunctuation = /[。！？：；，、]/.test(text);
+  const hasSentencePunctuation = /[\u3002\uff01\uff1f\uff1a\uff1b\uff0c\u3001]/.test(text);
   const hasMultipleWords = (text.match(/\s+/g) || []).length >= 2;
   return hasCjkCharacters(text) && (hasSentencePunctuation || hasMultipleWords);
 };
@@ -1989,13 +2028,13 @@ async function collectAuthProfiles(configDir: string) {
 
     const repairGuides: string[] = [];
     if (entry.diagnostics.includes('agent_credential_missing_or_invalid')) {
-      repairGuides.push('重新執行授權流程，確保 agent/auth-profiles.json 有有效 token。');
+      repairGuides.push(t('main.repair.reauth'));
     }
     if (entry.diagnostics.includes('global_only')) {
-      repairGuides.push('目前只有 global profile，請執行一次 onboarding/auth set 同步 agent 層。');
+      repairGuides.push(t('main.repair.onboardSync'));
     }
     if (entry.diagnostics.includes('agent_only')) {
-      repairGuides.push('目前只有 agent profile，請補齊 openclaw.json 的 auth.profiles。');
+      repairGuides.push(t('main.repair.agentOnly'));
     }
 
     entry.severity = severity;
@@ -2048,7 +2087,7 @@ async function writeFileIfMissing(filePath: string, content: string): Promise<bo
  * Parse YAML Frontmatter from SKILL.md (simple regex matching)
  */
 async function parseSkillMetadata(skillDir: string, fallbackId: string) {
-    const defaultMeta = { id: fallbackId, name: fallbackId, desc: '工作區擴充技能', category: 'Plugin', details: '無詳細說明' };
+    const defaultMeta = { id: fallbackId, name: fallbackId, desc: t('main.constants.workspaceExtension'), category: 'Plugin', details: t('main.constants.noDetails') };
     try {
         const skillMdPath = path.join(skillDir, 'SKILL.md');
         const content = await fs.readFile(skillMdPath, 'utf-8');
@@ -2318,31 +2357,31 @@ function inferFsEvent(
   if (base === 'SKILL.md' && isInSkills) {
     const type = (watchEvent === 'rename' && !existed) ? 'skill_created' : 'skill_updated';
     return { source: 'fs', type, category: 'development',
-      title: `${type === 'skill_created' ? '新技能建立' : '技能更新'}：${skillName}`,
+      title: `${type === 'skill_created' ? t('main.activity.skills.created') : t('main.activity.skills.updated')}：${skillName}`,
       detail: filePath, path: filePath };
   }
   if ((base.endsWith('.py') || base.endsWith('.ts') || base.endsWith('.js')) && isInSkills) {
     return { source: 'fs', type: 'skill_updated', category: 'development',
-      title: `技能程式碼${watchEvent === 'rename' ? '新增' : '修改'}：${skillName}/${base}`,
+      title: `${watchEvent === 'rename' ? t('main.activity.skills.codeAdded') : t('main.activity.skills.codeModified')}：${skillName}/${base}`,
       detail: filePath, path: filePath };
   }
   if (isInConfig && (base.endsWith('.json') || base.endsWith('.yaml') || base.endsWith('.toml'))) {
     return { source: 'fs', type: 'config_changed', category: 'config',
-      title: `設定檔變更：${base}`, detail: filePath, path: filePath };
+      title: `${t('main.activity.config.changed')}：${base}`, detail: filePath, path: filePath };
   }
   if (base === 'tasks.json') {
     return { source: 'fs', type: 'task_updated', category: 'task',
-      title: '任務清單更新', detail: filePath, path: filePath };
+      title: t('main.activity.tasks.updated'), detail: filePath, path: filePath };
   }
   if (base.endsWith('.py') && !isInSkills) {
     return { source: 'fs', type: 'script_executed', category: 'execution',
-      title: `腳本${watchEvent === 'rename' ? '建立' : '修改'}：${base}`,
+      title: `${watchEvent === 'rename' ? t('main.activity.scripts.created') : t('main.activity.scripts.modified')}：${base}`,
       detail: filePath, path: filePath };
   }
   const ext = path.extname(base);
   if (!base.startsWith('.') && ['.md', '.txt', '.json', '.yaml', '.toml', '.sh'].includes(ext)) {
     return { source: 'fs', type: 'file_change', category: 'system',
-      title: `檔案${watchEvent === 'rename' ? '建立/刪除' : '修改'}：${path.basename(path.dirname(filePath))}/${base}`,
+      title: `${watchEvent === 'rename' ? t('main.activity.files.createdDeleted') : t('main.activity.files.modified')}：${path.basename(path.dirname(filePath))}/${base}`,
       detail: filePath, path: filePath };
   }
   return null;
@@ -2453,7 +2492,7 @@ async function scanJsonlFile(filePath: string): Promise<void> {
               if (!cmd) continue;
               pushActivity({
                 timestamp: ts, source: 'jsonl', type: 'script_executed', category: 'execution',
-                title: `執行指令 [${agentId}]：${cmd}`,
+                title: `${t('main.activity.agent.exec')} [${agentId}]：${cmd}`,
                 detail: cmd, agent: agentId,
               });
             } else if (toolName === 'write') {
@@ -2467,9 +2506,9 @@ async function scanJsonlFile(filePath: string): Promise<void> {
                 timestamp: ts, source: 'jsonl',
                 type: isSkill ? 'skill_created' : 'file_change',
                 category: isSkill ? 'development' : isConfig ? 'config' : 'execution',
-                title: isSkill
-                  ? `Agent 建立技能檔案 [${agentId}]：${base}`
-                  : `Agent 寫入檔案 [${agentId}]：${base}`,
+                title: (isSkill
+                  ? `${t('main.activity.agent.createSkillFile')} [${agentId}]`
+                  : `${t('main.activity.agent.writeFile')} [${agentId}]`) + `：${base}`,
                 detail: fp, agent: agentId, path: fp,
               });
             } else if (toolName === 'edit') {
@@ -2482,16 +2521,16 @@ async function scanJsonlFile(filePath: string): Promise<void> {
                 timestamp: ts, source: 'jsonl',
                 type: isSkill ? 'skill_updated' : 'file_change',
                 category: isSkill ? 'development' : 'execution',
-                title: isSkill
-                  ? `Agent 修改技能 [${agentId}]：${base}`
-                  : `Agent 編輯檔案 [${agentId}]：${base}`,
+                title: (isSkill
+                  ? `${t('main.activity.agent.modifySkill')} [${agentId}]`
+                  : `${t('main.activity.agent.editFile')} [${agentId}]`) + `：${base}`,
                 detail: fp, agent: agentId, path: fp,
               });
             } else if (toolName === 'web_fetch' || toolName === 'web_search') {
               const query = String(args.url || args.query || '').slice(0, 80);
               pushActivity({
                 timestamp: ts, source: 'jsonl', type: 'agent_action', category: 'execution',
-                title: `網路${toolName === 'web_search' ? '搜尋' : '抓取'} [${agentId}]：${query}`,
+                title: `${toolName === 'web_search' ? t('main.activity.agent.webSearch') : t('main.activity.agent.webScrape')} [${agentId}]：${query}`,
                 detail: query, agent: agentId,
               });
             }
@@ -2545,7 +2584,7 @@ async function scanCronJobs(stateDir?: string): Promise<void> {
           timestamp: lastRun,
           source: 'cron', type: 'scheduled_run',
           category: isOk ? 'scheduled' : 'alert',
-          title: `排程${isOk ? '執行成功' : '執行失敗'}：${job.name}`,
+          title: `${isOk ? t('main.activity.cron.success') : t('main.activity.cron.failure')}：${job.name}`,
           detail: job.state?.lastError,
           agent: job.agentId,
           exitCode: isOk ? 0 : 1,
@@ -2794,7 +2833,8 @@ async function runControlAutoSync(): Promise<{ queueCreated: number; approvalsCr
 }
 
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await loadLocales();
   createWindow().catch((err) => {
     console.error('Failed to create window:', err);
   });
@@ -3092,9 +3132,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           ? payload.status : 'todo',
         priority: String(payload?.priority || 'medium'),
         components: [
-          { key: 'initial_purpose', label: '最初目的', content: '', weight: 0.2, progress: 0.0 },
-          { key: 'final_goal',      label: '最終目標', content: '', weight: 0.3, progress: 0.0 },
-          { key: 'description',     label: '描述',     content: String(payload?.description || ''), weight: 0.5, progress: 0.0 },
+          { key: 'initial_purpose', label: t('main.constants.initialPurpose'), content: '', weight: 0.2, progress: 0.0 },
+          { key: 'final_goal',      label: t('main.constants.finalGoal'), content: '', weight: 0.3, progress: 0.0 },
+          { key: 'description',     label: t('main.constants.description'),     content: String(payload?.description || ''), weight: 0.5, progress: 0.0 },
         ],
         overall_progress: 0.0,
         created_at: now,
@@ -3754,7 +3794,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const result = await dialog.showOpenDialog(mainWindow!, {
         properties: ['openDirectory'],
-        title: '選擇 OpenClaw 技能資料夾',
+        title: t('main.titles.selectSkillFolder'),
       });
       if (result.canceled) return { code: 0, stdout: 'Canceled', exitCode: 0 };
       
@@ -3765,7 +3805,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       try {
         await fs.access(path.join(sourcePath, 'SKILL.md'));
       } catch (e) {
-        return { code: 1, stderr: '錯誤：所選資料夾內缺少 SKILL.md，不是有效的技能。', exitCode: 1 };
+        return { code: 1, stderr: t('main.ipc.errors.skillMissingMd'), exitCode: 1 };
       }
 
       // Get target path
@@ -3788,7 +3828,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       await fs.mkdir(path.join(targetBaseDir, 'skills'), { recursive: true });
       await fs.cp(sourcePath, targetPath, { recursive: true });
       
-      return { code: 0, stdout: `成功匯入技能：${skillName}`, exitCode: 0 };
+      return { code: 0, stdout: t('main.ipc.success.skillImported', { name: skillName }), exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stderr: e.message, exitCode: 1 };
     }
@@ -3797,7 +3837,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   if (fullCommand.startsWith('skill:delete')) {
     try {
       const skillPath = fullCommand.replace('skill:delete ', '').trim();
-      if (!skillPath) throw new Error('未提供路徑');
+      if (!skillPath) throw new Error(t('main.ipc.errors.missingPath'));
 
       const launcherConfigPath = path.join(CONFIG_DIR, 'config.json');
       let configuredWorkspacePath = '';
@@ -3820,11 +3860,11 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const resolvedTarget = path.resolve(skillPath);
       const isInsideAllowedBase = allowedBases.some((base) => resolvedTarget === base || resolvedTarget.startsWith(`${base}${path.sep}`));
       if (!isInsideAllowedBase) {
-        throw new Error('安全性拒絕：該技能路徑不在允許的 skills 目錄內');
+        throw new Error(t('main.ipc.errors.securityDenied'));
       }
 
       await fs.rm(resolvedTarget, { recursive: true, force: true });
-      return { code: 0, stdout: '技能已成功移除', exitCode: 0 };
+      return { code: 0, stdout: t('main.ipc.success.skillRemoved'), exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stderr: e.message, exitCode: 1 };
     }
@@ -3990,7 +4030,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           return {
             code: 1,
             stdout: '',
-            stderr: 'MiniMax Coding Plan Token 格式異常：目前內容看起來像說明文字或無效字串，請重新貼上平台 Token。',
+            stderr: t('main.ipc.errors.minimaxFormat'),
             exitCode: 1,
           };
         }
@@ -4746,7 +4786,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     return {
       success: false,
       requestId: request.requestId,
-      error: '已指定 Gateway 埠號，但找不到顯式 token/password，請檢查 openclaw.json 的 gateway.auth 設定。',
+      error: t('main.ipc.errors.gatewayAuthMissing'),
       reason: 'gateway-explicit-auth-missing',
     };
   }
@@ -4767,7 +4807,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
       messageId,
       mode: 'gateway' as const,
       reason: 'core-required-force-local-blocked',
-      error: '核心對話已啟用強制 Gateway 模式，請先啟動核心（Gateway）後再送出。',
+      error: t('main.ipc.errors.forceGateway'),
     };
   }
 
@@ -4780,7 +4820,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
       messageId,
       mode: 'gateway' as const,
       reason: 'core-required-gateway-offline',
-      error: '核心尚未啟動，請先啟動 Gateway（Core）後再送出對話。',
+      error: t('main.ipc.errors.coreNotStarted'),
     };
   }
 

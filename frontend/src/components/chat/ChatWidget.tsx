@@ -302,7 +302,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                   <Bot size={14} />
                 </div>
                 <p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p>
-                <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">Enter 送出，Shift+Enter 換行</p>
+                <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p>
               </div>
             )}
             <div className="space-y-2">
@@ -370,7 +370,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                 </button>
               )}
             </div>
-            <div className="mt-2 text-right text-[10px] text-slate-400 dark:text-slate-500">Enter 送出，Shift+Enter 換行</div>
+            <div className="mt-2 text-right text-[10px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</div>
           </div>
         </div>
       )}

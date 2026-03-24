@@ -177,10 +177,10 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
           <div className="mt-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
             <div>
               <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                自動重啟 Gateway（崩潰時）
+                {t('launcher.autoRestart.label')}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                套用於非 daemon 模式；異常退出時會依啟動模式進行自動重啟。
+                {t('launcher.autoRestart.desc')}
               </div>
             </div>
             <button
@@ -192,8 +192,8 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                   : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'
               }`}
               aria-pressed={config.autoRestartGateway}
-              aria-label="自動重啟 Gateway"
-              title="自動重啟 Gateway"
+              aria-label={t('launcher.autoRestart.label')}
+              title={t('launcher.autoRestart.label')}
             >
               <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
             </button>
@@ -216,14 +216,16 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
               {updateState === 'up-to-date' && (
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
                   <CheckCircle size={12} />
-                  {updateInfo?.noReleases ? t('settings.checkUpdateNoReleases') : t('settings.checkUpdateUpToDate')}
+                  {updateInfo?.noReleases 
+                    ? t('settings.checkUpdateNoReleases') 
+                    : t('settings.checkUpdateUpToDate', { version: updateInfo?.current })}
                 </div>
               )}
               {updateState === 'available' && updateInfo && (
                 <div className="mt-1 flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
                     <AlertCircle size={12} />
-                    {t('settings.checkUpdateAvailable')}: <span className="font-mono">v{updateInfo.latest}</span>
+                    {t('settings.checkUpdateAvailable', { version: updateInfo.latest })}
                   </span>
                   <button
                     type="button"
