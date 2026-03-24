@@ -307,6 +307,7 @@
     "checkUpdateBtn": "檢查更新",
     "checkUpdateChecking": "檢查中...",
     "checkUpdateUpToDate": "已是最新版本",
+    "checkUpdateNoReleases": "尚未發布任何版本",
     "checkUpdateAvailable": "有新版本可用",
     "checkUpdateDownload": "前往下載",
     "checkUpdateError": "無法檢查更新"

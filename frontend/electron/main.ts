@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
@@ -2837,6 +2838,40 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 
 ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []) => {
   const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+
+  if (fullCommand === 'app:check-update') {
+    try {
+      const current = app.getVersion();
+      const releases = await new Promise<any[]>((resolve, reject) => {
+        const req = https.get(
+          'https://api.github.com/repos/nt-nerdtechnic/ClawLaunch/releases?per_page=1',
+          { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'NT-ClawLaunch' } },
+          (res) => {
+            if ((res.statusCode ?? 0) >= 400) {
+              reject(new Error(`GitHub API returned ${res.statusCode}`));
+              return;
+            }
+            let body = '';
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => {
+              try { resolve(JSON.parse(body)); } catch { reject(new Error('Invalid JSON response')); }
+            });
+          },
+        );
+        req.on('error', reject);
+        req.setTimeout(10000, () => { req.destroy(); reject(new Error('Request timed out')); });
+      });
+      if (!releases.length) {
+        return { code: 0, stdout: JSON.stringify({ current, latest: '', htmlUrl: '', upToDate: true, noReleases: true }), stderr: '', exitCode: 0 };
+      }
+      const latest = String(releases[0].tag_name || '').replace(/^v/, '');
+      const htmlUrl = String(releases[0].html_url || '');
+      const isNewer = !!latest && latest !== current;
+      return { code: 0, stdout: JSON.stringify({ current, latest, htmlUrl, upToDate: !isNewer }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'update check failed', exitCode: 1 };
+    }
+  }
 
   if (fullCommand === 'control:auth:status') {
     try {

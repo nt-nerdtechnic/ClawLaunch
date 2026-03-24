@@ -307,6 +307,7 @@
     "checkUpdateBtn": "Check for Updates",
     "checkUpdateChecking": "Checking...",
     "checkUpdateUpToDate": "You are on the latest version",
+    "checkUpdateNoReleases": "No releases published yet",
     "checkUpdateAvailable": "New version available",
     "checkUpdateDownload": "Download",
     "checkUpdateError": "Failed to check for updates"

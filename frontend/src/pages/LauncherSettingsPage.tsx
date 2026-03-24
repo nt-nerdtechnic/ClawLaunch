@@ -17,6 +17,8 @@ interface UpdateInfo {
   current: string;
   latest: string;
   htmlUrl: string;
+  upToDate: boolean;
+  noReleases?: boolean;
 }
 
 export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
@@ -30,6 +32,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
   const { t } = useTranslation();
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateError, setUpdateError] = useState<string>('');
 
   const saveButtonLabel =
     saveState === 'saving'
@@ -46,13 +49,15 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
     setUpdateInfo(null);
+    setUpdateError('');
     try {
       const res = await window.electronAPI.exec('app:check-update');
-      if ((res.code ?? res.exitCode) !== 0) throw new Error(res.stderr);
+      if ((res.code ?? res.exitCode) !== 0) throw new Error(res.stderr || 'unknown error');
       const info: UpdateInfo = JSON.parse(res.stdout);
       setUpdateInfo(info);
       setUpdateState(info.upToDate ? 'up-to-date' : 'available');
-    } catch {
+    } catch (e: any) {
+      setUpdateError(e?.message || 'unknown error');
       setUpdateState('error');
     }
   };
@@ -211,7 +216,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
               {updateState === 'up-to-date' && (
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
                   <CheckCircle size={12} />
-                  {t('settings.checkUpdateUpToDate')}
+                  {updateInfo?.noReleases ? t('settings.checkUpdateNoReleases') : t('settings.checkUpdateUpToDate')}
                 </div>
               )}
               {updateState === 'available' && updateInfo && (
@@ -231,9 +236,16 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                 </div>
               )}
               {updateState === 'error' && (
-                <div className="mt-1 flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
-                  <AlertCircle size={12} />
-                  {t('settings.checkUpdateError')}
+                <div className="mt-1 flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+                    <AlertCircle size={12} />
+                    {t('settings.checkUpdateError')}
+                  </div>
+                  {updateError && (
+                    <div className="text-[10px] font-mono text-rose-500/80 dark:text-rose-400/60 truncate max-w-xs" title={updateError}>
+                      {updateError}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
