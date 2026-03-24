@@ -26,6 +26,13 @@ const estimateCost = (inputTokens: number, outputTokens: number) => {
   return ((inputTokens + outputTokens * 2) / 1_000_000) * 0.5;
 };
 
+const formatCompactNumber = (number: number) => {
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(number);
+};
+
 const normalizeFinite = (value: unknown, fallback = 0) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
@@ -100,7 +107,7 @@ export function Analytics() {
 
     return Array.from(dailyMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-7)
+      .slice(-30)
       .map(([, value]) => ({ name: value.label, in: value.in, out: value.out, tokens: value.tokens, cost: normalizeFinite(value.cost, estimateCost(value.in, value.out)) }));
   }, [sessions, snapshot?.generatedAt]);
 
@@ -230,17 +237,70 @@ export function Analytics() {
     const costDelta = today && yesterday ? formatDelta(todayCost, yesterdayCost) : '+0.0%';
 
     return {
-      input: { value: `${(totals.input / 1000).toFixed(1)}K`, delta: inDelta },
-      output: { value: `${(totals.output / 1000).toFixed(1)}K`, delta: outDelta },
+      input: { value: formatCompactNumber(totals.input), delta: inDelta },
+      output: { value: formatCompactNumber(totals.output), delta: outDelta },
       cost: { value: totals.cost.toFixed(2), delta: costDelta },
     };
   }, [chartData, totals.cost, totals.input, totals.output]);
 
   const windowedChartData = useMemo(() => {
-    if (usageWindow === 'today') return chartData.slice(-1);
+    if (usageWindow === 'today') {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const hourlyMap = new Map<string, DaySeries>();
+      
+      for (let i = 0; i < 24; i++) {
+        const hh = String(i).padStart(2, '0');
+        hourlyMap.set(`${hh}:00`, { name: `${hh}:00`, in: 0, out: 0, tokens: 0, cost: 0 });
+      }
+
+      if (runtimeUsageEvents.length > 0) {
+        for (const ev of runtimeUsageEvents) {
+          if (ev.day === todayStr) {
+            const date = new Date(ev.timestamp);
+            if (!Number.isNaN(date.getTime())) {
+              const hh = String(date.getHours()).padStart(2, '0');
+              const key = `${hh}:00`;
+              const cur = hourlyMap.get(key);
+              if (cur) {
+                cur.in += normalizeFinite(ev.tokensIn, 0);
+                cur.out += normalizeFinite(ev.tokensOut, 0);
+                cur.tokens += normalizeFinite(ev.tokens, 0);
+                cur.cost += normalizeFinite(ev.cost, 0);
+              }
+            }
+          }
+        }
+      } else {
+        for (const session of sessions) {
+          const updatedAt = typeof session.updatedAt === 'string' ? session.updatedAt : '';
+          const snapshotDate = typeof snapshot?.generatedAt === 'string' ? snapshot.generatedAt : '';
+          const keyDate = toDateKey(updatedAt || snapshotDate);
+          
+          if (keyDate === todayStr) {
+            const date = new Date(updatedAt || snapshotDate);
+            if (!Number.isNaN(date.getTime())) {
+              const hh = String(date.getHours()).padStart(2, '0');
+              const key = `${hh}:00`;
+              const cur = hourlyMap.get(key);
+              if (cur) {
+                const inTokens = normalizeFinite(session.tokensIn, 0);
+                const outTokens = normalizeFinite(session.tokensOut, 0);
+                const sessionCostRaw = normalizeFinite(session.cost, NaN);
+                cur.in += inTokens;
+                cur.out += outTokens;
+                cur.tokens += inTokens + outTokens;
+                cur.cost += Number.isFinite(sessionCostRaw) && sessionCostRaw >= 0 ? sessionCostRaw : estimateCost(inTokens, outTokens);
+              }
+            }
+          }
+        }
+      }
+      return Array.from(hourlyMap.values());
+    }
+
     if (usageWindow === '7d') return chartData.slice(-7);
     return chartData.slice(-30);
-  }, [chartData, usageWindow]);
+  }, [chartData, usageWindow, runtimeUsageEvents, sessions, snapshot?.generatedAt]);
 
   // Track 2 Priority: From runtimeUsageEvents grouped by model (accurate source)
   const costHotspots = useMemo(() => {
@@ -337,7 +397,7 @@ export function Analytics() {
                 className={`rounded-2xl border px-4 py-4 transition-all text-left ${usageWindow === item.key ? 'border-blue-500/40 bg-blue-500/5' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20'}`}
               >
                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.label}</div>
-                <div className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-100">{period.tokens.toLocaleString()} {t('analytics.window.tokensUnit')}</div>
+                <div className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-100">{formatCompactNumber(period.tokens)} {t('analytics.window.tokensUnit')}</div>
                 <div className="text-xs text-slate-500">
                   ${period.cost.toFixed(3)}
                   {period.requestCount > 0 && <span className="ml-2 opacity-60">· {period.requestCount} {t('analytics.window.requests')}</span>}
@@ -389,6 +449,7 @@ export function Analytics() {
                     axisLine={false}
                     tickLine={false}
                     tick={{fill: 'currentColor', className: 'text-slate-400 dark:text-slate-600', fontSize: 10, fontWeight: 700}}
+                    tickFormatter={(value) => formatCompactNumber(value)}
                   />
                   <Tooltip
                     cursor={{stroke: 'currentColor', className: 'text-slate-200 dark:text-slate-800', strokeWidth: 2}}
@@ -401,6 +462,7 @@ export function Analytics() {
                         fontSize: '11px',
                         color: (isDark ? '#f1f5f9' : '#0f172a')
                     }}
+                    formatter={(value: any) => [formatCompactNumber(Number(value) || 0), undefined]}
                   />
                   <Area type="monotone" dataKey="in" name={t('analytics.labels.input')} stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorIn)" stackId="1" />
                   <Area type="monotone" dataKey="out" name={t('analytics.labels.output')} stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorOut)" stackId="1" />
@@ -437,6 +499,7 @@ export function Analytics() {
                     axisLine={false}
                     tickLine={false}
                     tick={{fill: '#475569', fontSize: 10, fontWeight: 700}}
+                    tickFormatter={(value) => formatCompactNumber(value)}
                   />
                   <Tooltip
                     contentStyle={{
@@ -445,6 +508,7 @@ export function Analytics() {
                         borderRadius: '16px',
                         fontSize: '11px'
                     }}
+                    formatter={(value: any) => [formatCompactNumber(Number(value) || 0), undefined]}
                   />
                   <Line type="stepAfter" dataKey="in" name={t('analytics.labels.inputLoad')} stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }} />
                   <Line type="stepAfter" dataKey="out" name={t('analytics.labels.outputDensity')} stroke="#fbbf24" strokeWidth={2} dot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
@@ -471,7 +535,7 @@ export function Analytics() {
                 <div key={row.provider} className="rounded-2xl border border-slate-200 dark:border-slate-700 px-4 py-3 bg-white/70 dark:bg-slate-900/40">
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">{row.provider}</div>
                   <div className="text-sm font-bold text-slate-800 dark:text-slate-100">${row.cost.toFixed(3)}</div>
-                  <div className="text-xs text-slate-500">{(row.tokens / 1000).toFixed(1)}K tokens</div>
+                  <div className="text-xs text-slate-500">{formatCompactNumber(row.tokens)} tokens</div>
                 </div>
               ))}
             </div>
@@ -531,6 +595,7 @@ export function Analytics() {
                       borderRadius: '16px',
                       boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
                     }}
+                    formatter={(value: any) => [formatCompactNumber(Number(value) || 0), undefined]}
                   />
                   <Legend />
                 </PieChart>
