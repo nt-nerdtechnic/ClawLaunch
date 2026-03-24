@@ -31,13 +31,13 @@ const UpdateBanner = () => {
   const checkVersion = async () => {
     if (window.electronAPI) {
       try {
-        const res = await window.electronAPI.exec('version:check');
+        const res = await window.electronAPI.exec('app:check-update');
         if (res.code !== 0 || !res.stdout) {
           return;
         }
         const data = JSON.parse(res.stdout);
-        setVersions({ local: data.local, remote: data.remote });
-        setHasUpdate(data.hasUpdate);
+        setVersions({ local: data.current, remote: data.latest });
+        setHasUpdate(!data.upToDate);
       } catch (e) {
         console.error("Failed to check version", e);
       }
