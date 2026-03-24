@@ -29,7 +29,13 @@ export function useAppBootstrap({
     );
 
     const forceReset = localStorage.getItem(ONBOARDING_FORCE_RESET_KEY) === 'true';
-    const finished = !forceReset && (localStorage.getItem(ONBOARDING_FINISHED_KEY) === 'true' || hasAnyConfiguredPath);
+    // Also check the persisted flag in config.json (survives PID-based userData/localStorage wipe on restart)
+    const persistedFlag = persisted.onboardingFinished === true;
+    const finished = !forceReset && (
+      localStorage.getItem(ONBOARDING_FINISHED_KEY) === 'true' ||
+      persistedFlag ||
+      hasAnyConfiguredPath
+    );
     if (finished) {
       localStorage.setItem(ONBOARDING_FINISHED_KEY, 'true');
       localStorage.removeItem(ONBOARDING_FORCE_RESET_KEY);
@@ -194,6 +200,14 @@ export function useAppBootstrap({
     localStorage.removeItem(ONBOARDING_FORCE_RESET_KEY);
     setOnboardingFinished(true);
     setActiveTab('monitor');
+    // Persist the finished flag to config.json so it survives PID-based localStorage/userData wipe on restart
+    if (window.electronAPI) {
+      const currentConfig = useStore.getState().config;
+      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = currentConfig as any;
+      window.electronAPI.exec(
+        `config:write ${JSON.stringify({ ...launcherPayload, onboardingFinished: true })}`
+      ).catch(() => {});
+    }
   }, [setActiveTab, setOnboardingFinished]);
 
   return {

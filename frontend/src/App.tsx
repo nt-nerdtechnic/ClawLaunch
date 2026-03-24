@@ -386,8 +386,11 @@ function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    // Sync to config.json to persist theme across restarts
-    if (window.electronAPI && config) {
+    // Only sync to config.json when config paths have been loaded.
+    // Guards against overwriting valid persisted paths with default empty state
+    // before loadConfig() has completed its async IPC call on startup.
+    const hasLoadedConfig = Boolean(config.corePath || config.configPath || config.workspacePath);
+    if (window.electronAPI && hasLoadedConfig) {
       const updated = { ...config, theme };
       window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
     }
@@ -534,6 +537,13 @@ function App() {
     setOnboardingFinished(false);
     setActiveTab('onboarding');
     setShowLogoutConfirm(false);
+    // Also clear the persisted flag in config.json so restart after logout shows onboarding
+    if (window.electronAPI) {
+      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = config as any;
+      window.electronAPI.exec(
+        `config:write ${JSON.stringify({ ...launcherPayload, onboardingFinished: false })}`
+      ).catch(() => {});
+    }
   };
 
   if (viewMode === 'mini') {

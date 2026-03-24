@@ -192,8 +192,8 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                   : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'
               }`}
               aria-pressed={config.autoRestartGateway}
-              aria-label={t('launcher.autoRestart.label')}
-              title={t('launcher.autoRestart.label')}
+              aria-label={t('settings.autoRestartGatewayTitle')}
+              title={t('settings.autoRestartGatewayTitle')}
             >
               <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
             </button>
