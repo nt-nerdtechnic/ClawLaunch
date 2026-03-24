@@ -129,13 +129,20 @@
       "title": "作业时间轴",
       "count": "{{count}} 项",
       "tabs": {
+        "all": "全部",
         "cron": "计划",
         "task": "任务",
         "observation": "观察"
       },
+      "legend": {
+        "cron": "计划触发",
+        "task": "手动任务",
+        "observed": "系统观察"
+      },
       "scanBtn": "立即扫描 Agent 作业",
       "empty": "尚无作业记录"
     },
+
     "services": {
       "title": "系统服务",
       "empty": "未侦测到系统服务"
@@ -367,18 +374,18 @@
     "checkUpdateCurrentVersion": "当前版本",
     "checkUpdateBtn": "检查更新",
     "checkUpdateChecking": "检查中...",
-    "checkUpdateUpToDate": "已是最新版本",
+    "checkUpdateUpToDate": "已是最新版本: {{version}}",
     "checkUpdateNoReleases": "尚未发布任何版本",
     "checkUpdateAvailable": "有新版本可用: {{version}}",
     "checkUpdateDownload": "前往下载",
     "checkUpdateError": "无法检查更新",
     "autoRestartGatewayTitle": "自动重启 Gateway（崩溃时）",
     "autoRestartGatewayDesc": "套用于非 daemon 模式；异常退出时会依启动模式进行自动重启。",
-    "savedDefault": "已保存默认",
+    "savedDefault": "已保存默认值",
     "modifiedUnsaved": "已修改，未保存",
     "authorizedFilter": "已授权筛选",
     "noAccountDetected": "尚未侦测到已授权账号。",
-    "modelsCount": "{{count}} models",
+    "modelsCount": "{{count}} 个模型",
     "noModelsFromAuth": "尚未从目前授权状态取得可选模型。",
     "modelSource": "模型来源",
     "modelNotInAuthScope": "目前模型不在已授权 provider 范围",
@@ -391,12 +398,12 @@
       "oauthFlow": "OAuth 流程",
       "oauthGuide": "无须输入密钥。点击「新增授权」后将自动启动浏览器 OAuth 授权流程。",
       "noKeyRequired": "无须密钥",
-      "localServiceGuide": "此本地服务直接新增即可，无须 API 密钥。",
+      "localServiceGuide": "此本地服务直接新增即可，无需 API 密钥。",
       "restoreSaved": "点击还原为已储存值：{{val}}",
       "modifiedUnsaved": "已修改，未储存"
     },
     "gateway": {
-      "portHelp": "写入 openclaw.json 的 gateway.port，Gateway 启动时使用此端口。留空则使用 openclaw 預设值。"
+      "portHelp": "写入 openclaw.json 的 gateway.port，Gateway 启动时使用此埠。留空则使用 openclaw 默认值。"
     }
   },
   "logs": {
@@ -1109,15 +1116,15 @@
         "desc": "Anthropic 官方密钥"
       },
       "anthropicCli": {
-        "desc": "CLI 指令生成的验证 Token",
-        "help": "执行下方指令后，将生成的 Token 贴入栏位中。",
+        "desc": "CLI 指令产生的验证 Token",
+        "help": "执行下方指令后，将产生的 Token 贴入栏位中。",
         "placeholder": "claude setup-token 后取得的 Token"
       },
       "openai": {
         "desc": "OpenAI sk-... 密钥"
       },
       "openaiCodex": {
-        "desc": "浏览器 OAuth 授权，无需 Key"
+        "desc": "浏览器 OAuth 授权，无须 Key"
       },
       "gemini": {
         "desc": "Gemini 官方密钥"

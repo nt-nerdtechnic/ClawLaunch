@@ -56,10 +56,10 @@
       "pendingQueue": "待介入",
       "pendingApprovals": "待審批",
       "budgetRisk": "預算風險",
-      "scheduledRuns": "24h 排程執行",
+      "scheduledRuns": "近期排程執行",
       "successError": "成功 / 異常",
-      "devEvents": "24h 開發事件",
-      "activePending": "執行中 / 待辦"
+      "devEvents": "開發事件",
+      "activePending": "執行中 / 待處理"
     },
     "actions": {
       "refresh": "重新整理",
@@ -129,13 +129,20 @@
       "title": "作業時間軸",
       "count": "{{count}} 項",
       "tabs": {
+        "all": "全部",
         "cron": "排程",
         "task": "任務",
         "observation": "觀察"
       },
+      "legend": {
+        "cron": "排程觸發",
+        "task": "手動任務",
+        "observed": "系統觀察"
+      },
       "scanBtn": "立即掃描 Agent 作業",
       "empty": "尚無作業紀錄"
     },
+
     "services": {
       "title": "系統服務",
       "empty": "未偵測到系統服務"
@@ -374,6 +381,14 @@
     "checkUpdateError": "無法檢查更新",
     "autoRestartGatewayTitle": "自動重啟 Gateway（崩潰時）",
     "autoRestartGatewayDesc": "套用於非 daemon 模式；異常退出時會依啟動模式進行自動重啟。",
+    "savedDefault": "已儲存預設值",
+    "modifiedUnsaved": "已修改，未儲存",
+    "authorizedFilter": "已授權篩選",
+    "noAccountDetected": "尚未偵測到已授權帳號。",
+    "modelsCount": "{{count}} 個模型",
+    "noModelsFromAuth": "尚未從目前授權狀態取得可選模型。",
+    "modelSource": "模型來源",
+    "modelNotInAuthScope": "目前模型不在已授權 provider 範圍",
     "diag": {
       "title": "快捷診斷工具",
       "terminalHelp": "以下指令將在獨立 Terminal 視窗中執行，完成後按 Enter 關閉。"
@@ -1115,7 +1130,7 @@
         "desc": "Gemini 官方密鑰"
       },
       "geminiCli": {
-        "desc": "CLI OAuth 非官方授權"
+        "desc": "CLI OAuth 非官方授權導引"
       },
       "openrouter": {
         "desc": "OpenRouter 統一閘道密鑰"
