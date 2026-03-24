@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sensitive config & secrets — never commit
+.env
+.env.*
+!.env.example
+config.json
+auth-profiles.json
+control-center-state.json
+activity-store.json
+dist-electron/
+release/

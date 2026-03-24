@@ -1,7 +1,9 @@
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const DEV_PORT = 5173;
-const PROJECT_ROOT = '/Users/neillu/Desktop/NT-ClawLaunch/frontend';
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function run(command) {
   try {

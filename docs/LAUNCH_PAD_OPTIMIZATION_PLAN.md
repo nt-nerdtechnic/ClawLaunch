@@ -14,16 +14,16 @@
 10. 驗證與回歸（*依賴 4-9*）：補單元測試與手動驗證清單，確保 gateway 啟停、權限 gate、資料降級、UI 退化皆可預期。
 
 **Relevant files**
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/App.tsx — 現有 tab 結構與主流程入口，承接新功能分區最小改動點。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/store.ts — 擴展狀態模型與快照同步機制核心位置。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/components/ActionCenter.tsx — 審批/動作隊列升級入口。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/components/Analytics.tsx — 用量多維拆解與 budget/subscription 顯示主戰場。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/components/StaffGrid.tsx — 人員狀態與任務上下文交叉揭露入口。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/components/MiniView.tsx — 關鍵指標精簡視圖同步補強。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/components/UpdateBanner.tsx — 更新狀態/風險提示的現有承載區。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/src/components/onboarding/SetupStepLaunch.jsx — 啟動後健康診斷與降級說明落點。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/electron/main.ts — 新增 IPC 命令與後端數據彙整橋接層。
-- /Users/neillu/Desktop/NT-ClawLaunch/frontend/electron/preload.js — 安全暴露 renderer API 的邊界層。
+- `frontend/src/App.tsx` — 現有 tab 結構與主流程入口，承接新功能分區最小改動點。
+- `frontend/src/store.ts` — 擴展狀態模型與快照同步機制核心位置。
+- `frontend/src/components/ActionCenter.tsx` — 審批/動作隊列升級入口。
+- `frontend/src/components/Analytics.tsx` — 用量多維拆解與 budget/subscription 顯示主戰場。
+- `frontend/src/components/StaffGrid.tsx` — 人員狀態與任務上下文交叉揭露入口。
+- `frontend/src/components/MiniView.tsx` — 關鍵指標精簡視圖同步補強。
+- `frontend/src/components/UpdateBanner.tsx` — 更新狀態/風險提示的現有承載區。
+- `frontend/src/components/onboarding/SetupStepLaunch.jsx` — 啟動後健康診斷與降級說明落點。
+- `frontend/electron/main.ts` — 新增 IPC 命令與後端數據彙整橋接層。
+- `frontend/electron/preload.js` — 安全暴露 renderer API 的邊界層。
 
 **Verification**
 1. 功能驗證：每個頁籤至少有 1 個新增高價值資訊區塊，且可在真實資料缺失時顯示降級原因。

@@ -1,5 +1,5 @@
-import React from 'react';
-import { FolderOpen } from 'lucide-react';
+import React, { useState } from 'react';
+import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface LauncherSettingsPageProps {
@@ -11,6 +11,14 @@ interface LauncherSettingsPageProps {
   onBrowsePath: (key: 'corePath' | 'configPath' | 'workspacePath') => void;
 }
 
+type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
+
+interface UpdateInfo {
+  current: string;
+  latest: string;
+  htmlUrl: string;
+}
+
 export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
   config,
   setConfig,
@@ -20,6 +28,8 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
   onBrowsePath,
 }) => {
   const { t } = useTranslation();
+  const [updateState, setUpdateState] = useState<UpdateState>('idle');
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
   const saveButtonLabel =
     saveState === 'saving'
@@ -32,6 +42,20 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
 
   const shouldUseExternalTerminal = (cfg?: any) =>
     (cfg?.useExternalTerminal ?? config?.useExternalTerminal) !== false;
+
+  const handleCheckUpdate = async () => {
+    setUpdateState('checking');
+    setUpdateInfo(null);
+    try {
+      const res = await window.electronAPI.exec('app:check-update');
+      if ((res.code ?? res.exitCode) !== 0) throw new Error(res.stderr);
+      const info: UpdateInfo = JSON.parse(res.stdout);
+      setUpdateInfo(info);
+      setUpdateState(info.upToDate ? 'up-to-date' : 'available');
+    } catch {
+      setUpdateState('error');
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in zoom-in-95">
@@ -167,6 +191,60 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
               title="自動重啟 Gateway"
             >
               <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
+            </button>
+          </div>
+        </div>
+
+        {/* Check for Updates Section */}
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">
+            {t('settings.checkUpdateTitle')}
+          </div>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                {t('settings.checkUpdateCurrentVersion')}
+                {updateInfo && (
+                  <span className="font-mono font-normal text-slate-500 dark:text-slate-400">v{updateInfo.current}</span>
+                )}
+              </div>
+              {updateState === 'up-to-date' && (
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <CheckCircle size={12} />
+                  {t('settings.checkUpdateUpToDate')}
+                </div>
+              )}
+              {updateState === 'available' && updateInfo && (
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                    <AlertCircle size={12} />
+                    {t('settings.checkUpdateAvailable')}: <span className="font-mono">v{updateInfo.latest}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => window.electronAPI.openExternal(updateInfo.htmlUrl)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    <Download size={11} />
+                    {t('settings.checkUpdateDownload')}
+                  </button>
+                </div>
+              )}
+              {updateState === 'error' && (
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+                  <AlertCircle size={12} />
+                  {t('settings.checkUpdateError')}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleCheckUpdate}
+              disabled={updateState === 'checking'}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-60 disabled:cursor-wait"
+            >
+              <RefreshCw size={13} className={updateState === 'checking' ? 'animate-spin' : ''} />
+              {updateState === 'checking' ? t('settings.checkUpdateChecking') : t('settings.checkUpdateBtn')}
             </button>
           </div>
         </div>

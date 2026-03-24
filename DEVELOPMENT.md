@@ -4,7 +4,7 @@
 
 ## 常用指令 (scripts)
 
-請在 `/Users/neillu/Desktop/NT-ClawLaunch/frontend` 目錄下執行：
+請在專案的 `frontend/` 目錄下執行：
 
 ### 1. 開發模式 (熱重載) ⚡
 如果您正在修改代碼並希望立即看到結果：
