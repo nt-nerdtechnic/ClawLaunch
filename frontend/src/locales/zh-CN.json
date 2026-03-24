@@ -301,7 +301,15 @@
     "saveConfig": "保存配置变更",
     "savingConfigButton": "保存中...",
     "configSavedButton": "已保存",
-    "saveConfigFailedButton": "保存失败"
+    "saveConfigFailedButton": "保存失败",
+    "checkUpdateTitle": "应用程序更新",
+    "checkUpdateCurrentVersion": "当前版本",
+    "checkUpdateBtn": "检查更新",
+    "checkUpdateChecking": "检查中...",
+    "checkUpdateUpToDate": "已是最新版本",
+    "checkUpdateAvailable": "有新版本可用",
+    "checkUpdateDownload": "前往下载",
+    "checkUpdateError": "无法检查更新"
   },
   "logs": {
     "autoDetectSuccess": ">>> 自动侦测完成: 已连结至机甲核心",

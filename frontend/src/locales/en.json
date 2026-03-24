@@ -301,7 +301,15 @@
     "saveConfig": "Save Configuration",
     "savingConfigButton": "Saving...",
     "configSavedButton": "Saved",
-    "saveConfigFailedButton": "Save Failed"
+    "saveConfigFailedButton": "Save Failed",
+    "checkUpdateTitle": "App Updates",
+    "checkUpdateCurrentVersion": "Current version",
+    "checkUpdateBtn": "Check for Updates",
+    "checkUpdateChecking": "Checking...",
+    "checkUpdateUpToDate": "You are on the latest version",
+    "checkUpdateAvailable": "New version available",
+    "checkUpdateDownload": "Download",
+    "checkUpdateError": "Failed to check for updates"
   },
   "logs": {
     "autoDetectSuccess": ">>> Auto detection complete: Connected to Mecha Core",

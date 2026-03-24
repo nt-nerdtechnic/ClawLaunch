@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 
 interface UseAppBootstrapParams {
@@ -16,6 +16,7 @@ export function useAppBootstrap({
   syncGatewayStatus,
 }: UseAppBootstrapParams) {
   const initPromiseRef = useRef<Promise<void> | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
 
   const checkOnboardingStatus = useCallback((loadedConfig?: any, _detected?: any) => {
     const persisted = loadedConfig || {};
@@ -184,7 +185,7 @@ export function useAppBootstrap({
 
   useEffect(() => {
     if (!initPromiseRef.current) {
-      initPromiseRef.current = initializeApp();
+      initPromiseRef.current = initializeApp().finally(() => setBootstrapping(false));
     }
   }, [initializeApp]);
 
@@ -196,6 +197,7 @@ export function useAppBootstrap({
   }, [setActiveTab, setOnboardingFinished]);
 
   return {
+    bootstrapping,
     handleOnboardingComplete,
   };
 }
