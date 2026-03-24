@@ -376,7 +376,7 @@ function App() {
     setSnapshotSourcePath,
   });
 
-  // JSONL 自算 — 直接掃 ~/.openclaw/agents/*/sessions/*.jsonl
+  // JSONL calculation — directly scan ~/.openclaw/agents/*/sessions/*.jsonl
   useRuntimeUsageSync();
 
   const { theme } = useStore();
@@ -386,7 +386,7 @@ function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    // 同步寫進 config.json，讓主題跨重啟保留
+    // Sync to config.json to persist theme across restarts
     if (window.electronAPI && config) {
       const updated = { ...config, theme };
       window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
@@ -520,7 +520,7 @@ function App() {
   };
 
   const handleResetOnboarding = async () => {
-    // 登出前先嘗試停止 Gateway，避免殭屍進程占用 port
+    // Try to stop Gateway before logging out to avoid zombie processes occupying the port
     if (running && config.corePath && window.electronAPI) {
       const hasConfigIsolation = !!config.configPath?.trim();
       if (!hasConfigIsolation) {

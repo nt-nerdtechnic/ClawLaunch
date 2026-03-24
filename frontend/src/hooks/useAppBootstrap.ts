@@ -20,8 +20,8 @@ export function useAppBootstrap({
 
   const checkOnboardingStatus = useCallback((loadedConfig?: any, _detected?: any) => {
     const persisted = loadedConfig || {};
-    // 只看已儲存的 config 判斷是否完成 onboarding。
-    // 偵測到的路徑僅供 wizard 預填，不代表此實例已完成設定。
+    // Determine onboarding completion based solely on saved config.
+    // Detected paths are for wizard pre-filling only; they don't imply the instance is fully configured.
     const hasAnyConfiguredPath = Boolean(
       (persisted.corePath && String(persisted.corePath).trim()) ||
       (persisted.configPath && String(persisted.configPath).trim()) ||
@@ -135,7 +135,7 @@ export function useAppBootstrap({
       syncGatewayStatus(loadedConfig),
     ]);
 
-    // 若偵測到全三條路徑且 agent auth 已健康，且此實例已有儲存的 config，直接完成 onboarding，不再顯示 wizard
+    // If all three paths are detected, agent auth is healthy, and the instance has saved config, complete onboarding directly without showing the wizard
     const hasSavedConfig = Boolean(
       loadedConfig && (
         (loadedConfig.corePath && String(loadedConfig.corePath).trim()) ||
@@ -160,7 +160,7 @@ export function useAppBootstrap({
       const hasMessaging   = Boolean(detBotToken);
 
       if (hasAllPaths && hasHealthyAuth && hasMessaging) {
-        // 自動把偵測到的路徑寫入 launcher config（合併現有設定）
+        // Automatically write detected paths into launcher config (merge with existing settings)
         const { setConfig } = useStore.getState();
         const patch = { corePath: detCorePath, configPath: detConfigPath, workspacePath: detWorkspace };
         setConfig(patch);

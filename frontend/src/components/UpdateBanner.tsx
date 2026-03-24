@@ -49,7 +49,7 @@ const UpdateBanner = () => {
     setLocalLogs([{ text: t('updateBanner.logs.start'), source: 'system', time: new Date().toLocaleTimeString() }]);
     
     try {
-      // 在專案根目錄執行更新
+      // Execute update in the project root directory
       const res = await window.electronAPI.exec('git pull && pnpm install --no-frozen-lockfile || npm install');
       
       if (res.code === 0) {
@@ -124,7 +124,7 @@ const UpdateBanner = () => {
         </div>
       </div>
 
-      {/* 展開的日誌區域 */}
+      {/* Expanded log area */}
       {(updating || localLogs.length > 0) && !complete && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
             <TerminalLog logs={localLogs} height="h-44" title={t('updateBanner.logs.title')} />

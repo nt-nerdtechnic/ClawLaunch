@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 
 /**
- * 運行時配置 Hook
- * 管理 openclaw.json 相關的配置狀態和操作
+ * Runtime configuration hook
+ * Manages openclaw.json related configuration states and operations
  */
 export function useRuntimeConfig(
   resolvedConfigDir: string,
@@ -22,8 +22,8 @@ export function useRuntimeConfig(
 
   const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
-  // 探測運行時配置（全域，不限 tab，應用程式載入即執行）
-  // 依序嘗試：設定區 → 工作區 → 核心區，三區輪詢確保能找到 openclaw.json
+  // Detect runtime configuration (global, not limited to any tab, executes upon app load)
+  // Try in order: config area → workspace area → core area; polling across these three zones ensures openclaw.json is found
   useEffect(() => {
     const probeRuntimeConfig = async () => {
       if (!window.electronAPI) return;
@@ -34,7 +34,7 @@ export function useRuntimeConfig(
         return;
       }
 
-      // 建立三區候選路徑（設定區優先，去重）
+      // Create candidate paths for the three zones (config area prioritized, deduplicated)
       const candidates: string[] = [resolvedConfigDir];
       if (fallbackWorkspacePath?.trim() && fallbackWorkspacePath.trim() !== resolvedConfigDir) {
         candidates.push(fallbackWorkspacePath.trim());
@@ -52,11 +52,11 @@ export function useRuntimeConfig(
             return;
           }
         } catch {
-          // 繼續嘗試下一個候選路徑
+          // Continue trying the next candidate path
         }
       }
 
-      // 三區均未找到
+      // Not found in any of the three zones
       setRuntimeProfile(null);
       const checkedPaths = candidates.map(p => `${p}/openclaw.json`).join('、');
       setRuntimeProfileError(`找不到 openclaw.json：已搜尋 ${checkedPaths}，均不存在或無法讀取。`);
@@ -65,7 +65,7 @@ export function useRuntimeConfig(
     probeRuntimeConfig();
   }, [resolvedConfigDir, fallbackCorePath, fallbackWorkspacePath]);
 
-  // 同步有效的運行時模型和 token
+  // Sync valid runtime models and tokens
   useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;
     
@@ -77,7 +77,7 @@ export function useRuntimeConfig(
     setRuntimeDraftGatewayPort(nextGatewayPort);
   }, [activeTab, runtimeProfile, detectedConfig]);
 
-  // 加載動態模型選項
+  // Load dynamic model options
   const loadDynamicModelOptions = async (
     corePath: string,
     effectiveAuthorizedProviders: string[]

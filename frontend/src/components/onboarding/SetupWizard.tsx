@@ -64,7 +64,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
     };
   }, []);
 
-  // 定義動態步驟路徑
+  // Define dynamic step paths
   const steps: StepDefinition[] = [
     { id: 'welcome', component: SetupStepWelcome },
     ...(userType === 'new' ? [{ id: 'initialize', component: SetupStepInitialize }] : []),
@@ -103,7 +103,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   return (
     <div className="h-screen bg-[#fcfcfd] flex flex-col items-center overflow-y-auto p-6 font-sans">
       <div className="w-full max-w-2xl flex flex-col my-auto">
-      {/* 頂部進度條 (Stepper UI) */}
+      {/* Top progress bar (Stepper UI) */}
       <div className="w-full mb-8">
         <div className="flex justify-between items-center mb-4">
           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
@@ -129,12 +129,12 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
         </div>
       </div>
 
-      {/* 步驟內容容器 */}
+      {/* Step content container */}
       <div className="w-full transition-all duration-300">
         {renderStep()}
       </div>
 
-      {/* 底部導航補助 */}
+      {/* Bottom navigation helper */}
       {currentStep > 0 && currentStep < totalSteps - 1 && (
         <button 
           onClick={prevStep}
@@ -144,7 +144,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
         </button>
       )}
 
-      {/* 品牌 Logo (蝦爪圖標) */}
+      {/* Brand Logo (Claw icon) */}
       <div className="mt-12 flex items-center gap-4">
         <LanguageToggle />
         <div className="flex items-center gap-2 opacity-20 grayscale">

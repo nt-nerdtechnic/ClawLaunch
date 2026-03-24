@@ -14,8 +14,8 @@ export type AuthProfileRow = {
 };
 
 /**
- * 認證管理 Hook
- * 管理所有授權相關的狀態和操作
+ * Authentication management hook
+ * Manages all authorization-related states and operations
  */
 export function useAuthProfiles(
   resolvedConfigDir: string,
@@ -41,7 +41,7 @@ export function useAuthProfiles(
   const [authAddTokenRunning, setAuthAddTokenRunning] = useState(false);
   const [authAddTokenError, setAuthAddTokenError] = useState('');
 
-  // 載入授權清單
+  // Load authorization list
   const loadAuthProfiles = async () => {
     if (!window.electronAPI || !resolvedConfigDir) {
       setAuthProfiles([]);
@@ -72,7 +72,7 @@ export function useAuthProfiles(
     }
   };
 
-  // 當 activeTab 變化時，初始加載授權清單
+  // Initially load authorization list when activeTab changes
   useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;
     loadAuthProfiles();

@@ -21,7 +21,7 @@ const formatDelta = (current: number, previous: number) => {
   return `${percent > 0 ? '+' : ''}${percent.toFixed(1)}%`;
 };
 
-// 保留作 fallback（當 runtimeUsageEvents 為空時）
+// Keep as fallback (when runtimeUsageEvents is empty)
 const estimateCost = (inputTokens: number, outputTokens: number) => {
   return ((inputTokens + outputTokens * 2) / 1_000_000) * 0.5;
 };
@@ -62,7 +62,7 @@ export function Analytics() {
     return snapshotSessions.filter((item): item is ReadModelSession => !!item && typeof item === 'object');
   }, [snapshotSessions]);
 
-  // ── Track 2: JSONL 自算 - 從 runtimeUsageEvents 建立 per-day DaySeries ──
+  // ── Track 2: JSONL Calculation - Build per-day DaySeries from runtimeUsageEvents ──
   const runtimeDayMap = useMemo<DaySeries[]>(() => {
     if (runtimeUsageEvents.length === 0) return [];
     const map = new Map<string, DaySeries>();
@@ -104,7 +104,7 @@ export function Analytics() {
       .map(([, value]) => ({ name: value.label, in: value.in, out: value.out, tokens: value.tokens, cost: normalizeFinite(value.cost, estimateCost(value.in, value.out)) }));
   }, [sessions, snapshot?.generatedAt]);
 
-  // 優先順序：runtimeDayMap (Track 2) > snapshotHistory (Track 1) > fallbackChartData
+  // Priority: runtimeDayMap (Track 2) > snapshotHistory (Track 1) > fallbackChartData
   const chartData = useMemo<DaySeries[]>(() => {
     if (runtimeDayMap.length > 0) return runtimeDayMap;
 
@@ -125,7 +125,7 @@ export function Analytics() {
     return fallbackChartData;
   }, [runtimeDayMap, fallbackChartData, snapshotHistory]);
 
-  // Track 2 優先：從 runtimeUsageEvents 加總（最精確）
+  // Track 2 Priority: Sum from runtimeUsageEvents (most accurate)
   const totals = useMemo(() => {
     if (runtimeUsageEvents.length > 0) {
       return runtimeUsageEvents.reduce(
@@ -148,7 +148,7 @@ export function Analytics() {
     );
   }, [runtimeUsageEvents, sessions]);
 
-  // 三時窗從 runtimeUsageEvents 動態計算（同 openclaw-control-center computeUsageCostSnapshot）
+  // Dynamic calculation across three time windows from runtimeUsageEvents (same as openclaw-control-center computeUsageCostSnapshot)
   const runtimePeriods = useMemo<Record<'today' | '7d' | '30d', PeriodAgg>>(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
     const getFrom = (days: number) =>
@@ -186,7 +186,7 @@ export function Analytics() {
     };
   }, [runtimeUsageEvents, runtimePeriods, chartData]);
 
-  // Pace 分類（同 openclaw-control-center classifyPace）
+  // Pace classification (same as openclaw-control-center classifyPace)
   const paceStatus = useMemo(() => {
     if (runtimeUsageEvents.length === 0) return null;
     const avgCost = (daysBack: number, len: number) => {
@@ -203,7 +203,7 @@ export function Analytics() {
     return { label: t('analytics.pace.steady'), state: 'steady' as const, color: 'text-emerald-500' as const };
   }, [runtimeUsageEvents, t]);
 
-  // Provider 分布（只有 runtimeUsageEvents 有 provider 資訊）
+  // Provider distribution (only runtimeUsageEvents contains provider info)
   const providerBreakdown = useMemo(() => {
     if (runtimeUsageEvents.length === 0) return [];
     const map = new Map<string, { tokens: number; cost: number }>();
@@ -242,7 +242,7 @@ export function Analytics() {
     return chartData.slice(-30);
   }, [chartData, usageWindow]);
 
-  // Track 2 優先：從 runtimeUsageEvents by model（精確來歷）
+  // Track 2 Priority: From runtimeUsageEvents grouped by model (accurate source)
   const costHotspots = useMemo(() => {
     if (runtimeUsageEvents.length > 0) {
       const grouped = new Map<string, number>();
@@ -271,7 +271,7 @@ export function Analytics() {
       .slice(0, 5);
   }, [runtimeUsageEvents, sessions, t]);
 
-  // Track 2 優先：by agentId from runtimeUsageEvents
+  // Track 2 Priority: Grouped by agentId from runtimeUsageEvents
   const agentBreakdown = useMemo(() => {
     if (runtimeUsageEvents.length > 0) {
       const grouped = new Map<string, number>();

@@ -32,21 +32,21 @@ const SetupStepMessaging = ({ onNext }) => {
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
   const [localError, setLocalError] = useState('');
 
-  // 初始化：如果偵測到配置且為現有使用者，回填至 config
+  // Initialize: Backfill config if existing user configuration is detected
   useEffect(() => {
     if (userType !== 'new' && detectedConfig?.botToken && !config.botToken) {
         setConfig({ botToken: detectedConfig.botToken });
     }
   }, [config.botToken, detectedConfig?.botToken, setConfig, userType]);
 
-  // 自動跳過：僅在偵測到既有設定 token 時才自動前進，避免手動貼上後直接跳步。
+  // Auto-skip: Proceed only if existing tokens are detected to avoid premature navigation after manual pasting.
   const autoAdvancedRef = React.useRef(false);
   useEffect(() => {
     if (autoAdvancedRef.current) return;
     const detectedToken = String(detectedConfig?.botToken || '').trim();
     if (detectedToken) {
       autoAdvancedRef.current = true;
-      // 確保 config 中的 botToken 已填入再前進
+      // Ensure botToken in config is filled before proceeding
       if (!config.botToken) {
         setConfig({ botToken: detectedToken });
       }
@@ -56,7 +56,7 @@ const SetupStepMessaging = ({ onNext }) => {
 
   const handleChannelSelect = (channelId) => {
     setLocalError('');
-    setConfig({ platform: channelId, botToken: '', appToken: '' }); // 重設 Token
+    setConfig({ platform: channelId, botToken: '', appToken: '' }); // Reset Token
   };
 
   const selectedChannel = CHANNEL_OPTIONS.find(c => c.id === config.platform) || CHANNEL_OPTIONS[0];
@@ -83,7 +83,7 @@ const SetupStepMessaging = ({ onNext }) => {
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-left">
-      {/* 步驟頭部 */}
+      {/* Step header */}
       <div className="mb-8 text-center">
         <div className="inline-flex items-center justify-center w-12 h-12 bg-green-50 rounded-full text-green-600 mb-4">
           <MessageSquare size={24} />
@@ -106,7 +106,7 @@ const SetupStepMessaging = ({ onNext }) => {
           </div>
         )}
 
-        {/* 配置摘要 (若已有資料) */}
+        {/* Config summary (if data exists) */}
         {config.botToken && !showFullSetup && (
             <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-4 animate-in fade-in zoom-in-95">
                 <div className="flex justify-between items-center">
@@ -163,11 +163,11 @@ const SetupStepMessaging = ({ onNext }) => {
             </div>
         )}
 
-        {/* 手動輸入區 (僅在需要修改或無資料時顯示) */}
+        {/* Manual input area (shown only when editing or if empty) */}
         {(showFullSetup || (!config.botToken && config.platform !== 'whatsapp' && config.platform !== 'irc' && config.platform !== 'signal' && config.platform !== 'imessage')) && (
             <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
                 
-                {/* 第一步：選擇通訊頻道 */}
+                {/* Step 1: Select communication channel */}
                 <div className="space-y-3">
                      <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
                         <span className="w-5 h-5 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-[10px]">1</span>
@@ -192,7 +192,7 @@ const SetupStepMessaging = ({ onNext }) => {
                     </div>
                 </div>
 
-                {/* 第二步：Token / 授權區 */}
+                {/* Step 2: Token / Auth area */}
                 <div className="space-y-3 bg-gray-50 p-4 rounded-3xl border border-gray-100 mt-4">
                     <div className="flex justify-between items-center px-1">
                         <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2 mb-2">
@@ -279,7 +279,7 @@ const SetupStepMessaging = ({ onNext }) => {
                     )}
                 </div>
 
-                {/* 下一步按鈕 */}
+                {/* Next button */}
                 <div className="pt-4 space-y-4">
                     {onboardingAction.executing && (
                         <div className="space-y-2 animate-in fade-in duration-300">
@@ -317,7 +317,7 @@ const SetupStepMessaging = ({ onNext }) => {
             </div>
         )}
 
-        {/* 教學彈窗 (Modal Overlay) */}
+        {/* Tutorial modal overlay */}
         {showGuide && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">

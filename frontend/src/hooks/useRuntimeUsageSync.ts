@@ -31,8 +31,8 @@ export function useRuntimeUsageSync() {
       return;
     }
 
-    // JSONL 檔案在 configPath/agents/（~/.openclaw/agents/）
-    // configPath 可能是 "~/.openclaw" 或 "~/.openclaw/openclaw.json"，統一 strip 尾綴
+    // JSONL files located in configPath/agents/ (~/.openclaw/agents/)
+    // configPath can be "~/.openclaw" or "~/.openclaw/openclaw.json"; consistently strip the suffix
     const configDir = config.configPath
       ? config.configPath.replace(/[\\/]openclaw\.json$/i, '')
       : undefined;
@@ -56,7 +56,7 @@ export function useRuntimeUsageSync() {
   }, [config.configPath, setRuntimeUsageEvents]);
 
   useEffect(() => {
-    // 歷史數據不需要 gateway 在線，mount 時就掃描
+    // Historical data doesn't require gateway to be online; scan initiated on mount
     scan();
     const id = setInterval(scan, SCAN_INTERVAL_MS);
     return () => clearInterval(id);

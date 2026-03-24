@@ -174,7 +174,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const { t } = useTranslation();
   const dynamicModelSource = dynamicModelOptions.length > 0 ? '動態' : '靜態';
 
-  // 模型清單展開/收合狀態
+  // Model list expanded/collapsed state
   const [expandedModelGroups, setExpandedModelGroups] = useState<Set<string>>(new Set());
   const toggleModelGroup = (key: string) =>
     setExpandedModelGroups((prev) => {
@@ -184,13 +184,13 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
       return next;
     });
 
-  // 通道選擇與 Bot Token 草稿狀態
+  // Channel selection and Bot Token draft states
   const [selectedChannelId, setSelectedChannelId] = useState('telegram');
   const [localChannelTokens, setLocalChannelTokens] = useState<Record<string, string>>({});
   const [channelSaving, setChannelSaving] = useState('');
   const [channelSaved, setChannelSaved] = useState('');
 
-  // 從 runtimeProfile 同步各通道 Token（排除 telegram，由 runtimeDraftBotToken 處理）
+  // Sync channel tokens from runtimeProfile (excluding telegram, handled by runtimeDraftBotToken)
   useEffect(() => {
     const channels = (runtimeProfile?.channels || {}) as Record<string, any>;
     const tokens: Record<string, string> = {};
@@ -227,7 +227,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const getSavedChannelToken = (chId: string) =>
     chId === 'telegram' ? runtimeDraftBotToken : (localChannelTokens[chId] || '');
 
-  // 授權 Provider 與驗證方式的結構定義（對應 onboarding SetupStepModel）
+  // Definitions for authorization providers and verification methods (matches onboarding SetupStepModel)
   type AuthChoiceDef = { id: string; name: string; desc: string; reqKey: boolean; oauthFlow?: boolean; isTokenFlow?: boolean; placeholder?: string; link?: string | null; helpText?: string };
   type ProviderGroupDef = { id: string; label: string; desc: string; icon: React.ReactNode; choices: AuthChoiceDef[] };
   const AUTH_PROVIDER_GROUPS: ProviderGroupDef[] = [
@@ -299,7 +299,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     },
   ];
 
-  // 選擇 provider 時同步切換到該 provider 的第一個 choice
+  // Sync to the first choice of the provider when it is selected
   const handleAuthProviderSelect = (pid: string) => {
     setAuthAddProvider(pid);
     const group = AUTH_PROVIDER_GROUPS.find((g) => g.id === pid);
@@ -441,7 +441,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
               )}
               <div className="space-y-4">
 
-                {/* Step 1：選擇 Provider */}
+                {/* Step 1: Select Provider */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
                     <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px]">1</span>
@@ -473,7 +473,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   </div>
                 </div>
 
-                {/* Step 2：選擇驗證方式（當 provider 有多種選項時才顯示） */}
+                {/* Step 2: Select verification method (shown only if multiple options exist for the provider) */}
                 {currentAuthProviderGroup.choices.length > 1 && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -510,7 +510,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   </div>
                 )}
 
-                {/* Step 3：憑證輸入 / OAuth 說明 / 無須密鑰 */}
+                {/* Step 3: Credentials input / OAuth guide / No key required */}
                 {currentAuthChoice.oauthFlow ? (
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-700/60 dark:bg-emerald-950/20 px-4 py-3 space-y-1">
                     <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">OAuth 流程</p>
@@ -562,7 +562,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                       </div>
                     )}
 
-                    {/* Token CLI 指令執行器（僅 isTokenFlow 時顯示） */}
+                    {/* Token CLI command executor (shown only during isTokenFlow) */}
                     {currentAuthChoice.isTokenFlow && (
                       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2">
                         <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Token 產生指令</div>
@@ -642,7 +642,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                     : 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 focus:border-amber-400 dark:focus:border-amber-600'
                 }`}
               />
-              {/* 目前已儲存的預設模型 */}
+              {/* Currently saved default models */}
               {runtimeProfile?.model && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
                   <span>已儲存預設：</span>
@@ -699,7 +699,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
 
           {/* Model Picker */}
           <div className="mt-5 rounded-[24px] border border-slate-200 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-sky-50/70 dark:from-slate-950/70 dark:via-slate-900/60 dark:to-sky-950/30 p-4 space-y-4 shadow-lg shadow-slate-200/40 dark:shadow-none">
-            {/* 已授權 Provider 徽章 */}
+            {/* Authorized provider badges */}
             <div className="flex flex-wrap items-center gap-2">
               {authorizedProviderBadges.length > 0 ? (
                 <>
@@ -800,7 +800,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
         </div>
       </div>
 
-      {/* 通道 Bot Token 管理 */}
+      {/* Channel Bot Token management */}
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
@@ -811,7 +811,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           </div>
         </div>
 
-        {/* 已設定 Token 常駐總覽（不受通道切換影響） */}
+        {/* Configured tokens overview (independent of channel switching) */}
         {(() => {
           const configured = CHANNEL_OPTIONS.filter(ch => ch.reqKey !== false && getSavedChannelToken(ch.id));
           if (configured.length === 0) return null;
@@ -839,7 +839,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           );
         })()}
 
-        {/* Step 1：選擇通道 */}
+        {/* Step 1: Select channel */}
         <div className="grid grid-cols-3 gap-2">
           {CHANNEL_OPTIONS.map(ch => (
             <button
@@ -879,7 +879,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           ))}
         </div>
 
-        {/* Step 2：Token 輸入 */}
+        {/* Step 2: Token input */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 space-y-3">
           {selectedChannel.reqKey === false ? (
             <div className="flex items-start gap-3 py-2">
@@ -936,7 +936,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           )}
         </div>
 
-        {/* Telegram 配對管理：常駐顯示，不受通道選擇影響 */}
+        {/* Telegram pairing management: always displayed, independent of channel selection */}
         <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">

@@ -19,7 +19,7 @@ const SetupStepLaunch = ({ onComplete }) => {
   const [hasStarted, setHasStarted] = useState(false);
   const autoStartedRef = React.useRef(false);
 
-  // 最後一步固定不走 daemon，避免在背景安裝/執行服務。
+  // Final step avoids daemon mode to prevent background installation/execution of services.
   React.useEffect(() => {
     setConfig({ installDaemon: false });
   }, [setConfig]);
@@ -49,7 +49,7 @@ const SetupStepLaunch = ({ onComplete }) => {
     }
   };
 
-  // existing user：掛載時自動執行啟動檢查，不顯示準備畫面
+  // Existing user: Auto-check startup on mount; skip setup screens
   React.useEffect(() => {
     if (autoStartedRef.current) return;
     if (userType !== 'new') {
@@ -58,7 +58,7 @@ const SetupStepLaunch = ({ onComplete }) => {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 成功後自動完成，不需使用者點按
+  // Auto-complete upon success; no user interaction required
   React.useEffect(() => {
     if (status === 'success') {
       onComplete();

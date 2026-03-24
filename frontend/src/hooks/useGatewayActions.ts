@@ -45,7 +45,7 @@ export function useGatewayActions({
   const shouldUseExternalTerminal = (cfg?: any) =>
     (cfg?.useExternalTerminal ?? config.useExternalTerminal) !== false;
 
-  // 從 openclaw.json (runtimeProfile) 取得 gateway port
+  // Get gateway port from openclaw.json (runtimeProfile)
   const getGatewayPort = (): number | null => {
     const raw = String(runtimeProfile?.gateway?.port ?? '').trim();
     if (!raw || !/^\d+$/.test(raw)) return null;
@@ -53,7 +53,7 @@ export function useGatewayActions({
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
   };
 
-  // 用 lsof 檢查 gateway 是否在監聽（port 未知時回傳 null）
+  // Check if gateway is listening using lsof (returns null if port is unknown)
   const isGatewayListening = async (): Promise<boolean | null> => {
     if (!window.electronAPI) return null;
     const port = getGatewayPort();
@@ -71,7 +71,7 @@ export function useGatewayActions({
     timeoutMs = 15000,
     intervalMs = 500,
   ): Promise<boolean> => {
-    // 若 port 未知則無法確認，視為成功（依 openclaw 自行管理）
+    // If port is unknown, cannot verify; treat as success (managed by OpenClaw itself)
     if (getGatewayPort() === null) return true;
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
@@ -136,8 +136,8 @@ export function useGatewayActions({
         await window.electronAPI.exec(closeTerminalWindowsCmd).catch(() => {});
       }
 
-      // non-daemon + killTerminalAndPortHolders 模式下，process 已被 killPortHolder 殺掉，
-      // gateway stop 只適用於 daemon 模式，跳過以避免開多餘的 Terminal 視窗顯示 "service not loaded"
+      // In non-daemon + killTerminalAndPortHolders mode, the process is already killed by killPortHolder,
+      // gateway stop only applies to daemon mode; skip to avoid redundant Terminal windows showing "service not loaded"
       const skipGatewayStop = options?.killTerminalAndPortHolders && !config.installDaemon;
       if (!skipGatewayStop) {
         const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
@@ -190,7 +190,7 @@ export function useGatewayActions({
       const envPrefix = buildOpenClawEnvPrefix();
       const port = getGatewayPort();
 
-      // 啟動前 port 衝突檢查（僅在 openclaw.json 已設定 port 時執行）
+      // Port conflict check before startup (only executed if port is set in openclaw.json)
       if (port) {
         const precheckRes: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
         const precheckCode = precheckRes.code ?? precheckRes.exitCode;

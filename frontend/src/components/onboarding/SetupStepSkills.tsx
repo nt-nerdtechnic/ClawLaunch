@@ -44,7 +44,7 @@ const SetupStepSkills = ({ onNext }) => {
     setScanning(false);
   };
 
-  // 自動跳過：existing user 已有技能設定，不需停留在此步驟
+  // Auto-skip: Existing user with skill settings don't need to stay on this step
   const autoAdvancedRef = React.useRef(false);
   React.useEffect(() => {
     if (autoAdvancedRef.current) return;
@@ -53,7 +53,7 @@ const SetupStepSkills = ({ onNext }) => {
       onNext();
       return;
     }
-    // 新使用者才執行掃描
+    // Scan only for new users
     if (detectedSkills.length === 0 || coreSkills.length === 0) {
       rescan();
     }
@@ -113,7 +113,7 @@ const SetupStepSkills = ({ onNext }) => {
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-left">
-      {/* 步驟頭部 */}
+      {/* Step header */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
@@ -146,7 +146,7 @@ const SetupStepSkills = ({ onNext }) => {
         </button>
       </div>
 
-      {/* ── 核心技能區（從 CORE_SKILLS 掃描，唯讀）── */}
+      {/* ── Core Skills area (scanned from CORE_SKILLS, read-only) ── */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-3">
           <ShieldCheck size={14} className="text-violet-500" />
@@ -182,7 +182,7 @@ const SetupStepSkills = ({ onNext }) => {
         )}
       </div>
 
-      {/* ── 工作區技能區（可匯入 / 刪除）── */}
+      {/* ── Workspace Skills area (importable / deletable) ── */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-3">
           <Package size={14} className="text-blue-500" />
@@ -239,7 +239,7 @@ const SetupStepSkills = ({ onNext }) => {
         )}
       </div>
 
-      {/* 下一步按鈕與錯誤 */}
+      {/* Next button and errors */}
       <div className="space-y-4">
         {errorMsg && (
             <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-red-600 text-[11px] animate-in slide-in-from-top-1">

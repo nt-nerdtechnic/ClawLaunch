@@ -4,7 +4,7 @@ import type { SkillItem } from '../store';
 import { Info, Lock, ChevronDown, ChevronUp, Puzzle, ShieldCheck, RefreshCw, PackagePlus, Trash2, FolderOpen, Blocks, AlertCircle } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 
-// ── 技能卡片元件 ──────────────────────────────────────────────────────────────
+// ── Skill Card Component ──────────────────────────────────────────────────────────────
 function SkillCard({
   skill,
   isCore,
@@ -29,7 +29,7 @@ function SkillCard({
             : 'border-blue-100 dark:border-blue-900/30 hover:border-blue-400 dark:hover:border-blue-700'}`}
     >
       <div className="p-6 flex flex-col h-full">
-        {/* 卡片頭部：標籤與動作 */}
+        {/* Card header: Tags and actions */}
         <div className="flex items-start justify-between mb-4">
           <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl text-blue-500 group-hover:scale-110 transition-transform duration-300">
             {isCore ? <ShieldCheck size={24} /> : <Blocks size={24} />}
@@ -52,14 +52,14 @@ function SkillCard({
           </div>
         </div>
 
-        {/* 標籤 */}
+        {/* Tags */}
         <div className="mb-2">
           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${badge}`}>
             {isCore ? 'CORE' : skill.category}
           </span>
         </div>
 
-        {/* 標題與描述 */}
+        {/* Title and description */}
         <div className="flex-grow">
           <h4 className="font-bold text-slate-900 dark:text-white text-base mb-1 tracking-tight">
             {skill.name}
@@ -69,7 +69,7 @@ function SkillCard({
           </p>
         </div>
 
-        {/* 底部展開控制 */}
+        {/* Bottom expand controls */}
         <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-800/50 flex items-center justify-between">
           <button 
             onClick={() => setExpanded(!expanded)}
@@ -84,7 +84,7 @@ function SkillCard({
           </div>
         </div>
 
-        {/* 展開詳情 */}
+        {/* Expansion details */}
         {expanded && (
           <div className="mt-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-slate-50 dark:bg-black/20 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50">
@@ -102,7 +102,7 @@ function SkillCard({
   );
 }
 
-// ── 主元件 ────────────────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────────────
 export function SkillManager() {
   const { t } = useTranslation();
   const { coreSkills, workspaceSkills, setCoreSkills, setWorkspaceSkills, config } = useStore();
@@ -140,7 +140,7 @@ export function SkillManager() {
   };
 
   useEffect(() => {
-    // 優先使用 App.tsx 初始化時偵測到的數據，僅在完全缺失且未在偵測中時才觸發
+    // Prioritize data detected during App.tsx initialization; trigger only if completely missing and not currently detecting
     if (coreSkills.length === 0 && workspaceSkills.length === 0) {
       rescan();
     }

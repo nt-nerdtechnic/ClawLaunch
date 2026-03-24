@@ -1,13 +1,13 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
 
 /**
- * 應用全局性上下文
- * 將 App.tsx 的所有 state 和 handlers 統一管理
- * 便於逐步遷移至各個 Page 組件
+ * Global application context
+ * Manages all App.tsx states and handlers centrally
+ * Facilitates gradual migration to individual page components
  */
 
 type AppContextType = {
-  // 路由
+  // Routing
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onboardingFinished: boolean;
@@ -53,8 +53,8 @@ export const AppProvider: React.FC<{ children: ReactNode; value: AppContextType 
 };
 
 /**
- * 使用應用全局上下文
- * @throws 如果未在 AppProvider 內調用
+ * Hook to use global application context
+ * @throws Error if called outside of AppProvider
  */
 export const useAppContext = (): AppContextType => {
   const context = useContext(AppContext);

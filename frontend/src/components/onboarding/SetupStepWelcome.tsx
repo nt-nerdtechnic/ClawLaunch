@@ -26,7 +26,7 @@ const SetupStepWelcome = ({ onNext }) => {
   const handleChoice = (type) => {
     setUserType(type);
     if (type === 'new') {
-      // 若為新建專案，清除所有內容，確保完全從零開始
+      // If new project, clear all content to ensure a fresh start
       const nextPatch = {
         corePath: '', 
         configPath: '', 
@@ -44,8 +44,8 @@ const SetupStepWelcome = ({ onNext }) => {
       setDetectedConfig(null);
       localStorage.removeItem('onboarding_finished');
     } else if (type === 'existing' && detectedConfig) {
-      // 若為現有專案且有偵測到配置，則預填入核心路徑與設定
-      // 但保留 API Key 等敏感資訊在 detectedConfig 中，待後續步驟確認
+      // If existing project with detected config, pre-fill core paths and settings
+       // But keep sensitive info like API Keys in detectedConfig for confirmation in subsequent steps
       const nextPatch = {
         corePath: detectedConfig.corePath || '',
         configPath: detectedConfig.configPath || '',
@@ -69,7 +69,7 @@ const SetupStepWelcome = ({ onNext }) => {
       </div>
 
       <div className="grid grid-cols-2 gap-8">
-        {/* 選項 1: 已有安裝 (現有用戶) */}
+        {/* Option 1: Existing installation (current users) */}
         <div 
           onClick={() => handleChoice('existing')}
           className="group relative p-8 rounded-[32px] border-2 border-gray-100 hover:border-blue-500 hover:bg-blue-50/30 transition-all duration-300 cursor-pointer overflow-hidden"
@@ -103,7 +103,7 @@ const SetupStepWelcome = ({ onNext }) => {
           </div>
         </div>
 
-        {/* 選項 2: 尚未安裝 (新用戶) */}
+        {/* Option 2: Not yet installed (new users) */}
         <div 
           onClick={() => handleChoice('new')}
           className="group relative p-8 rounded-[32px] border-2 border-gray-100 hover:border-indigo-500 hover:bg-indigo-50/30 transition-all duration-300 cursor-pointer overflow-hidden"

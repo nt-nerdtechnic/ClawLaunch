@@ -9,12 +9,12 @@ import fs from 'node:fs/promises';
 import { mkdirSync, unlinkSync, watch as fsWatch, existsSync } from 'node:fs';
 
 // ── Multi-instance support ──────────────────────────────────────────────────
-// userData 用 PID 隔離，防止 Chromium singleton lock 讓第二個實例閃退。
-// 但 config.json（使用者設定）改存在固定路徑 PERSISTENT_CONFIG_DIR，
-// 讓每次重啟都能讀到上一次的設定，不因 PID 變動而消失。
+// Isolate userData by PID to prevent Chromium singleton lock causing the second instance to crash.
+// However, config.json (user settings) is stored in a fixed path PERSISTENT_CONFIG_DIR,
+// so that the previous settings can be read on each restart and won't disappear due to PID changes.
 app.setPath('userData', `${app.getPath('userData')}-${process.pid}`);
 mkdirSync(app.getPath('userData'), { recursive: true });
-// 固定的 config 目錄：~/Library/Application Support/NT-ClawLaunch/
+// Fixed config directory: ~/Library/Application Support/NT-ClawLaunch/
 const PERSISTENT_CONFIG_DIR = path.join(
   app.getPath('appData'),
   app.getName().replace(/ /g, '-'),
@@ -218,7 +218,7 @@ const runGatewayHttpWatchdogCheck = async () => {
       return;
     }
 
-    // 重啟前二次確認，降低瞬時抖動造成的誤判。
+    // Double confirmation before restart to reduce misjudgment caused by transient jitter.
     await sleep(1200);
     const recheckRes = await runShellCommand(healthCheckCommand);
     const recheckOnline = isGatewayOnlineFromStatus(recheckRes);
@@ -621,7 +621,7 @@ const parseSessionJsonlForUsage = (content: string, agentId: string): RuntimeUsa
       const timestamp = String(entry.timestamp || entry.message?.timestamp || '');
       const day = timestamp.length >= 10 ? timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
       const model: string | undefined = entry.message?.model || currentModel || undefined;
-      // 優先使用 message.provider（如 "minimax", "openai"），fallback 才推算
+      // Prioritize message.provider (e.g., "minimax", "openai"), use fallback for inference only.
       const provider = typeof entry.message?.provider === 'string' && entry.message.provider
         ? entry.message.provider
         : inferProviderFromModel(model);
@@ -1100,8 +1100,8 @@ const isGatewayOnlineFromStatus = (statusRes: { code: number; stdout: string; st
     return true;
   }
 
-  // 支援通用 shell health check（例如 lsof）。
-  // 這類命令通常以 code=0 + stdout 非空表示健康。
+  // Supports general shell health checks (e.g., lsof).
+  // These commands usually indicate health with code=0 and non-empty stdout.
   if (String(statusRes.stdout || '').trim()) {
     return true;
   }
@@ -1427,7 +1427,7 @@ function killAllSubprocesses() {
     try {
       if (!proc.killed) {
         proc.kill('SIGTERM');
-        // 強制殺死如果 SIGTERM 沒用
+        // Force kill if SIGTERM doesn't work.
         setTimeout(() => {
           if (!proc.killed) proc.kill('SIGKILL');
         }, 2000);
@@ -1601,7 +1601,7 @@ async function createWindow() {
 }
 
 /**
- * 從 agent auth-profile 推斷對應的 UI authChoice
+ * Infer the corresponding UI authChoice from the agent auth-profile
  */
 function inferAuthChoiceFromProfile(profile: any): string {
   const provider = String(profile?.provider || '').toLowerCase();
@@ -1624,8 +1624,8 @@ function inferAuthChoiceFromProfile(profile: any): string {
 }
 
 /**
- * 深度解析 OpenClaw 配置檔
- * 支援從 agents.defaults.model.primary 提取模型，並從 auth.profiles 提取金鑰
+ * Deeply parse OpenClaw config file
+ * Supports extracting model from agents.defaults.model.primary and keys from auth.profiles
  */
 function parseOpenClawConfig(content: string) {
     try {
@@ -1637,32 +1637,32 @@ function parseOpenClawConfig(content: string) {
         let corePath = '';
         let authChoice = parsed.authChoice || '';
 
-        // 0. 提取 Core Path (如果有的話)
+        // 0. Extract Core Path (if any)
         if (parsed.corePath) corePath = parsed.corePath;
 
-        // 1. 提取模型 (OpenClaw 標準路徑)
+        // 1. Extract model (OpenClaw standard path)
         if (!model && parsed.agents?.defaults?.model?.primary) {
             model = parsed.agents.defaults.model.primary;
         }
 
-        // 2. 提取 Workspace (OpenClaw 標準路徑)
+        // 2. Extract Workspace (OpenClaw standard path)
         if (parsed.agents?.defaults?.workspace) {
             workspace = parsed.agents.defaults.workspace;
         }
 
-        // 3. 提取 Bot Token (OpenClaw 標準路徑)
+        // 3. Extract Bot Token (OpenClaw standard path)
         if (parsed.channels?.telegram?.botToken) {
             botToken = parsed.channels.telegram.botToken;
         }
 
-        // 4. 提取 API Key (遍歷 profiles) 並推斷 authChoice
+        // 4. Extract API Key (iterate profiles) and infer authChoice
         if (!apiKey && parsed.auth?.profiles) {
             for (const key in parsed.auth.profiles) {
                 const profile = parsed.auth.profiles[key];
                 const possibleKey = profile.apiKey || profile.api_key || profile.token || profile.bearer;
                 if (possibleKey && typeof possibleKey === 'string' && possibleKey.length > 5) {
                     apiKey = possibleKey;
-                    // 如果沒有明確定義 authChoice，嘗試根據 profile 名稱推斷
+                    // If no authChoice is explicitly defined, try to infer it from the profile name
                     if (!authChoice) {
                         const lowKey = key.toLowerCase();
                         if (lowKey.includes('anthropic')) authChoice = 'apiKey';
@@ -1676,8 +1676,8 @@ function parseOpenClawConfig(content: string) {
             }
         }
 
-        // 4.5 MiniMax Coding Plan Token 偵測：不寫入 auth.profiles，需從 models.providers 推斷
-        // （minimax-coding-plan-* 使用 Provider 層認證，apiKey 存於 models.providers.minimax-portal）
+        // 4.5 MiniMax Coding Plan Token detection: Do not write to auth.profiles, infer from models.providers
+        // (minimax-coding-plan-* uses Provider level authentication, apiKey stored in models.providers.minimax-portal)
         const portalProvider = parsed.models?.providers?.['minimax-portal'];
         if (portalProvider?.apiKey) {
           if (!authChoice) {
@@ -1688,11 +1688,11 @@ function parseOpenClawConfig(content: string) {
               authChoice = 'minimax-coding-plan-global-token';
             }
           }
-          // 匯入設定時優先使用 provider 層 apiKey，避免讀到歷史殘留欄位。
+          // Prioritize using provider-level apiKey when importing settings to avoid reading legacy fields.
           apiKey = String(portalProvider.apiKey || apiKey || '');
         }
 
-        // 5. 二次推斷：如果還是沒有 authChoice，根據模型名稱推斷
+        // 5. Secondary inference: If authChoice is still missing, infer from the model name
         if (!authChoice && model) {
             const lowModel = model.toLowerCase();
             if (lowModel.includes('claude')) authChoice = 'apiKey';
@@ -1703,10 +1703,10 @@ function parseOpenClawConfig(content: string) {
             else if (lowModel.includes('deepseek')) authChoice = 'ollama';
         }
         
-        // 最終保底
+        // Final fallback
         if (!authChoice && apiKey) authChoice = 'apiKey';
 
-        // 6. 提取所有已授權的 providers
+        // 6. Extract all authorized providers
         const providers: string[] = [];
         if (parsed.auth?.profiles) {
             for (const key in parsed.auth.profiles) {
@@ -2014,7 +2014,7 @@ async function collectAuthProfiles(configDir: string) {
 }
 
 /**
- * 遞迴複製目錄 (排除 .git, node_modules)
+ * Recursively copy directory (exclude .git, node_modules)
  */
 async function copyDir(src: string, dest: string, progressCallback?: (msg: string) => void) {
     await fs.mkdir(dest, { recursive: true });
@@ -2045,18 +2045,18 @@ async function writeFileIfMissing(filePath: string, content: string): Promise<bo
 }
 
 /**
- * 從 SKILL.md 解析 YAML Frontmatter (簡單正則匹配)
+ * Parse YAML Frontmatter from SKILL.md (simple regex matching)
  */
 async function parseSkillMetadata(skillDir: string, fallbackId: string) {
     const defaultMeta = { id: fallbackId, name: fallbackId, desc: '工作區擴充技能', category: 'Plugin', details: '無詳細說明' };
     try {
         const skillMdPath = path.join(skillDir, 'SKILL.md');
         const content = await fs.readFile(skillMdPath, 'utf-8');
-        // 嘗試匹配 --- 之間的 yaml 區段
+        // Try to match yaml sections between ---
         const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
         if (match && match[1]) {
             const yamlStr = match[1];
-            // 簡易解析 name/description (不依賴 yaml 解析器)
+            // Simple parsing of name/description (does not rely on yaml parser)
             const nameMatch = yamlStr.match(/name:\s*(.+)/i);
             const descMatch = yamlStr.match(/description:\s*(.+)/i) || yamlStr.match(/desc:\s*(.+)/i);
             
@@ -2064,13 +2064,13 @@ async function parseSkillMetadata(skillDir: string, fallbackId: string) {
             if (descMatch) defaultMeta.desc = descMatch[1].replace(/['"]/g, '').trim();
         }
     } catch (e) {
-        // 如果沒有 SKILL.md 或讀取失敗，回傳預設值
+        // If SKILL.md doesn't exist or reading fails, return default values
     }
     return defaultMeta;
 }
 
 /**
- * 掃描指定目錄下的技能子資料夾 (skills/ 或 extensions/ 皆可)
+ * Scan skill subfolders in the specified directory (skills/ or extensions/ are both allowed)
  */
 async function scanSkillsInDir(dir: string): Promise<any[]> {
     const results = [];
@@ -2094,7 +2094,7 @@ async function scanSkillsInDir(dir: string): Promise<any[]> {
 }
 
 /**
- * 掃描多個基礎路徑中的已安裝技能 (包含 skills/ 與 extensions/ 下的技能)
+ * Scan installed skills in multiple base paths (including skills in skills/ and extensions/)
  */
 async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
     const allIds = new Set<string>();
@@ -2102,9 +2102,9 @@ async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
 
     for (const basePath of basePaths) {
         if (!basePath) continue;
-        // 掃描 skills/ 子目錄
+        // Scan skills/ subdirectory
         const fromSkills = await scanSkillsInDir(path.join(basePath, 'skills'));
-        // 掃描 extensions/ 子目錄 (OpenClaw 的擴充包)
+        // Scan extensions/ subdirectory (OpenClaw extensions)
         const extDir = path.join(basePath, 'extensions');
         const fromExtensions: any[] = [];
         try {
@@ -2112,12 +2112,12 @@ async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
             for (const extPkg of extItems) {
                 if (extPkg.startsWith('.')) continue;
                 const pkgPath = path.join(extDir, extPkg);
-                // extensions 可能直接是技能，也可能是包含 skills/ 的套件
+                // extensions might be skills directly, or packages containing skills/
                 const nestedSkills = await scanSkillsInDir(path.join(pkgPath, 'skills'));
                 if (nestedSkills.length > 0) {
                     fromExtensions.push(...nestedSkills);
                 } else {
-                    // 直接嘗試當成技能讀取 (e.g. extensions/lobster/SKILL.md)
+                    // Try reading directly as a skill (e.g. extensions/lobster/SKILL.md)
                     const meta = await parseSkillMetadata(pkgPath, extPkg);
                     fromExtensions.push(meta);
                 }
@@ -3153,7 +3153,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     }
   }
 
-  // ── 靜默執行 shell 指令（不送 renderer log）────────────────────────────
+  // ── Silently execute shell commands (no renderer log) ────────────────────────────
   const runSilent = (cmd: string): Promise<{ stdout: string; stderr: string; code: number }> =>
     new Promise((resolve) => {
       const child = spawn(cmd, { shell: true });
@@ -3192,7 +3192,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const listOutput = launchctlRes.stdout;
 
       const agents = await Promise.all(knownAgents.map(async (agent) => {
-        // plist 是否存在
+        // Whether plist exists
         let plistExists = false;
         let keepAlive = false;
         let comment = '';
@@ -3204,7 +3204,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           if (commentMatch) comment = commentMatch[1];
         } catch { /* plist missing */ }
 
-        // launchctl 狀態
+        // launchctl status
         const line = listOutput.split('\n').find(l => l.includes(agent.label));
         let running = false;
         let pid: number | null = null;
@@ -3618,7 +3618,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           changed = true;
         }
 
-        // 修復各 provider 缺少 models array 的問題（OpenClaw >=2026.3.x 要求此欄位存在）
+        // Fix missing models array in each provider (OpenClaw >=2026.3.x requires this field)
         if (parsed.models && typeof parsed.models.providers === 'object' && parsed.models.providers !== null) {
           for (const [providerKey, providerVal] of Object.entries(parsed.models.providers)) {
             if (providerVal && typeof providerVal === 'object' && !Array.isArray((providerVal as any).models)) {
@@ -3670,7 +3670,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           if (existingConfig.workspace) {
             workspacePath = existingConfig.workspace;
           }
-          // 補充掃描 agent auth-profiles，填補 global profiles 中只有 meta 而無憑證的情況
+          // Supplementary scan of agent auth-profiles to fill in meta-only cases in global profiles
           const agentAuth = await collectAuthProfiles(savedConfigPath);
           const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
           if (healthyAgentProfiles.length > 0) {
@@ -3703,7 +3703,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         const content = await fs.readFile(possibleConfigPath, 'utf-8');
         existingConfig = parseOpenClawConfig(content);
         if (existingConfig.workspace) workspacePath = existingConfig.workspace;
-        // 補充掃描 agent auth-profiles（fallback 路徑同樣適用）
+        // Supplementary scan of agent auth-profiles (fallback path also applies)
         const agentAuth = await collectAuthProfiles(possibleWorkspace);
         const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
         if (healthyAgentProfiles.length > 0) {
@@ -3738,9 +3738,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
     }
 
-    // Core skills = 只掃 corePath/skills/，不掃 extensions/（避免 provider adapter 污染）
+    // Core skills = only scan corePath/skills/, ignore extensions/ (avoid provider adapter pollution)
     const coreSkills = corePath ? await scanSkillsInDir(path.join(corePath, 'skills')) : [];
-    // Workspace skills = 只掃使用者設定的 workspacePath，不加任何 fallback 雜路徑
+    // Workspace skills = only scan user-configured workspacePath, no fallback paths
     const workspaceSkills = workspacePath ? await scanInstalledSkills(workspacePath) : [];
 
     return { 
@@ -3761,14 +3761,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const sourcePath = result.filePaths[0];
       const skillName = path.basename(sourcePath);
       
-      // 驗證是否為有效技能
+      // Verify if it is a valid skill
       try {
         await fs.access(path.join(sourcePath, 'SKILL.md'));
       } catch (e) {
         return { code: 1, stderr: '錯誤：所選資料夾內缺少 SKILL.md，不是有效的技能。', exitCode: 1 };
       }
 
-      // 取得目標路徑
+      // Get target path
       const configPath = path.join(CONFIG_DIR, 'config.json');
       let targetBaseDir = '';
       try {
@@ -3784,7 +3784,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
       const targetPath = path.join(targetBaseDir, 'skills', skillName);
       
-      // 執行複製 (fs.cp 在 Node 16+ 支援)
+      // Execute copy (fs.cp supported in Node 16+)
       await fs.mkdir(path.join(targetBaseDir, 'skills'), { recursive: true });
       await fs.cp(sourcePath, targetPath, { recursive: true });
       
@@ -3998,12 +3998,12 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
       const configFilePath = path.join(configDir, 'openclaw.json');
 
-      // MiniMax Coding Plan Token 採用 Provider 層認證模式（與標準 auth.profiles 不同）：
-      // 核心 Runtime 透過 models.providers.minimax-portal.apiKey 直接存取，
-      // 無需建立 auth.profiles 或 agent/auth-profiles.json。
-      // 驗證邏輯由 verifyMiniMaxPortalTokenConfig 負責，不走雙層 profile 檢查。
-      // 注意：因不寫入 auth.profiles，inferAuthChoiceFromProfile 無法自動偵測此 authChoice；
-      //       authChoice 需由 Launcher 設定持久化（config:write）確保重啟後仍可取得。
+      // MiniMax Coding Plan Token uses Provider-level authentication (different from standard auth.profiles):
+      // Core runtime accesses through models.providers.minimax-portal.apiKey directly,
+      // no need to create auth.profiles or agent/auth-profiles.json.
+      // Verification logic is handled by verifyMiniMaxPortalTokenConfig, no dual-layer profile check.
+      // Note: As it's not written to auth.profiles, inferAuthChoiceFromProfile cannot auto-detect this authChoice;
+      //       authChoice must be persisted via Launcher settings (config:write) to ensure it's available after restart.
       if (authChoice === 'minimax-coding-plan-global-token' || authChoice === 'minimax-coding-plan-cn-token') {
         const configJson = (await loadJsonFile(configFilePath)) || {};
         const providers = configJson?.models?.providers && typeof configJson.models.providers === 'object'
@@ -4062,8 +4062,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
       }
 
-      // 新版 OpenClaw 已移除 `openclaw auth set`。
-      // 授權寫入由 onboard 負責，後續以 dual-layer profile 檢查確認結果。
+      // New version of OpenClaw has removed `openclaw auth set`.
+      // Authorization writing is handled by onboarding, followed by dual-layer profile check to confirm.
 
       const aliases = getChoiceAliases(authChoice);
       const listed = await collectAuthProfiles(configDir);
@@ -4248,8 +4248,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     .split('\n')
                     .filter(line => line.includes('refs/tags/'))
                     .map(line => line.split('refs/tags/')[1].replace('^{}', ''))
-                    .filter((v, i, a) => a.indexOf(v) === i) // 去重
-                    .reverse(); // 讓最新的版本在前
+                    .filter((v, i, a) => a.indexOf(v) === i) // Deduplicate
+                    .reverse(); // Keep latest versions at the front
                 resolve({ code: 0, stdout: JSON.stringify(['main', ...tags]), exitCode: 0 });
             });
         });
@@ -4284,12 +4284,12 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             }
         };
 
-        // 預檢三區路徑
+        // Pre-check paths in three zones
         const finalCorePath = await checkAndWrap(corePath, 'openclaw');
         const finalConfigPath = await checkAndWrap(configPath, '.openclaw');
         const finalWorkspacePath = await checkAndWrap(workspacePath, 'openclaw-workspace');
 
-        // 1. 下載核心原始碼
+        // 1. Download core source code
         const repoUrl = 'https://github.com/openclaw/openclaw.git';
         const tarballUrl = `https://github.com/openclaw/openclaw/tarball/${encodeURIComponent(targetVersion)}`;
         
@@ -4333,7 +4333,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
             if (downloadMethod === 'zip') {
               const actualCmd = `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(finalCorePath)}`;
-                // 改回直接執行，不使用 osascript，以便串流日誌到 UI 的「小視窗」
+                // Executed directly without osascript to stream logs to the UI "mini view"
                 childProcess = spawn(actualCmd, { shell: true });
             } else {
               const versionArgs = `--branch ${shellQuote(targetVersion)} --depth 1 --single-branch`;
@@ -4372,7 +4372,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     return;
                 }
 
-                // [NEW] 自動清理 Git 跡象 (僅保留純核心代碼)
+                // [NEW] Automatically clean up Git traces (keep pure core code only)
                 if (downloadMethod === 'git') {
                     const gitDirPath = path.join(finalCorePath, '.git');
                     try {
@@ -4414,16 +4414,16 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     trackOutcome(dirPath);
                   };
 
-                  // 在任何 CLI 執行之前，先對所有目標路徑拍快照（包含 bootstrap 檔案）；
-                  // openclaw setup 會建立其中部分檔案，若快照在其後才拍，這些檔案會被
-                  // 誤判為「你啟動初始化之前就已存在」，導致 Already Existed 顯示不正確。
+                  // Take snapshots of all target paths (including bootstrap files) before any CLI execution;
+                  // openclaw setup will create some of these files; if snapshots are taken after, they will be
+                  // misidentified as "already existed before initialization", causing incorrect Already Existed display.
                   await trackPreExisting(finalConfigPath);
                   await trackPreExisting(configFilePath);
                   await trackPreExisting(finalWorkspacePath);
                   await trackPreExisting(skillsDir);
                   await trackPreExisting(extensionsDir);
 
-                  // Bootstrap 檔案的快照也必須在 openclaw setup 之前完成
+                  // Snapshots of bootstrap files must also be completed before openclaw setup
                   const bootstrapFileNames = [
                     'AGENTS.md', 'SOUL.md', 'TOOLS.md', 'IDENTITY.md',
                     'USER.md', 'HEARTBEAT.md', 'BOOTSTRAP.md', 'MEMORY.md',
@@ -4432,8 +4432,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     await trackPreExisting(path.join(finalWorkspacePath, name));
                   }
 
-                  // 2. 安裝依賴（先安裝才有可用的 CLI，讓後續 openclaw setup 可以執行）
-                  // 使用 zsh -ilc 讓 GUI 環境也能讀取 .zshrc / nvm / volta PATH
+                  // 2. Install dependencies (required for CLI availability for subsequent openclaw setup)
+                  // Use zsh -ilc so that GUI environment can read .zshrc / nvm / volta PATH
                   const pnpmCheckRes = await runCommandWithStreaming('zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version', 'Checking pnpm availability...');
                   if (pnpmCheckRes.code !== 0) {
                     const detail = [
@@ -4462,15 +4462,15 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     return;
                   }
 
-                  // 3. 預熱 CLI 執行環境 (會在 dist 過舊時自動建置 TypeScript)
+                  // 3. Warm up CLI execution environment (auto-builds TypeScript if dist is outdated)
                   const warmupRes = await runCommandWithStreaming('zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
                   if (warmupRes.code !== 0) {
                     resolve({ code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 });
                     return;
                   }
 
-                  // 4. 用 openclaw setup 建立/更新 config（處理 workspace / gateway 欄位）
-                  //    此時 CLI 已就緒，可直接呼叫原生指令，不再依賴 Launcher 手寫模板
+                  // 4. Use openclaw setup to create/update config (handles workspace / gateway fields)
+                  //    CLI is now ready; call native commands directly without relying on Launcher manual templates
                   emitShellStdout(`>>> Initializing config at ${finalConfigPath}...\n`, 'stdout');
                   await ensureDirWithTracking(finalConfigPath);
 
@@ -4486,7 +4486,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                   }
                   trackOutcome(configFilePath);
 
-                  // 清理 Launcher 舊版可能寫入的 legacy keys（不影響 openclaw schema）
+                  // Clean up legacy keys possibly written by older Launcher versions (no impact on openclaw schema)
                   try {
                     const raw = await fs.readFile(configFilePath, 'utf-8');
                     const parsed = JSON.parse(raw);
@@ -4497,11 +4497,11 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                       await fs.writeFile(configFilePath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf-8');
                     }
                   } catch {
-                    // legacy cleanup 失敗不阻斷流程
+                    // Legacy cleanup failure does not block the flow
                   }
 
-                  // 6. 初始化 Workspace 附加資料夾與 Launcher 專屬 bootstrap 文件
-                  // （openclaw setup 已建立 workspace 基礎目錄與 AGENTS.md；此處補充 Launcher 專屬內容）
+                  // 6. Initialize additional Workspace folders and Launcher-specific bootstrap files
+                  // (openclaw setup has created workspace base dir and AGENTS.md; additional Launcher content added here)
                   emitShellStdout(`>>> Setting up workspace at ${finalWorkspacePath}...\n`, 'stdout');
                   await ensureDirWithTracking(finalWorkspacePath);
                   await ensureDirWithTracking(skillsDir);
@@ -4518,7 +4518,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     'MEMORY.md': '# MEMORY\n\nPersistent project memory and verify decisions.\n',
                   };
 
-                  // trackPreExisting 已在 openclaw setup 執行之前完成（見上方），此處直接寫入
+                  // trackPreExisting completed before openclaw setup execution (see above); write directly here
                   for (const [name, content] of Object.entries(bootstrapTemplates)) {
                     const targetPath = path.join(finalWorkspacePath, name);
                     const wrote = await writeFileIfMissing(targetPath, content);
@@ -4610,8 +4610,8 @@ ipcMain.handle('port:find-free', async (_event, startPort?: number, endPort?: nu
 });
 
 // ── usage:scan-sessions ────────────────────────────────────────────────────
-// 直接掃描 ~/.openclaw/agents/*/sessions/*.jsonl，無需後端預聚合
-// 複製 openclaw-control-center usage-cost.ts Track 2 (JSONL 掃描) 邏輯
+// Directly scan ~/.openclaw/agents/*/sessions/*.jsonl, no backend pre-aggregation required
+// Copy openclaw-control-center usage-cost.ts Track 2 (JSONL scan) logic
 ipcMain.handle('usage:scan-sessions', async (_event, payload?: string) => {
   try {
     const homeDir = process.env.HOME || process.env.USERPROFILE || '';
@@ -4652,7 +4652,7 @@ ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
     return { success: false, error: 'Invalid port', port };
   }
 
-  // 先嘗試卸載 launchctl 管理的 gateway daemon，避免 process 被殺後立刻重啟
+  // Try unloading launchctl-managed gateway daemon first to avoid immediate restart after kill
   const launchctlLabel = 'ai.openclaw.gateway';
   const uid = (await runShellCommand('id -u')).stdout.trim();
   if (uid) {

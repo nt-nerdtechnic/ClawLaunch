@@ -28,7 +28,7 @@ interface ChatState {
   messages: ChatMessage[];
 }
 
-// 技能定義 (核心層或工作區層共用)
+// Skill definitions (shared between core or workspace layer)
 export interface SkillItem {
   id: string;
   name: string;
@@ -39,7 +39,7 @@ export interface SkillItem {
 
 interface Config {
   model: string;
-  authChoice: string; // 對齊 CLI AuthChoice
+  authChoice: string; // Align with CLI AuthChoice
   apiKey: string;
   platform: string;
   botToken: string;
@@ -49,10 +49,10 @@ interface Config {
   autoRestartGateway: boolean;
   unrestrictedMode: boolean;
   enabledSkills: string[];
-  corePath: string;    // 主核心區
-  configPath: string;  // 設定區
-  workspacePath: string; // 工作區
-  theme?: 'light' | 'dark'; // 持久化主題
+  corePath: string;    // Primary core area
+  configPath: string;  // Configuration area
+  workspacePath: string; // Workspace area
+  theme?: 'light' | 'dark'; // Persisted theme
 }
 
 export interface ReadModelSession {
@@ -125,7 +125,7 @@ export interface ReadModelHistoryPoint {
   estimatedCost: number;
 }
 
-// 直接從 session JSONL 掃描的原始用量事件（複製 openclaw-control-center Track 2 邏輯）
+// Raw usage events scanned directly from session JSONL (copy openclaw-control-center Track 2 logic)
 export interface RuntimeUsageEvent {
   timestamp: string;
   day: string;          // YYYY-MM-DD for date bucketing
@@ -216,7 +216,7 @@ interface AppState {
   ackEventLocal: (eventId: string, ttlMs?: number) => void;
   setRawSnapshot: (rawSnapshot: any | null) => void;
   setSnapshotSourcePath: (path: string) => void;
-  // Runtime Usage Events（從 JSONL 自算）
+  // Runtime Usage Events (calculated from JSONL)
   runtimeUsageEvents: RuntimeUsageEvent[];
   setRuntimeUsageEvents: (events: RuntimeUsageEvent[]) => void;
   theme: 'light' | 'dark';
@@ -260,7 +260,7 @@ export const useStore = create<AppState>((set) => ({
     useExternalTerminal: true,
     autoRestartGateway: false,
     unrestrictedMode: false,
-    enabledSkills: [], // 初始擴展技能為空，核心技能已預設啟動
+    enabledSkills: [], // Initial extension skills are empty; core skills are enabled by default
     corePath: '',
     configPath: '',
     workspacePath: ''

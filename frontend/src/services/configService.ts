@@ -1,19 +1,19 @@
 /**
- * 配置和通用工具 Service
- * 包含所有與配置、格式化相關的工具方法
+ * Config and utility service
+ * Includes all utility methods related to configuration and formatting
  */
 
 export const ConfigService = {
   /**
-   * 將字符串轉義用於 shell 命令
+   * Escape string for shell commands
    */
   shellQuote: (value: string): string => {
     return `'${String(value).replace(/'/g, `'\\''`)}'`;
   },
 
   /**
-   * 規範化配置目錄路徑
-   * 移除末尾的 /openclaw.json
+   * Normalize config directory path
+   * Removes the trailing /openclaw.json
    */
   normalizeConfigDir: (rawPath: string): string => {
     const trimmed = (rawPath || '').trim();
@@ -22,7 +22,7 @@ export const ConfigService = {
   },
 
   /**
-   * 構建 OpenClaw 環境變數前綴
+   * Build OpenClaw environment variable prefix
    */
   buildOpenClawEnvPrefix: (configPath?: string, _corePath?: string): string => {
     const configDir = ConfigService.normalizeConfigDir(configPath || '');
@@ -35,11 +35,11 @@ export const ConfigService = {
 };
 
 /**
- * 模型和提供者相關工具
+ * Model and provider related tools
  */
 export const ModelService = {
   /**
-   * 從模型名稱推斷提供者
+   * Infer provider from model name
    */
   inferProviderFromModel: (modelRef: string): string => {
     const model = String(modelRef || '').trim().toLowerCase();
@@ -58,7 +58,7 @@ export const ModelService = {
   },
 
   /**
-   * 獲取提供者別名
+   * Get provider alias
    */
   getProviderAliases: (providerRef: string, PROVIDER_ALIAS_MAP: Record<string, string[]>): string[] => {
     const normalized = String(providerRef || '').trim().toLowerCase();
@@ -67,7 +67,7 @@ export const ModelService = {
   },
 
   /**
-   * 檢查提供者是否符合過濾條件
+   * Check if provider matches the filter criteria
    */
   providerMatchesFilters: (
     providerRef: string,
@@ -83,7 +83,7 @@ export const ModelService = {
   },
 
   /**
-   * 檢查模型是否被授權
+   * Check if model is authorized
    */
   isModelAuthorizedByProvider: (
     modelRef: string,

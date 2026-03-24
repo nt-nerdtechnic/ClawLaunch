@@ -18,8 +18,8 @@ export type TelegramAuthorizedUser = {
 };
 
 /**
- * Telegram 配對管理 Hook
- * 管理 Telegram 配對請求和授權用戶
+ * Telegram pairing management hook
+ * Manages Telegram pairing requests and authorized users
  */
 export function useTelegramPairing(
   resolvedConfigDir: string,
@@ -37,7 +37,7 @@ export function useTelegramPairing(
 
   const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
-  // 載入 Telegram 配對請求
+  // Load Telegram pairing requests
   const loadTelegramPairingRequests = async () => {
     if (!window.electronAPI || !resolvedConfigDir) {
       setTelegramPairingRequests([]);
@@ -90,7 +90,7 @@ export function useTelegramPairing(
     }
   };
 
-  // 定期重新加載
+  // Periodic reload
   useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;
     loadTelegramPairingRequests();

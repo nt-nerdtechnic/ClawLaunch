@@ -79,7 +79,7 @@ interface ObservedEvent {
   exitCode?: number;
 }
 
-// 統一活動條目
+// Unified activity entries
 type ActivityItem =
   | { type: 'cron'; id: string; name: string; time: number; status?: 'ok' | 'error'; duration?: number; hasError: boolean; error?: string; schedule: CronSchedule }
   | { type: 'task'; id: string; name: string; time: number; taskStatus: TaskStatus; progress: number; priority: string }
@@ -327,12 +327,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
-        {/* ── 左：混合作業時間軸 ──────────────────────────────── */}
+        {/* ── Left: Mixed activity timeline ──────────────────────────────── */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden">
           <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(99,102,241,0.5),transparent)' }} />
           <div className="p-6 space-y-3">
 
-            {/* 標題 */}
+            {/* Title */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity size={13} className="text-indigo-500" />
@@ -340,7 +340,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <span className="text-[10px] text-slate-400">{activityFeed.length} 項</span>
               </div>
               <div className="flex items-center gap-2">
-                {/* 圖例 */}
+                {/* Legend */}
                 <span className="flex items-center gap-1 text-[9px] text-slate-400">
                   <CalendarClock size={9} className="text-violet-400" />排程
                 </span>
@@ -372,7 +372,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               </div>
             </div>
 
-            {/* 時間軸列表 */}
+            {/* Timeline list */}
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-0.5">
               {activityFeed.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-400">
@@ -393,7 +393,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        {/* 排程圖示 */}
+                        {/* Schedule icon */}
                         <div className="shrink-0 w-5 h-5 rounded-lg bg-violet-50 dark:bg-violet-950/40 flex items-center justify-center">
                           <CalendarClock size={10} className="text-violet-500" />
                         </div>
@@ -403,7 +403,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time)}</span>
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 pl-7 text-[10px] flex-wrap">
-                        {/* 狀態 */}
+                        {/* Status */}
                         <span className={`flex items-center gap-0.5 font-medium ${isOk ? 'text-emerald-600 dark:text-emerald-400' : isErr ? 'text-rose-500' : 'text-slate-400'}`}>
                           {isOk ? <CheckCircle size={9} /> : isErr ? <AlertTriangle size={9} /> : <Clock size={9} />}
                           {isOk ? '成功' : isErr ? '失敗' : '執行'}
@@ -440,7 +440,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        {/* 任務圖示 */}
+                        {/* Task icon */}
                         <div className="shrink-0 w-5 h-5 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
                           <ClipboardList size={10} className="text-amber-500" />
                         </div>
@@ -452,7 +452,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         </span>
                         <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time)}</span>
                       </div>
-                      {/* 進度條 */}
+                      {/* Progress bar */}
                       {progress > 0 && (
                         <div className="mt-1.5 flex items-center gap-2 pl-7">
                           <div className="flex-1 h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
@@ -523,10 +523,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           </div>
         </div>
 
-        {/* ── 右：排程三層 ──────────────────────────────────────── */}
+        {/* ── Right: Three-layer scheduling ──────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
 
-          {/* 層 1：系統服務 */}
+          {/* Layer 1: System services */}
           <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(16,185,129,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
@@ -556,7 +556,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             </div>
           </div>
 
-          {/* 層 2：crontab */}
+          {/* Layer 2: crontab */}
           <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(245,158,11,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
@@ -582,7 +582,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             </div>
           </div>
 
-          {/* 層 3：OpenClaw 排程 */}
+          {/* Layer 3: OpenClaw scheduling */}
           <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(139,92,246,0.45),transparent)' }} />
             <div className="p-5 space-y-2">

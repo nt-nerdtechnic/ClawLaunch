@@ -68,7 +68,7 @@ const SetupStepModel = ({ onNext }) => {
 
     const profileMatchesSelectedChoice = (profile, authChoice) => {
         const aliases = authChoiceProviderAliases[String(authChoice || '').trim()] || [];
-        // 若 authChoice 未知/空，不顯示警告（避免初始渲染誤包含殘留 profile）
+        // Hide warnings if authChoice is unknown/empty to avoid misrepresenting legacy profiles during initial render
         if (!aliases.length) return false;
         const provider = String(profile?.provider || '').toLowerCase();
         const profileId = String(profile?.profileId || '').toLowerCase();
@@ -323,7 +323,7 @@ const SetupStepModel = ({ onNext }) => {
                 }
                 const parsed = JSON.parse(res.stdout || '{}');
                 const rows = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
-                // 優先用元件 state（selectedChoiceId），其次 config.authChoice，避免初始值為空字串時包含所有 profile
+                // Prioritize component state (selectedChoiceId) over config.authChoice to avoid including all profiles when the initial value is empty
                 const effectiveAuthChoice = selectedChoiceId || config.authChoice || 'apiKey';
                 const relatedRows = rows.filter((profile) => profileMatchesSelectedChoice(profile, effectiveAuthChoice));
                 const relatedCritical = relatedRows.filter((profile) => String(profile?.severity || '').toLowerCase() === 'critical').length;
@@ -399,7 +399,7 @@ const SetupStepModel = ({ onNext }) => {
 
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-left">
-      {/* 步驟頭部 */}
+      {/* Step header */}
       <div className="mb-8 text-center">
         <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-50 rounded-full text-blue-600 mb-4">
           <Bot size={24} />
@@ -429,10 +429,10 @@ const SetupStepModel = ({ onNext }) => {
                     </div>
                 )}
 
-        {/* 第一階段：環境與偵測 (偵測優先) */}
+        {/* Phase 1: Environment and Detection (detection prioritized) */}
         {!pathsConfirmed && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* ...環境區同前... */}
+            {/* ...Environment section same as before... */}
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${envStatus.node !== 'loading' && envStatus.git !== 'loading' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
@@ -454,7 +454,7 @@ const SetupStepModel = ({ onNext }) => {
               </div>
             </div>
 
-            {/* 三區分治路徑確認區 */}
+            {/* Three-zone path confirmation area */}
             <div className="p-5 bg-slate-900 rounded-3xl border border-slate-800 space-y-5 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 pointer-events-none">
                     <Database size={80} className="text-blue-500" />
@@ -498,7 +498,7 @@ const SetupStepModel = ({ onNext }) => {
                 </div>
             </div>
 
-            {/* 自動偵測提示區 (僅在非新建專案時顯示) */}
+            {/* Auto-detection notification (shown only for existing projects) */}
             {detectedConfig && userType !== 'new' && (
                 <div className="p-4 bg-gradient-to-r from-blue-700 to-blue-600 rounded-2xl shadow-xl shadow-blue-500/20 text-white flex items-center justify-between border border-blue-400/20 animate-in zoom-in-95">
                     <div className="flex items-center gap-4">
@@ -543,7 +543,7 @@ const SetupStepModel = ({ onNext }) => {
           </div>
         )}
 
-        {/* 第二階段：模型與密鑰配置 (路徑完成後解鎖) */}
+        {/* Phase 2: Model and Key configuration (unlocked after path completion) */}
         {pathsConfirmed && (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
              <button 
@@ -553,7 +553,7 @@ const SetupStepModel = ({ onNext }) => {
                 {t('modelSetup.modelSelect.backToPaths')}
              </button>
 
-            {/* 配置摘要 (若已有資料 且 不顯示選單) */}
+            {/* Config summary (if data exists and menu is hidden) */}
             {(config.authChoice || config.model) && !showFullSetup && (
                 <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-4">
                     <div className="flex justify-between items-center">
@@ -627,11 +627,11 @@ const SetupStepModel = ({ onNext }) => {
                 </div>
             )}
 
-            {/* 模型選擇卡片 (僅在需要修改或無資料時顯示) */}
+            {/* Model selection card (shown only if editing or if empty) */}
             {(showFullSetup || (!config.authChoice && !config.model)) && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
                     
-                    {/* 第 1 步：選擇供應商生態系 */}
+                    {/* Step 1: Select provider ecosystem */}
                     <div className="space-y-3">
                         <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2">
                             <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">1</span>
@@ -656,7 +656,7 @@ const SetupStepModel = ({ onNext }) => {
                         </div>
                     </div>
 
-                    {/* 第 2 步：選擇驗證方式 */}
+                    {/* Step 2: Select verification method */}
                     <div className="space-y-3 bg-gray-50 p-4 rounded-3xl border border-gray-100">
                         <label className="text-sm font-extrabold text-gray-700 flex items-center gap-2 mb-2">
                             <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-[10px]">2</span>
@@ -680,7 +680,7 @@ const SetupStepModel = ({ onNext }) => {
                             ))}
                         </div>
 
-                        {/* 如果需要 API Key，顯示輸入框 */}
+                        {/* Show input field if API Key is required */}
                         {currentChoice?.reqKey && (
                             <div className="space-y-3 pt-4 border-t border-gray-200/60 mt-4">
                                 <div className="flex justify-between items-center px-1">

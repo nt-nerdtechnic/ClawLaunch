@@ -94,7 +94,7 @@ const SetupStepInitialize = ({ onNext }) => {
         fetchVersions();
     }, []);
 
-    // 新建專案時，對已填入的路徑自動驗證，立即顯示「目錄已有資料」警告
+    // Auto-validate filled paths for new projects; show "directory already contains data" warning immediately
     useEffect(() => {
         const autoValidatePrefilled = async () => {
             const keysToCheck: Array<'corePath' | 'configPath' | 'workspacePath'> = ['corePath', 'configPath', 'workspacePath'];
@@ -197,7 +197,7 @@ const SetupStepInitialize = ({ onNext }) => {
 
             const res = await window.electronAPI.exec(`project:initialize ${JSON.stringify(payload)}`);
             if (res.code === 0) {
-                // 如果後端有回傳實際路徑（例如建立了子目錄），同步更新到 store
+                // If the backend returns an actual path (e.g., subdirectory created), sync it to the store
                 try {
                    const result = JSON.parse(res.stdout);
                    const updates = {};
@@ -238,7 +238,7 @@ const SetupStepInitialize = ({ onNext }) => {
         }
     };
     
-    // 自動捲動日誌
+    // Auto-scroll logs
     useEffect(() => {
         if (logEndRef.current) {
             logEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -258,7 +258,7 @@ const SetupStepInitialize = ({ onNext }) => {
             </div>
 
             <div className="space-y-6">
-                {/* 版本選擇器 */}
+                {/* Version selector */}
                 <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center px-1">
                         <p className="text-[10px] text-gray-400 uppercase font-black tracking-wider flex items-center gap-1.5">
@@ -283,7 +283,7 @@ const SetupStepInitialize = ({ onNext }) => {
                     </div>
                 </div>
 
-                {/* 下載模式說明 (僅保留 ZIP) */}
+                {/* Download mode guide (ZIP only) */}
                 <div className="flex flex-col gap-2">
                     <p className="text-[10px] text-gray-400 uppercase font-black tracking-wider flex items-center gap-1.5 px-1">
                         <span className="text-blue-500 opacity-60"><Monitor size={14} /></span>
@@ -406,7 +406,7 @@ const SetupStepInitialize = ({ onNext }) => {
                                 </div>
                             </div>
 
-                            {/* 取消按鈕 */}
+                            {/* Cancel button */}
                             {!progress.includes('完成') && (
                                 <button 
                                     onClick={handleCancel}
@@ -419,7 +419,7 @@ const SetupStepInitialize = ({ onNext }) => {
                         </div>
                     )}
 
-                    {/* 實時日誌視窗（曾執行初始化後持續保留，避免視窗瞬間消失） */}
+                    {/* Real-time log window (persists after initialization to avoid flickering) */}
                     {(initializing || hasInitializeAttempt) && (
                         <TerminalLog 
                             logs={logs} 

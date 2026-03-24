@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
 /**
- * Gateway 控制 Hook
- * 管理 Gateway 啟動、停止和相關狀態
+ * Gateway control hook
+ * Manages Gateway start, stop, and related statuses
  */
 export function useGatewayControl() {
   const [gatewayConflictModal, setGatewayConflictModal] = useState<{
