@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, type ErrorInfo, type ReactNode } from 'react';
+import { useState, useEffect, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
 import { Layout, Settings, Activity, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, Brain, Cpu, Globe, Zap, Network, Database, Radar } from 'lucide-react';
 import { MiniView } from './components/MiniView';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -485,6 +485,29 @@ function App() {
     setGatewayConflictActionMessage,
     closeGatewayConflictModal,
   });
+
+  // 當 runtimeProfile 首次成功載入後，立即觸發一次 Gateway 狀態偵測。
+  // 修復啟動時序問題：App bootstrap 呼叫 syncGatewayStatus 時 runtimeProfile 尚為 null，
+  // 導致 getGatewayPort() 無法取得 port 而跳過偵測，狀態永遠顯示 STANDBY。
+  const prevRuntimeProfileRef = useRef<any>(undefined);
+  useEffect(() => {
+    const wasNull = prevRuntimeProfileRef.current === undefined || prevRuntimeProfileRef.current === null;
+    const isNowLoaded = runtimeProfile !== null && runtimeProfile !== undefined;
+    
+    // 初始載入時立即偵測一次
+    if (wasNull && isNowLoaded) {
+      syncGatewayStatus(runtimeProfile);
+    }
+    prevRuntimeProfileRef.current = runtimeProfile;
+
+    // 設定定時輪詢（每 10 秒），確保狀態持續同步
+    // 即使服務是在外部啟動或因故停止，Dashboard 也能自動更新
+    const interval = setInterval(() => {
+      syncGatewayStatus();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [runtimeProfile, syncGatewayStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggleGatewayWithStopModal = async () => {
     if (running) {

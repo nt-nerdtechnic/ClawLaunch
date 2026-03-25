@@ -46,17 +46,19 @@ export function useGatewayActions({
     (cfg?.useExternalTerminal ?? config.useExternalTerminal) !== false;
 
   // Get gateway port from openclaw.json (runtimeProfile)
-  const getGatewayPort = (): number | null => {
-    const raw = String(runtimeProfile?.gateway?.port ?? '').trim();
+  // overrideProfile: 當 runtimeProfile hook state 尚未載入時可提供備援資料（例如 App 啟動時序問題）
+  const getGatewayPort = (overrideProfile?: any): number | null => {
+    const source = overrideProfile ?? runtimeProfile;
+    const raw = String(source?.gateway?.port ?? '').trim();
     if (!raw || !/^\d+$/.test(raw)) return null;
     const port = Number(raw);
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
   };
 
   // Check if gateway is listening using lsof (returns null if port is unknown)
-  const isGatewayListening = async (): Promise<boolean | null> => {
+  const isGatewayListening = async (overrideProfile?: any): Promise<boolean | null> => {
     if (!window.electronAPI) return null;
-    const port = getGatewayPort();
+    const port = getGatewayPort(overrideProfile);
     if (!port) return null;
     try {
       const res: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
@@ -84,9 +86,11 @@ export function useGatewayActions({
     return false;
   };
 
-  const syncGatewayStatus = async () => {
+  // overrideRuntimeProfile: 當 hook state 的 runtimeProfile 尚未載入完成時，
+  // 可傳入 openclaw.json probe 的結果以取得正確的 gateway port 進行偵測。
+  const syncGatewayStatus = async (overrideRuntimeProfile?: any) => {
     try {
-      const listening = await isGatewayListening();
+      const listening = await isGatewayListening(overrideRuntimeProfile ?? undefined);
       if (listening !== null) {
         setRunning(listening);
       }

@@ -87,7 +87,7 @@ interface ObservedEvent {
 type ActivityItem =
   | { type: 'cron'; id: string; name: string; time: number; status?: 'ok' | 'error'; duration?: number; hasError: boolean; error?: string; schedule: CronSchedule }
   | { type: 'task'; id: string; name: string; time: number; taskStatus: TaskStatus; progress: number; priority: string }
-  | { type: 'observed'; id: string; name: string; time: number; event: ObservedEvent };
+  | { type: 'obs'; id: string; name: string; time: number; event: ObservedEvent };
 
 interface ControlCenterPageProps {
   onRefreshSnapshot?: () => Promise<void>;
@@ -193,6 +193,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const loadTasks = useCallback(async () => {
     try {
       const res = await window.electronAPI.exec('control:tasks:list');
+      console.log('[ControlCenter] loadTasks res:', res.stdout);
       const items: ManualTask[] = (JSON.parse(res.stdout || '{}').items || []).map((t: any) => ({
         id: String(t.id || ''),
         title: String(t.title || ''),
@@ -202,8 +203,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         updated_at: String(t.updated_at || t.updatedAt || ''),
         created_at: String(t.created_at || t.createdAt || ''),
       }));
+      console.log(`[ControlCenter] loadTasks parsed ${items.length} items`);
       setTasks(items);
-    } catch { setTasks([]); }
+    } catch (e) { 
+      console.error('[ControlCenter] loadTasks failed:', e);
+      setTasks([]); 
+    }
   }, []);
 
   const loadSystem = useCallback(async () => {
@@ -212,9 +217,18 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         window.electronAPI.exec('system:crontab:list'),
         window.electronAPI.exec('system:launchagents:list'),
       ]);
-      setCrontabEntries(JSON.parse(ctRes.stdout || '{}').entries || []);
-      setLaunchAgents(JSON.parse(laRes.stdout || '{}').agents || []);
-    } catch { /* non-fatal */ }
+      console.log('[ControlCenter] loadSystem agents:', laRes.stdout);
+      const ctData = JSON.parse(ctRes.stdout || '{}');
+      const laData = JSON.parse(laRes.stdout || '{}');
+      const ctEntries = ctData.entries || [];
+      const laAgents = laData.agents || [];
+      
+      console.log(`[ControlCenter] loadSystem parsed ct:${ctEntries.length}, la:${laAgents.length}`);
+      setCrontabEntries(ctEntries);
+      setLaunchAgents(laAgents);
+    } catch (e) { 
+      console.error('[ControlCenter] loadSystem failed:', e);
+    }
   }, []);
 
   const loadObservedEvents = useCallback(async () => {
@@ -254,11 +268,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     } finally { setLoading(false); }
   }, [loadCron, loadTasks, loadSystem, loadObservedEvents, onRefreshSnapshot, t]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    const id = setInterval(() => void Promise.all([loadCron(), loadTasks(), loadObservedEvents()]), 30000);
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const id = setInterval(() => void Promise.all([loadCron(), loadTasks(), loadSystem(), loadObservedEvents()]), 30000);
     return () => clearInterval(id);
-  }, [loadCron, loadTasks, loadObservedEvents]);
+  }, [loadCron, loadTasks, loadSystem, loadObservedEvents]);
 
   // ── Cron actions ───────────────────────────────────────────────────────────
 
@@ -347,7 +364,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     const observedItems: ActivityItem[] = observedEvents
       .filter(e => e.source !== 'cron' || !cronTimestamps.has(e.timestamp))
       .map(e => ({
-        type: 'observed' as const,
+        type: 'obs' as const,
         id: e.id,
         name: e.title,
         time: e.timestamp,
@@ -367,20 +384,29 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   // ── KPI ────────────────────────────────────────────────────────────────────
 
   const kpi = useMemo(() => {
-    const day = Date.now() - 86400000;
-    const recentCron = activityFeed.filter(a => a.type === 'cron' && a.time > day);
-    const recentObserved = observedEvents.filter(e => e.timestamp > day);
+    // 1. 作業紀錄 (Timeline) - 與下方渲染標題旁顯示的 activityFeed.length 一致
+    const totalActivities = activityFeed.length;
+
+    // 2. 內部排程 (Cron) - 指下方「系統排程」區塊
+    const totalCrons = (cronJobs || []).length;
+    const activeCrons = (cronJobs || []).filter(j => j.enabled).length;
+
+    // 3. 系統服務 (LaunchAgents)
+    const totalAgents = (launchAgents || []).length;
+    const runningAgents = (launchAgents || []).filter(a => a.running).length;
+
+    // 4. 待辦任務 (Tasks) - 用戶改稱為「應用排程」的部分數據？
+    // 但根據用戶要求，應用排程應為原先的 cronJobs (內部排程)，系統排程為 crontabEntries
+    const totalTasks = (tasks || []).length;
+
     return {
-      recentRuns:   recentCron.length,
-      successCount: recentCron.filter(a => a.type === 'cron' && (a as any).status === 'ok').length,
-      errorCount:   recentCron.filter(a => a.type === 'cron' && (a as any).hasError).length,
-      enabled:      cronJobs.filter(j => j.enabled).length,
-      total:        cronJobs.length,
-      activeTasks:  tasks.filter(t => t.status === 'in_progress').length,
-      pendingTasks: tasks.filter(t => t.status === 'todo').length,
-      devEvents:    recentObserved.filter(e => e.category === 'development').length,
+      activityTimeline: totalActivities,
+      systemServices: { running: runningAgents, total: totalAgents },
+      crontabEntriesCount: (crontabEntries || []).length,
+      cronSchedules: { active: activeCrons, total: totalCrons },
+      manualTasks: totalTasks,
     };
-  }, [activityFeed, cronJobs, tasks, observedEvents]);
+  }, [activityFeed, cronJobs, tasks, launchAgents, crontabEntries]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -390,10 +416,26 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: t('controlCenter.kpi.scheduledRuns'), value: kpi.recentRuns,   color: 'text-blue-600 dark:text-blue-400' },
-          { label: t('controlCenter.kpi.successError'),  value: `${kpi.successCount} / ${kpi.errorCount}`, color: kpi.errorCount > 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400' },
-          { label: t('controlCenter.kpi.devEvents'), value: kpi.devEvents,    color: 'text-indigo-600 dark:text-indigo-400' },
-          { label: t('controlCenter.kpi.activePending'), value: `${kpi.activeTasks} / ${kpi.pendingTasks}`, color: 'text-amber-500 dark:text-amber-400' },
+          { 
+            label: t('controlCenter.kpi.activityTimeline', '作業時間軸'), 
+            value: kpi.activityTimeline, 
+            color: 'text-indigo-600 dark:text-indigo-400' 
+          },
+          { 
+            label: t('controlCenter.kpi.systemServices', '系統服務'), 
+            value: kpi.systemServices.total, 
+            color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400' 
+          },
+          { 
+            label: t('controlCenter.kpi.crontabEntries', '系統排程'), 
+            value: kpi.crontabEntriesCount, 
+            color: 'text-blue-600 dark:text-blue-400' 
+          },
+          { 
+            label: t('controlCenter.kpi.cronSchedules', '應用排程'), 
+            value: kpi.cronSchedules.total, 
+            color: 'text-violet-600 dark:text-violet-400' 
+          },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[22px] p-4 shadow-sm text-center">
             <div className={`text-2xl font-black ${color}`}>{value}</div>
@@ -558,7 +600,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       )}
                     </div>
                   );
-                } else if (item.type === 'observed') {
+                } else if (item.type === 'obs') {
                   // observed event
                   const ev = item.event;
                   const catIcon = ev.category === 'development'

@@ -154,6 +154,7 @@ export function SkillManager() {
       if (result?.exitCode === 0) {
         if (result.stdout !== 'Canceled') {
            await rescan();
+           setActiveTab('workspace');
         }
       } else {
         alert(result?.stderr || t('skillManager.status.importError', { msg: 'Unknown' }));
@@ -218,14 +219,16 @@ export function SkillManager() {
         </div>
         
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleImport}
-            disabled={acting}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 dark:bg-blue-600 dark:border-blue-500 dark:hover:bg-blue-500 text-white rounded-2xl text-xs font-black transition-all shadow-xl shadow-slate-200 dark:shadow-blue-900/30 active:scale-95 disabled:opacity-50"
-          >
-            <PackagePlus size={16} />
-            {t('skillManager.actions.import')}
-          </button>
+          {activeTab === 'workspace' && (
+            <button
+              onClick={handleImport}
+              disabled={acting}
+              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 dark:bg-blue-600 dark:border-blue-500 dark:hover:bg-blue-500 text-white rounded-2xl text-xs font-black transition-all shadow-xl shadow-slate-200 dark:shadow-blue-900/30 active:scale-95 disabled:opacity-50"
+            >
+              <PackagePlus size={16} />
+              {t('skillManager.actions.import')}
+            </button>
+          )}
           
           <button
             onClick={rescan}

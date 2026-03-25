@@ -36,14 +36,8 @@ export function useRuntimeConfig(
         return;
       }
 
-      // Create candidate paths for the three zones (config area prioritized, deduplicated)
+      // Create candidate paths (only restricted to the user-specified config area)
       const candidates: string[] = [resolvedConfigDir];
-      if (fallbackWorkspacePath?.trim() && fallbackWorkspacePath.trim() !== resolvedConfigDir) {
-        candidates.push(fallbackWorkspacePath.trim());
-      }
-      if (fallbackCorePath?.trim() && fallbackCorePath.trim() !== resolvedConfigDir) {
-        candidates.push(fallbackCorePath.trim());
-      }
 
       for (const candidate of candidates) {
         try {
@@ -65,7 +59,11 @@ export function useRuntimeConfig(
     };
 
     probeRuntimeConfig();
-  }, [resolvedConfigDir, fallbackCorePath, fallbackWorkspacePath]);
+
+    // 每 30 秒自動探測一次設定檔變動 (如手動修改 Port)
+    const interval = setInterval(probeRuntimeConfig, 30000);
+    return () => clearInterval(interval);
+  }, [resolvedConfigDir, fallbackCorePath, fallbackWorkspacePath, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync valid runtime models and tokens
   useEffect(() => {

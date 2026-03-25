@@ -361,7 +361,7 @@
     "configPath": "OpenClaw 設定區 (Config)",
     "configPathPlaceholder": "留空則使用預設路徑",
     "gatewayPort": "Gateway 連接埠 (Port)",
-    "gatewayPortPlaceholder": "請填入 Launcher 指定的 Gateway Port（必填）",
+    "gatewayPortPlaceholder": "18789",
     "externalTerminalTitle": "外部 Terminal 可視化啟動",
     "externalTerminalDesc": "啟用後，啟動/停止 Gateway 會強制開啟外部 Terminal 視窗；關閉後改為背景執行。",
     "workspacePath": "工作區 (Workspace)",
@@ -407,7 +407,7 @@
       "modifiedUnsaved": "已修改，未儲存"
     },
     "gateway": {
-      "portHelp": "寫入 openclaw.json 的 gateway.port，Gateway 啟動時使用此端口。留空則使用 openclaw 預設值。"
+      "portHelp": "寫入 openclaw.json 的 gateway.port，Gateway 啟動時使用此端口。留空則使用預設值（18789）。"
     }
   },
   "logs": {

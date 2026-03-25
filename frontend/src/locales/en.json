@@ -361,7 +361,7 @@
     "configPath": "OpenClaw Config Path",
     "configPathPlaceholder": "Leave empty for default path",
     "gatewayPort": "Gateway Port",
-    "gatewayPortPlaceholder": "Leave empty to use openclaw default",
+    "gatewayPortPlaceholder": "18789",
     "externalTerminalTitle": "External Terminal Visual Launch",
     "externalTerminalDesc": "When enabled, start/stop Gateway always opens an external Terminal window; when disabled, commands run in background.",
     "workspacePath": "Workspace Path",
@@ -407,7 +407,7 @@
       "modifiedUnsaved": "Modified, unsaved"
     },
     "gateway": {
-      "portHelp": "Writes to gateway.port in openclaw.json; Gateway uses this port on startup. Leave empty for openclaw default."
+      "portHelp": "Writes to gateway.port in openclaw.json; Gateway uses this port on startup. Leave empty for default (18789)."
     }
   },
   "logs": {

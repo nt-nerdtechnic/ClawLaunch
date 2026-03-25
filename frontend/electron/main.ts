@@ -1676,6 +1676,7 @@ function parseOpenClawConfig(content: string) {
         let botToken = '';
         let corePath = '';
         let authChoice = parsed.authChoice || '';
+        let gateway = parsed.gateway || null;
 
         // 0. Extract Core Path (if any)
         if (parsed.corePath) corePath = parsed.corePath;
@@ -1758,9 +1759,9 @@ function parseOpenClawConfig(content: string) {
             }
         }
 
-        return { apiKey, model, workspace, botToken, corePath, authChoice, providers };
+        return { apiKey, model, workspace, botToken, corePath, authChoice, providers, gateway };
     } catch (e) {
-        return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '', providers: [] as string[] };
+        return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '', providers: [] as string[], gateway: null };
     }
 }
 
@@ -3851,8 +3852,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       } catch (e) {}
       
       if (!targetBaseDir) {
-        // Fallback or ask
-        targetBaseDir = path.join(app.getPath('home'), '.openclaw');
+        return { code: 1, stderr: t('main.ipc.errors.missingPath'), exitCode: 1 };
       }
 
       const targetPath = path.join(targetBaseDir, 'skills', skillName);
@@ -3886,8 +3886,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
       const allowedBases = [
         configuredWorkspacePath ? path.resolve(configuredWorkspacePath, 'skills') : '',
-        configuredConfigPath ? path.resolve(configuredConfigPath, 'skills') : '',
-        path.resolve(app.getPath('home'), '.openclaw', 'skills')
+        configuredConfigPath ? path.resolve(configuredConfigPath, 'skills') : ''
       ].filter(Boolean);
 
       const resolvedTarget = path.resolve(skillPath);

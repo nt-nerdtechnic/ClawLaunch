@@ -214,6 +214,12 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
             if ((setPortRes.code ?? setPortRes.exitCode) !== 0) {
               throw new Error(setPortRes.stderr || t('runtime.errors.updatePortFailed'));
             }
+          } else {
+            const delPortCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config delete gateway.port --json`;
+            const delPortRes = await window.electronAPI.exec(delPortCmd);
+            if ((delPortRes.code ?? delPortRes.exitCode) !== 0) {
+              throw new Error(delPortRes.stderr || t('runtime.errors.updatePortFailed'));
+            }
           }
         }
 
