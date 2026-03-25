@@ -721,6 +721,8 @@
     "efficiencyTitle": "推论效率分析",
     "noData": "暂无消耗数据记录",
     "waitingData": "等待数据注入...",
+    "agentAttribution": "Agent 消耗归因比例",
+    "noAgentData": "尚无 Agent 消耗数据",
     "window": {
       "title": "时窗",
       "today": "今日",

@@ -721,6 +721,8 @@
     "efficiencyTitle": "推論效率分析",
     "noData": "暫無消耗數據記錄",
     "waitingData": "等待數據注入...",
+    "agentAttribution": "Agent 消耗歸因比例",
+    "noAgentData": "尚無 Agent 消耗數據",
     "window": {
       "title": "時窗",
       "today": "今日",
@@ -1169,6 +1171,28 @@
       "qwen": {
         "desc": "Qwen 通義千問密鑰"
       }
+    },
+    "channel": {
+      "management": "通訊頻道管理",
+      "desc": "設定 AI 代理與外部通訊軟體的連接方式。",
+      "configuredTokens": "已配置 Token",
+      "noKeyNeeded": "{{name}} 不需要密鑰",
+      "noKeyDesc": "此頻道無須輸入 Token 即可直接運作。",
+      "applyToken": "儲存頻道 Token",
+      "applyingToken": "儲存中...",
+      "appliedToken": "已成功套用",
+      "telegramTokenHelp": "請在 @BotFather 取得 Token。"
+    },
+    "telegram": {
+      "management": "Telegram 終端管理",
+      "pairingLabel": "Pairing 模式",
+      "clearPairing": "清除待審",
+      "pairingLoading": "正在讀取 Telegram 配對請求...",
+      "noPairing": "目前沒有待核准的配對請求。",
+      "approving": "核准中...",
+      "rejecting": "拒絕中...",
+      "authorizedUsers": "已授權使用者",
+      "noAuthorizedUsers": "尚無已授權的使用者。"
     },
     "actions": {
       "onboardTitle": "OpenClaw 完整授權導引",

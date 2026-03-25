@@ -721,6 +721,8 @@
     "efficiencyTitle": "Inference Efficiency Analysis",
     "noData": "No consumption data available",
     "waitingData": "Awaiting data injection...",
+    "agentAttribution": "Agent Consumption Attribution",
+    "noAgentData": "No agent consumption data yet.",
     "window": {
       "title": "Window",
       "today": "Today",

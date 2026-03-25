@@ -359,7 +359,31 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
       {/* Gateway & Model Section */}
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div>
-          <div className="flex items-center justify-between mb-4">
+          {/* Gateway Port */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              Gateway Port
+            </label>
+            <div className="flex items-stretch gap-2">
+              <input
+                type="text"
+                value={runtimeDraftGatewayPort}
+                onChange={(e) => setRuntimeDraftGatewayPort(e.target.value)}
+                placeholder={t('settings.gatewayPortPlaceholder')}
+                className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+              />
+            </div>
+            {runtimeDraftGatewayPort !== (runtimeProfile?.gateway?.port ? String(runtimeProfile.gateway.port) : '') && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-amber-500 dark:text-amber-400 font-bold">
+                <span>({t('settings.modifiedUnsaved')})</span>
+              </div>
+            )}
+            <div className="text-[10px] text-slate-400 dark:text-slate-500">
+              {t('settings.gateway.portHelp')}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
             <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
               Gateway & Model
             </div>
@@ -648,46 +672,11 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                 }`}
               />
               {/* Currently saved default models */}
-              {runtimeProfile?.model && (
-                <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
-                  <span>{t('settings.savedDefault')}：</span>
-                  <button
-                    type="button"
-                    onClick={() => setRuntimeDraftModel(String(runtimeProfile.model))}
-                    className="font-mono text-blue-600 dark:text-blue-400 hover:underline truncate max-w-[260px]"
-                    title={t('settings.auth.restoreSaved', { val: runtimeProfile.model })}
-                  >
-                    {runtimeProfile.model}
-                  </button>
-                  {runtimeDraftModel !== runtimeProfile.model && (
-                    <span className="text-amber-500 dark:text-amber-400 font-bold">({t('settings.auth.modifiedUnsaved')})</span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Gateway Port */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                Gateway Port
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="text"
-                  value={runtimeDraftGatewayPort}
-                  onChange={(e) => setRuntimeDraftGatewayPort(e.target.value)}
-                  placeholder={t('settings.gatewayPortPlaceholder')}
-                  className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-                />
-              </div>
-              {runtimeDraftGatewayPort !== (runtimeProfile?.gateway?.port ? String(runtimeProfile.gateway.port) : '') && (
+              {runtimeDraftModel !== (runtimeProfile?.model || '') && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-amber-500 dark:text-amber-400 font-bold">
-                  <span>({t('settings.modifiedUnsaved')})</span>
+                  <span>({t('settings.auth.modifiedUnsaved')})</span>
                 </div>
               )}
-              <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                {t('settings.gateway.portHelp')}
-              </div>
             </div>
           </div>
 
