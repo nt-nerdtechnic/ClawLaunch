@@ -52,6 +52,7 @@ interface Config {
   configPath: string;  // Configuration area
   workspacePath: string; // Workspace area
   theme?: 'light' | 'dark'; // Persisted theme
+  language?: string; // Persisted language
 }
 
 export interface ReadModelSession {
@@ -262,7 +263,8 @@ export const useStore = create<AppState>((set) => ({
     unrestrictedMode: false,
     corePath: '',
     configPath: '',
-    workspacePath: ''
+    workspacePath: '',
+    language: localStorage.getItem('i18nextLng') || 'zh-TW',
   },
   detectedConfig: null,
   detectingPaths: false,
@@ -345,7 +347,7 @@ export const useStore = create<AppState>((set) => ({
   language: localStorage.getItem('i18nextLng') || 'zh-TW',
   setLanguage: (lang) => {
     localStorage.setItem('i18nextLng', lang);
-    set({ language: lang });
+    set((state) => ({ language: lang, config: { ...state.config, language: lang } }));
   },
   chat: {
     isOpen: false,

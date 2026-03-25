@@ -81,7 +81,7 @@ function App() {
   const ONBOARDING_FINISHED_KEY = 'onboarding_finished';
   const ONBOARDING_FORCE_RESET_KEY = 'onboarding_force_reset';
 
-  const { running, setRunning, logs, addLog, envStatus, config, setConfig, detectedConfig, snapshot, auditTimeline, dailyDigest, setSnapshot, setSnapshotHistory, setEventQueue, setAckedEvents, setAuditTimeline, setDailyDigest, setRawSnapshot, setSnapshotSourcePath } = useStore();
+  const { running, setRunning, logs, addLog, envStatus, config, setConfig, detectedConfig, snapshot, auditTimeline, dailyDigest, setSnapshot, setSnapshotHistory, setEventQueue, setAckedEvents, setAuditTimeline, setDailyDigest, setRawSnapshot, setSnapshotSourcePath, theme, language } = useStore();
   const [viewMode, setViewMode] = useState<'mini' | 'expanded'>('expanded');
   const [activeTab, setActiveTab] = useState('monitor'); // Default to monitor if onboarding finished
   const [onboardingFinished, setOnboardingFinished] = useState(
@@ -379,7 +379,6 @@ function App() {
   // JSONL calculation — directly scan ~/.openclaw/agents/*/sessions/*.jsonl
   useRuntimeUsageSync();
 
-  const { theme } = useStore();
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -392,10 +391,17 @@ function App() {
     const hasLoadedConfig = Boolean(config.corePath || config.configPath || config.workspacePath);
     if (window.electronAPI && hasLoadedConfig) {
       const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = config as any;
-      const updated = { ...launcherPayload, theme };
+      const updated = { ...launcherPayload, theme, language };
       window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
     }
-  }, [theme]);
+  }, [theme, language]);
+
+  const { i18n } = useTranslation();
+  useEffect(() => {
+    if (language && i18n.language !== language) {
+      i18n.changeLanguage(language);
+    }
+  }, [language, i18n]);
 
   useEffect(() => {
     if (!window.electronAPI?.setTitle) return;
