@@ -161,6 +161,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [error, setError]             = useState('');
   const [view, setView]               = useState<'all' | 'cron' | 'task' | 'obs'>('all');
+  const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'loaded'>('all');
+  const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled' | 'error'>('all');
   const { i18n } = useTranslation();
 
   // Update TASK_STATUS_CFG to use t after useTranslation is available
@@ -414,17 +417,34 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <span className="text-[10px] text-slate-400">{t('controlCenter.timeline.count', { count: activityFeed.length })}</span>
               </div>
               <div className="flex items-center gap-2">
-                {/* Legend */}
-                <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                  <CalendarClock size={9} className="text-violet-400" />{t('controlCenter.timeline.legend.cron')}
-                </span>
-                <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                  <ClipboardList size={9} className="text-amber-400" />{t('controlCenter.timeline.legend.task')}
-                </span>
-                <span className="flex items-center gap-1 text-[9px] text-slate-400">
-                  <ScanLine size={9} className="text-indigo-400" />{t('controlCenter.timeline.legend.observed')}
-                </span>
-                <div className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
+                {/* Unified Filter Buttons */}
+                <div className="flex items-center gap-1 border-r border-slate-200 dark:border-slate-700 pr-2 mr-1">
+                    {(['all', 'cron', 'task', 'obs'] as const).map(f => {
+                      const isActive = view === f;
+                      const color = f === 'cron' ? (isActive ? 'bg-violet-500 border-violet-500' : 'text-violet-400')
+                                  : f === 'task' ? (isActive ? 'bg-amber-500 border-amber-500' : 'text-amber-400')
+                                  : f === 'obs'  ? (isActive ? 'bg-indigo-500 border-indigo-500' : 'text-indigo-400')
+                                  : (isActive ? 'bg-slate-600 border-slate-600' : 'text-slate-400');
+                      const Icon = f === 'cron' ? CalendarClock : f === 'task' ? ClipboardList : f === 'obs' ? ScanLine : Activity;
+                      const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
+                                  : f === 'cron' ? t('controlCenter.timeline.tabs.cron') 
+                                  : f === 'task' ? t('controlCenter.timeline.tabs.task') 
+                                  : t('controlCenter.timeline.tabs.observation');
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setView(f)}
+                          title={label}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[9px] font-bold transition-all ${
+                            isActive ? `${color} text-white` : `bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 ${color}`
+                          }`}
+                        >
+                          <Icon size={8} />
+                          <span className="hidden sm:inline">{label}</span>
+                        </button>
+                      );
+                    })}
+                </div>
                 {lastRefreshed && (
                   <span className="text-[10px] text-slate-400 tabular-nums">
                     {lastRefreshed.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -446,21 +466,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               </div>
             </div>
 
-            {/* Timeline filter buttons */}
-            <div className="flex items-center gap-2">
-                <button onClick={() => setView('all')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'all' ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
-                  <Activity size={9} className={view === 'all' ? 'text-white' : 'text-indigo-400'} />{t('controlCenter.timeline.tabs.all')}
-                </button>
-                <button onClick={() => setView('cron')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'cron' ? 'bg-violet-500 text-white border-violet-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
-                  <CalendarClock size={9} className={view === 'cron' ? 'text-white' : 'text-violet-400'} />{t('controlCenter.timeline.tabs.cron')}
-                </button>
-                <button onClick={() => setView('task')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'task' ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
-                  <ClipboardList size={9} className={view === 'task' ? 'text-white' : 'text-amber-400'} />{t('controlCenter.timeline.tabs.task')}
-                </button>
-                <button onClick={() => setView('obs')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${view === 'obs' ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800'}`}>
-                  <ScanLine size={9} className={view === 'obs' ? 'text-white' : 'text-indigo-400'} />{t('controlCenter.timeline.tabs.observation')}
-                </button>
-            </div>
 
             {/* Timeline list */}
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-0.5">
@@ -624,10 +629,36 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <Server size={12} className="text-emerald-500" />
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.services.title')}</span>
                 <span className="text-[9px] text-slate-400">LaunchAgents</span>
+                <div className="flex items-center gap-1 ml-auto">
+                  {(['all', 'running', 'loaded'] as const).map(f => {
+                    const isActive = agentFilter === f;
+                    const Icon = f === 'all' ? Activity : f === 'running' ? CheckCircle : Clock;
+                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
+                                : f === 'running' ? t('common.agent.running', { pid: '' }).split(' ')[0] 
+                                : t('common.agent.loaded');
+                    return (
+                      <button 
+                        key={f} 
+                        onClick={() => setAgentFilter(f)} 
+                        title={label}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
+                      >
+                        <Icon size={8} />
+                        <span className="hidden sm:inline">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {launchAgents.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
-              ) : launchAgents.map(agent => (
+              ) : launchAgents
+                .filter(a => {
+                  if (agentFilter === 'running') return a.running;
+                  if (agentFilter === 'loaded') return a.loaded;
+                  return true;
+                })
+                .map(agent => (
                 <div key={agent.label} className={`flex items-center gap-2.5 rounded-xl border border-slate-100 dark:border-slate-800 px-3 py-2 transition-all ${
                   agent.loaded ? 'bg-white dark:bg-slate-900/50' : 'bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
                 }`}>
@@ -669,10 +700,36 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <Terminal size={12} className="text-amber-500" />
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.crontab.title')}</span>
                 <span className="text-[9px] text-slate-400">{t('controlCenter.crontab.count', { count: crontabEntries.length })}</span>
+                <div className="flex items-center gap-1 ml-auto">
+                  {(['all', 'enabled', 'disabled'] as const).map(f => {
+                    const isActive = ctFilter === f;
+                    const Icon = f === 'all' ? Activity : f === 'enabled' ? CheckCircle : Clock;
+                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
+                                : f === 'enabled' ? t('common.status.success') 
+                                : t('common.status.todo');
+                    return (
+                      <button 
+                        key={f} 
+                        onClick={() => setCtFilter(f)} 
+                        title={label}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-amber-500 text-white border-amber-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
+                      >
+                        <Icon size={8} />
+                        <span className="hidden sm:inline">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {crontabEntries.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
-              ) : crontabEntries.map((entry, i) => (
+              ) : crontabEntries
+                .filter(e => {
+                  if (ctFilter === 'enabled') return e.enabled !== false;
+                  if (ctFilter === 'disabled') return e.enabled === false;
+                  return true;
+                })
+                .map((entry, i) => (
                 <div key={i} className={`rounded-xl border px-3 py-2 transition-all ${
                   entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
                 }`}>
@@ -714,12 +771,34 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.cronJobs.title')}</span>
                   <span className="text-[9px] text-slate-400">{t('controlCenter.cronJobs.count', { count: cronJobs.length })}</span>
                 </div>
-                <button
-                  onClick={async () => { setCronLoading(true); await loadCron(); setCronLoading(false); }}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
-                >
-                  <RefreshCw size={9} className={cronLoading ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex items-center gap-1">
+                  {(['all', 'enabled', 'disabled', 'error'] as const).map(f => {
+                    const isActive = cjFilter === f;
+                    const Icon = f === 'all' ? Activity : f === 'enabled' ? CheckCircle : f === 'disabled' ? Clock : AlertTriangle;
+                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
+                                : f === 'enabled' ? t('common.status.success') 
+                                : f === 'disabled' ? t('common.status.todo') 
+                                : t('common.status.failure');
+                    return (
+                      <button 
+                        key={f} 
+                        onClick={() => setCjFilter(f)} 
+                        title={label}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-violet-500 text-white border-violet-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
+                      >
+                        <Icon size={8} />
+                        <span className="hidden sm:inline">{label}</span>
+                      </button>
+                    );
+                  })}
+                  <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
+                  <button
+                    onClick={async () => { setCronLoading(true); await loadCron(); setCronLoading(false); }}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
+                  >
+                    <RefreshCw size={9} className={cronLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
@@ -728,7 +807,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     <CalendarClock size={22} className="mb-2 opacity-30" />
                     <span className="text-sm">{t('controlCenter.cronJobs.empty')}</span>
                   </div>
-                ) : [...cronJobs].sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
+                ) : [...cronJobs]
+                  .filter(j => {
+                    if (cjFilter === 'enabled') return j.enabled;
+                    if (cjFilter === 'disabled') return !j.enabled;
+                    if (cjFilter === 'error') return (j.state?.consecutiveErrors ?? 0) > 0;
+                    return true;
+                  })
+                  .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
                   const hasError = (job.state?.consecutiveErrors ?? 0) > 0;
                   return (
                     <div key={job.id} className={`rounded-xl border px-3 py-2.5 transition-all ${
