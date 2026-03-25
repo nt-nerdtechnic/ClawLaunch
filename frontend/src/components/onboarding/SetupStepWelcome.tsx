@@ -36,8 +36,7 @@ const SetupStepWelcome = ({ onNext }) => {
         apiKey: '',
         botToken: '',
         platform: 'telegram',
-        installDaemon: false,
-        enabledSkills: []
+        installDaemon: false
       };
       setConfig(nextPatch);
       persistConfig(nextPatch);

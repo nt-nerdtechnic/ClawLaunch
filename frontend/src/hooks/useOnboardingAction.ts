@@ -900,27 +900,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         }
 
         case 'skills': {
-          const selectedSkills = config.enabledSkills || [];
-          if (selectedSkills.length === 0) {
-            addLocalLog(t('onboarding.logs.noSkillsNeeded'), 'system');
-            setExecuting(false);
-            return true;
-          }
-          addLocalLog(t('onboarding.logs.enablingSkills', { count: selectedSkills.length }), 'system');
-
-          for (const skillId of selectedSkills) {
-            addLocalLog(t('onboarding.logs.enablingSkill', { id: skillId }), "system");
-            if (!/^[a-z0-9_-]+$/i.test(skillId)) {
-              addLocalLog(t('onboarding.logs.unsafeSkillId', { id: skillId }), 'stderr');
-              continue;
-            }
-            const cmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set skills.entries.${skillId}.enabled true`;
-            const res = await (window as any).electronAPI.exec(cmd);
-            if (!isCommandSuccess(res)) {
-              addLocalLog(t('onboarding.logs.skillEnableFailed', { id: skillId, err: res.stderr }), "stderr");
-            }
-          }
-          break;
+          // As per latest architectural decision, enabledSkills has been removed from config.
+          // Skills are now handled via direct filesystem installation/deletion actions.
+          addLocalLog(t('onboarding.logs.skillsHandledByFilesystem'), 'system');
+          setExecuting(false);
+          return true;
         }
 
         case 'launch': {

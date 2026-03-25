@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
 import type { ReadModelSession } from '../store';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, RefreshCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 type DaySeries = {
@@ -57,9 +57,76 @@ const toDateKey = (isoTime: string) => {
 
 export function Analytics() {
   const { t } = useTranslation();
-  const { setUsage, snapshot, snapshotHistory, runtimeUsageEvents } = useStore();
+  const { setUsage, snapshot, snapshotHistory, runtimeUsageEvents, modelPrices, setModelPrices, config } = useStore();
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const [usageWindow, setUsageWindow] = useState<'today' | '7d' | '30d'>('7d');
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+
+  const handleRefreshPrices = async () => {
+    setIsRefreshingPrices(true);
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models');
+      const data = await res.json();
+      if (data && data.data) {
+        const newPrices: Record<string, { prompt: number, completion: number }> = {};
+        for (const item of data.data) {
+          if (item.pricing) {
+            newPrices[item.id] = {
+              prompt: Number(item.pricing.prompt) || 0,
+              completion: Number(item.pricing.completion) || 0,
+            };
+          }
+        }
+        setModelPrices(newPrices);
+      }
+    } catch (e) {
+      console.error('Failed to fetch OpenRouter model prices', e);
+    } finally {
+      setIsRefreshingPrices(false);
+    }
+  };
+
+  const getModelPrice = (modelName: string) => {
+    const name = modelName.trim().toLowerCase();
+    if (name === 'unknown' || !name) return null;
+
+    // Highest Priority: Custom configuration defined in clawlaunch.json
+    if ((config as any)?.customModelPrices) {
+      const customPrices = (config as any).customModelPrices;
+      if (customPrices && typeof customPrices === 'object') {
+        for (const [key, val] of Object.entries(customPrices)) {
+          if (key.toLowerCase() === name) {
+            const parsedVal = val as any;
+            if (parsedVal && typeof parsedVal.prompt === 'number' && typeof parsedVal.completion === 'number') {
+              return { prompt: parsedVal.prompt, completion: parsedVal.completion };
+            }
+          }
+        }
+      }
+    }
+
+    if (!modelPrices || Object.keys(modelPrices).length === 0) return null;
+    
+    // Attempt to match perfectly first from OpenRouter
+    if (modelPrices[name]) return modelPrices[name];
+    
+    const norm = name.replace(/[-_.\s]/g, '');
+    let bestMatch = null;
+
+    for (const [id, price] of Object.entries(modelPrices)) {
+      const slug = id.split('/')[1] || id;
+      const normSlug = slug.toLowerCase().replace(/[-_.\s]/g, '');
+      
+      if (norm === normSlug) return price; // Exact slug match
+      
+      if (norm.includes(normSlug) || normSlug.includes(norm)) {
+         if (!bestMatch || normSlug.length > bestMatch.slug.length) {
+            bestMatch = { price, slug: normSlug };
+         }
+      }
+    }
+    return bestMatch?.price || null;
+  };
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
 
@@ -544,19 +611,40 @@ export function Analytics() {
 
         {/* Cost Hotspots */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
-          <div className="mb-6">
-            <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.costHotspots.title')}</h3>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">
-              {runtimeUsageEvents.length > 0 ? t('analytics.costHotspots.subtitleRuntime') : t('analytics.costHotspots.subtitle')}
-            </p>
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.costHotspots.title')}</h3>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">
+                {runtimeUsageEvents.length > 0 ? t('analytics.costHotspots.subtitleRuntime') : t('analytics.costHotspots.subtitle')}
+              </p>
+            </div>
+            <button
+              onClick={handleRefreshPrices}
+              disabled={isRefreshingPrices}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-widest uppercase rounded-full border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 text-slate-500"
+            >
+              <RefreshCcw size={12} className={isRefreshingPrices ? 'animate-spin' : ''} />
+              {t('analytics.costHotspots.refreshBtn')}
+            </button>
           </div>
           <div className="space-y-2">
-            {costHotspots.length > 0 ? costHotspots.map((row) => (
-              <div key={row.name} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
-                <span className="text-xs text-slate-700 dark:text-slate-200 truncate pr-2">{row.name}</span>
-                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-100">${row.cost.toFixed(3)}</span>
-              </div>
-            )) : (
+            {costHotspots.length > 0 ? costHotspots.map((row) => {
+              const priceObj = getModelPrice(row.name);
+              const inPrice = priceObj ? (priceObj.prompt * 1000000).toFixed(2) : '0.50';
+              const outPrice = priceObj ? (priceObj.completion * 1000000).toFixed(2) : '1.00';
+              
+              return (
+                <div key={row.name} className="flex flex-col rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-700 dark:text-slate-200 truncate pr-2 font-medium">{row.name}</span>
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-100">${row.cost.toFixed(3)}</span>
+                  </div>
+                  <div className="text-[9px] text-slate-400 font-normal mt-0.5 tracking-tight truncate">
+                    {t('analytics.costHotspots.formulaSpecific', { inPrice, outPrice })}
+                  </div>
+                </div>
+              );
+            }) : (
               <div className="h-full flex items-center justify-center text-slate-700 italic">{t('analytics.costHotspots.noData')}</div>
             )}
           </div>

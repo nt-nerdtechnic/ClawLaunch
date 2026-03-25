@@ -4,9 +4,10 @@ import type { TFunction } from 'i18next';
 import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle, Clock,
-  CalendarClock, Zap, Activity, Server, Terminal, ClipboardList,
+  CalendarClock, Activity, Server, Terminal, ClipboardList,
   Code2, FileEdit, Settings, ScanLine,
 } from 'lucide-react';
+import cronstrue from 'cronstrue/i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ interface CrontabEntry {
   command: string;
   name: string;
   raw: string;
+  enabled?: boolean;
 }
 
 interface LaunchAgent {
@@ -103,6 +105,20 @@ function formatInterval(s: CronSchedule, t: TFunction): string {
     return t('common.time.every', { val: `${(m / 60).toFixed(0)}h` });
   }
   return '—';
+}
+
+function getCronstrueLocale(lang: string): string {
+  if (lang.toLowerCase().startsWith('zh-tw')) return 'zh_TW';
+  if (lang.toLowerCase().startsWith('zh-cn')) return 'zh_CN';
+  return 'en';
+}
+
+function describeCron(expr: string, lang: string): string {
+  try {
+    return cronstrue.toString(expr, { locale: getCronstrueLocale(lang) });
+  } catch {
+    return '';
+  }
 }
 
 function relTime(ms: number | undefined, t: TFunction): string {
@@ -251,6 +267,46 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const deleteCron = async (jobId: string) => {
     await execCmd(`cron:delete ${JSON.stringify({ jobId, stateDir })}`);
     await loadCron();
+  };
+
+  const toggleCrontab = async (raw: string) => {
+    try {
+      setError('');
+      await execCmd(`system:crontab:toggle ${JSON.stringify({ raw })}`);
+      await loadSystem();
+    } catch (e: any) {
+      setError(e.message || 'Toggle crontab failed');
+    }
+  };
+
+  const deleteCrontab = async (raw: string) => {
+    try {
+      setError('');
+      await execCmd(`system:crontab:delete ${JSON.stringify({ raw })}`);
+      await loadSystem();
+    } catch (e: any) {
+      setError(e.message || 'Delete crontab failed');
+    }
+  };
+
+  const toggleLaunchAgent = async (label: string) => {
+    try {
+      setError('');
+      await execCmd(`system:launchagents:toggle ${JSON.stringify({ label })}`);
+      await loadSystem();
+    } catch (e: any) {
+      setError(e.message || 'Toggle LaunchAgent failed');
+    }
+  };
+
+  const deleteLaunchAgent = async (label: string) => {
+    try {
+      setError('');
+      await execCmd(`system:launchagents:delete ${JSON.stringify({ label })}`);
+      await loadSystem();
+    } catch (e: any) {
+      setError(e.message || 'Delete LaunchAgent failed');
+    }
   };
 
   // ── Merged activity feed ───────────────────────────────────────────────────
@@ -572,7 +628,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               {launchAgents.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
               ) : launchAgents.map(agent => (
-                <div key={agent.label} className="flex items-center gap-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 px-3 py-2">
+                <div key={agent.label} className={`flex items-center gap-2.5 rounded-xl border border-slate-100 dark:border-slate-800 px-3 py-2 transition-all ${
+                  agent.loaded ? 'bg-white dark:bg-slate-900/50' : 'bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
+                }`}>
                   <span className={`w-2 h-2 rounded-full shrink-0 ${agent.running ? 'bg-emerald-500' : agent.loaded ? 'bg-amber-400' : 'bg-slate-400'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">{agent.name}</div>
@@ -585,6 +643,19 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   }`}>
                     {agent.running ? t('common.agent.running', { pid: agent.pid }) : agent.loaded ? t('common.agent.loaded') : agent.plistExists ? t('common.agent.unloaded') : t('common.agent.notInstalled')}
                   </span>
+                  
+                  {agent.plistExists && (
+                    <div className="flex items-center gap-0.5 shrink-0 ml-2">
+                      <button onClick={() => void toggleLaunchAgent(agent.label)} title={agent.loaded ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
+                        className={`p-1 rounded-lg transition-all ${agent.loaded ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-emerald-600'}`}>
+                        {agent.loaded ? <Pause size={10} /> : <Play size={10} />}
+                      </button>
+                      <button onClick={() => void deleteLaunchAgent(agent.label)}
+                        className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -602,14 +673,31 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               {crontabEntries.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
               ) : crontabEntries.map((entry, i) => (
-                <div key={i} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 px-3 py-2">
+                <div key={i} className={`rounded-xl border px-3 py-2 transition-all ${
+                  entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
+                }`}>
                   <div className="flex items-center gap-2">
-                    <Zap size={10} className="text-amber-400 shrink-0" />
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${entry.enabled !== false ? 'bg-amber-400' : 'bg-slate-400'}`} />
                     <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">{entry.name}</span>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button onClick={() => void toggleCrontab(entry.raw)} title={entry.enabled !== false ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
+                        className={`p-1 rounded-lg transition-all ${entry.enabled !== false ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-amber-600'}`}>
+                        {entry.enabled !== false ? <Pause size={10} /> : <Play size={10} />}
+                      </button>
+                      <button onClick={() => void deleteCrontab(entry.raw)}
+                        className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="mt-1 pl-4 flex items-center gap-2 text-[10px] text-slate-400">
-                    <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{entry.schedule}</span>
-                    <span className="truncate max-w-[160px] opacity-60">{entry.command.split('/').slice(-2).join('/')}</span>
+                  <div className="mt-1 pl-3.5 flex items-center gap-2 text-[10px] text-slate-400">
+                    <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded" title={describeCron(entry.schedule, i18n.language)}>
+                      {entry.schedule}
+                    </span>
+                    <span className="text-violet-400/80 max-w-[120px] truncate" title={describeCron(entry.schedule, i18n.language)}>
+                      {describeCron(entry.schedule, i18n.language)}
+                    </span>
+                    <span className="truncate max-w-[140px] opacity-60 ml-auto">{entry.command.split('/').slice(-2).join('/')}</span>
                   </div>
                 </div>
               ))}

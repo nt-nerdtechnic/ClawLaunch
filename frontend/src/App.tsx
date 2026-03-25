@@ -391,7 +391,8 @@ function App() {
     // before loadConfig() has completed its async IPC call on startup.
     const hasLoadedConfig = Boolean(config.corePath || config.configPath || config.workspacePath);
     if (window.electronAPI && hasLoadedConfig) {
-      const updated = { ...config, theme };
+      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = config as any;
+      const updated = { ...launcherPayload, theme };
       window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
     }
   }, [theme]);

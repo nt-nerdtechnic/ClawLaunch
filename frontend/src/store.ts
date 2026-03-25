@@ -48,7 +48,6 @@ interface Config {
   useExternalTerminal: boolean;
   autoRestartGateway: boolean;
   unrestrictedMode: boolean;
-  enabledSkills: string[];
   corePath: string;    // Primary core area
   configPath: string;  // Configuration area
   workspacePath: string; // Workspace area
@@ -216,9 +215,10 @@ interface AppState {
   ackEventLocal: (eventId: string, ttlMs?: number) => void;
   setRawSnapshot: (rawSnapshot: any | null) => void;
   setSnapshotSourcePath: (path: string) => void;
-  // Runtime Usage Events (calculated from JSONL)
   runtimeUsageEvents: RuntimeUsageEvent[];
   setRuntimeUsageEvents: (events: RuntimeUsageEvent[]) => void;
+  modelPrices: Record<string, { prompt: number, completion: number }>;
+  setModelPrices: (prices: Record<string, { prompt: number, completion: number }>) => void;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   language: string;
@@ -260,7 +260,6 @@ export const useStore = create<AppState>((set) => ({
     useExternalTerminal: true,
     autoRestartGateway: false,
     unrestrictedMode: false,
-    enabledSkills: [], // Initial extension skills are empty; core skills are enabled by default
     corePath: '',
     configPath: '',
     workspacePath: ''
@@ -278,14 +277,10 @@ export const useStore = create<AppState>((set) => ({
   setDetectedConfig: (config) => set({ detectedConfig: config }),
   setDetectingPaths: (status) => set({ detectingPaths: status }),
   setPathsConfirmed: (status) => set({ pathsConfirmed: status }),
-  toggleSkill: (skillId) => set((state) => ({
-    config: {
-      ...state.config,
-      enabledSkills: state.config.enabledSkills.includes(skillId)
-        ? state.config.enabledSkills.filter(id => id !== skillId)
-        : [...state.config.enabledSkills, skillId]
-    }
-  })),
+  toggleSkill: (skillId) => {
+    // Skills are now handled by filesystem actions, not by this config toggle.
+    console.log(`Toggle skill requested for ${skillId}, but enabledSkills has been removed from config.`);
+  },
   usage: {
     input: 0,
     output: 0,
@@ -328,6 +323,19 @@ export const useStore = create<AppState>((set) => ({
   setSnapshotSourcePath: (snapshotSourcePath) => set({ snapshotSourcePath }),
   runtimeUsageEvents: [],
   setRuntimeUsageEvents: (runtimeUsageEvents) => set({ runtimeUsageEvents }),
+  modelPrices: (() => {
+    try {
+      const stored = localStorage.getItem('openclaw_model_prices');
+      if (stored) return JSON.parse(stored);
+    } catch (e) { /* ignore */ }
+    return {};
+  })(),
+  setModelPrices: (modelPrices) => set((state) => {
+    try {
+      localStorage.setItem('openclaw_model_prices', JSON.stringify({ ...state.modelPrices, ...modelPrices }));
+    } catch(e) { /* ignore */ }
+    return { modelPrices: { ...state.modelPrices, ...modelPrices } };
+  }),
   theme: (localStorage.getItem('theme') as 'light' | 'dark') ||
     (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   setTheme: (theme) => {

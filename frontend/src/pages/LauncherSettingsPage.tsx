@@ -198,6 +198,58 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
               <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
             </button>
           </div>
+
+          {/* Background Service (Daemon) */}
+          <div className="mt-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                {t('settings.installDaemonTitle')}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                {t('settings.installDaemonDesc')}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setConfig({ installDaemon: !config.installDaemon })}
+              className={`shrink-0 inline-flex h-7 w-12 items-center rounded-full border transition-all ${
+                config.installDaemon
+                  ? 'bg-emerald-500 border-emerald-500 justify-end'
+                  : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'
+              }`}
+              aria-pressed={config.installDaemon}
+              aria-label={t('settings.installDaemonTitle')}
+              title={t('settings.installDaemonTitle')}
+            >
+              <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
+            </button>
+          </div>
+
+          {/* Unrestricted Mode */}
+          <div className="mt-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                {t('settings.unrestrictedModeTitle')}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                {t('settings.unrestrictedModeDesc')}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setConfig({ unrestrictedMode: !config.unrestrictedMode })}
+              className={`shrink-0 inline-flex h-7 w-12 items-center rounded-full border transition-all ${
+                config.unrestrictedMode
+                  ? 'bg-emerald-500 border-emerald-500 justify-end'
+                  : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 justify-start'
+              }`}
+              aria-pressed={config.unrestrictedMode}
+              aria-label={t('settings.unrestrictedModeTitle')}
+              title={t('settings.unrestrictedModeTitle')}
+            >
+              <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
+            </button>
+          </div>
         </div>
 
         {/* Check for Updates Section */}

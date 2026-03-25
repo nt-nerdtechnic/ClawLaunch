@@ -203,7 +203,15 @@ export function useAppBootstrap({
     // Persist the finished flag to config.json so it survives PID-based localStorage/userData wipe on restart
     if (window.electronAPI) {
       const currentConfig = useStore.getState().config;
-      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = currentConfig as any;
+      const { 
+        model: _m, 
+        botToken: _b, 
+        authChoice: _a, 
+        apiKey: _k, 
+        platform: _p, 
+        appToken: _at, 
+        ...launcherPayload 
+      } = currentConfig as any;
       window.electronAPI.exec(
         `config:write ${JSON.stringify({ ...launcherPayload, onboardingFinished: true })}`
       ).catch(() => {});

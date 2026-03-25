@@ -21,6 +21,7 @@ const PERSISTENT_CONFIG_DIR = path.join(
 );
 mkdirSync(PERSISTENT_CONFIG_DIR, { recursive: true });
 const CONFIG_DIR = PERSISTENT_CONFIG_DIR;
+const getClawlaunchFile = () => path.join(app.getPath('home'), '.clawlaunch', 'clawlaunch.json');
 // ───────────────────────────────────────────────────────────────────────────
 
 // Suppress EPIPE errors that occur when concurrently/piped launchers close
@@ -1352,7 +1353,7 @@ const waitForAssistantFinalByHistory = async ({
 };
 
 async function resolveOpenClawRuntime() {
-  const launcherConfigPath = path.join(CONFIG_DIR, 'config.json');
+  const launcherConfigPath = getClawlaunchFile();
   let launcherConfig: LauncherConfig = {};
   try {
     const raw = await fs.readFile(launcherConfigPath, 'utf-8');
@@ -2399,7 +2400,7 @@ async function readLauncherConfigPaths(): Promise<{
     stateDir: process.env['OPENCLAW_STATE_DIR'] || path.join(HOME, '.openclaw'),
   };
   try {
-    const raw = await fs.readFile(path.join(CONFIG_DIR, 'config.json'), 'utf-8');
+    const raw = await fs.readFile(getClawlaunchFile(), 'utf-8');
     const cfg = JSON.parse(raw);
     return {
       corePath:      String(cfg.corePath      || '').trim(),
@@ -3207,17 +3208,68 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   if (fullCommand === 'system:crontab:list') {
     try {
       const res = await runSilent('crontab -l');
-      const lines = res.stdout.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+      const lines = res.stdout.split('\n').filter(l => l.trim() && (!l.trim().startsWith('#') || l.trim().startsWith('# [DISABLED]')));
       const entries = lines.map(line => {
-        const parts = line.trim().split(/\s+/);
+        const isPaused = line.trim().startsWith('# [DISABLED]');
+        const actualLine = isPaused ? line.trim().replace(/^#\s*\[DISABLED\]\s*/, '') : line.trim();
+        const parts = actualLine.split(/\s+/);
         const schedule = parts.slice(0, 5).join(' ');
         const command = parts.slice(5).join(' ');
         const name = command.split('/').pop()?.replace(/\.sh$/, '') || command.slice(0, 40);
-        return { schedule, command, name, raw: line.trim() };
+        return { schedule, command, name, raw: line.trim(), enabled: !isPaused };
       });
       return { code: 0, stdout: JSON.stringify({ entries }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 0, stdout: JSON.stringify({ entries: [] }), stderr: '', exitCode: 0 };
+    }
+  }
+
+  if (fullCommand.startsWith('system:crontab:toggle ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('system:crontab:toggle ', '').trim() || '{}');
+      const raw = String(payload?.raw || '');
+      if (!raw) return { code: 1, stdout: '', stderr: 'raw is required', exitCode: 1 };
+      
+      const res = await runSilent('crontab -l');
+      const lines = res.stdout.split('\n');
+      const newLines = lines.map(l => {
+        if (l.trim() === raw.trim()) {
+          return l.trim().startsWith('# [DISABLED]') 
+            ? l.replace(/^#\s*\[DISABLED\]\s*/, '') 
+            : `# [DISABLED] ${l}`;
+        }
+        return l;
+      });
+      
+      const tmpPath = path.join(app.getPath('temp'), `crontab_${Date.now()}`);
+      await fs.writeFile(tmpPath, newLines.join('\n'), 'utf-8');
+      await runSilent(`crontab "${tmpPath}"`);
+      await fs.rm(tmpPath, { force: true }).catch(() => {});
+      
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'crontab toggle failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('system:crontab:delete ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('system:crontab:delete ', '').trim() || '{}');
+      const raw = String(payload?.raw || '');
+      if (!raw) return { code: 1, stdout: '', stderr: 'raw is required', exitCode: 1 };
+      
+      const res = await runSilent('crontab -l');
+      const lines = res.stdout.split('\n');
+      const newLines = lines.filter(l => l.trim() !== raw.trim());
+      
+      const tmpPath = path.join(app.getPath('temp'), `crontab_${Date.now()}`);
+      await fs.writeFile(tmpPath, newLines.join('\n'), 'utf-8');
+      await runSilent(`crontab "${tmpPath}"`);
+      await fs.rm(tmpPath, { force: true }).catch(() => {});
+      
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'crontab delete failed', exitCode: 1 };
     }
   }
 
@@ -3259,9 +3311,50 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         return { label: agent.label, name: agent.name, plistExists, keepAlive, comment, loaded: !!line, running, pid, exitCode };
       }));
 
-      return { code: 0, stdout: JSON.stringify({ agents }), stderr: '', exitCode: 0 };
+      return { code: 0, stdout: JSON.stringify({ agents: agents.filter(a => a.plistExists || a.loaded) }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'launchagents list failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('system:launchagents:toggle ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('system:launchagents:toggle ', '').trim() || '{}');
+      const agentLabel = String(payload?.label || '');
+      if (!agentLabel) return { code: 1, stdout: '', stderr: 'label is required', exitCode: 1 };
+      
+      const home = process.env['HOME'] || '';
+      const plist = path.join(home, `Library/LaunchAgents/${agentLabel}.plist`);
+      
+      const launchctlRes = await runSilent('launchctl list');
+      const isLoaded = launchctlRes.stdout.split('\n').some(l => l.includes(agentLabel));
+      
+      if (isLoaded) {
+        await runSilent(`launchctl unload -w "${plist}"`);
+      } else {
+        await runSilent(`launchctl load -w "${plist}"`);
+      }
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'launchagents toggle failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('system:launchagents:delete ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('system:launchagents:delete ', '').trim() || '{}');
+      const agentLabel = String(payload?.label || '');
+      if (!agentLabel) return { code: 1, stdout: '', stderr: 'label is required', exitCode: 1 };
+      
+      const home = process.env['HOME'] || '';
+      const plist = path.join(home, `Library/LaunchAgents/${agentLabel}.plist`);
+      
+      await runSilent(`launchctl unload -w "${plist}"`);
+      await fs.rm(plist, { force: true }).catch(() => {});
+      
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e: any) {
+      return { code: 1, stdout: '', stderr: e?.message || 'launchagents delete failed', exitCode: 1 };
     }
   }
 
@@ -3592,7 +3685,11 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const configStr = fullCommand.replace('config:write ', '');
       const config = JSON.parse(configStr);
-      const configFilePath = path.join(CONFIG_DIR, 'config.json');
+      
+      const dir = path.join(app.getPath('home'), '.clawlaunch');
+      await fs.mkdir(dir, { recursive: true }).catch(() => {});
+      const configFilePath = path.join(dir, 'clawlaunch.json');
+      
       await fs.writeFile(configFilePath, JSON.stringify(config, null, 2));
       if (config?.configPath) {
         activateConfigPath(String(config.configPath)).catch(() => {});
@@ -3607,8 +3704,17 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
   if (fullCommand === 'config:read') {
     try {
-      const configFilePath = path.join(CONFIG_DIR, 'config.json');
-      const content = await fs.readFile(configFilePath, 'utf-8');
+      const dir = path.join(app.getPath('home'), '.clawlaunch');
+      const configFilePath = path.join(dir, 'clawlaunch.json');
+      let content = '{}';
+      
+      try {
+        content = await fs.readFile(configFilePath, 'utf-8');
+      } catch {
+        // If file is missing, we return empty. 
+        // DO NOT attempt to migrate from old paths or auto-create.
+      }
+
       try {
         const parsed = JSON.parse(content);
         if (parsed?.configPath) {
@@ -3617,7 +3723,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       } catch {}
       return { code: 0, stdout: content, stderr: '', exitCode: 0 };
     } catch (e: any) {
-      return { code: 1, stdout: '', stderr: 'No config file found', exitCode: 1 };
+      return { code: 1, stdout: '{}', stderr: 'No config file found', exitCode: 1 };
     }
   }
 
@@ -3680,112 +3786,39 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   }
 
   if (fullCommand === 'detect:paths') {
-    const home = app.getPath('home');
-    const possibleWorkspace = path.join(home, '.openclaw');
-    const searchScopes = [home, path.join(home, 'Desktop'), path.join(home, 'Documents'), path.dirname(app.getAppPath())];
-    const launcherConfigPath = path.join(CONFIG_DIR, 'config.json');
+    const dir = path.join(app.getPath('home'), '.clawlaunch');
+    const newConfigPath = path.join(dir, 'clawlaunch.json');
 
     let corePath = '';
     let configPath = '';
     let workspacePath = '';
     let existingConfig: any = {};
 
-    // Respect user-selected paths saved by onboarding before falling back to auto-discovery.
+    // Strictly read ONLY from NEW config file. No more "guessing" or legacy fallback.
     try {
-      const launcherRaw = await fs.readFile(launcherConfigPath, 'utf-8');
-      const launcherCfg = JSON.parse(launcherRaw);
-
-      if (typeof launcherCfg.workspacePath === 'string' && launcherCfg.workspacePath.trim()) {
-        workspacePath = launcherCfg.workspacePath.trim();
-      }
-
-      if (typeof launcherCfg.configPath === 'string' && launcherCfg.configPath.trim()) {
-        const savedConfigPath = launcherCfg.configPath.trim();
-        const savedConfigFile = path.join(savedConfigPath, 'openclaw.json');
-        configPath = savedConfigPath;
+      const raw = await fs.readFile(newConfigPath, 'utf-8');
+      const cfg = JSON.parse(raw);
+      if (cfg.corePath) corePath = cfg.corePath;
+      if (cfg.configPath) configPath = cfg.configPath;
+      if (cfg.workspacePath) workspacePath = cfg.workspacePath;
+      
+      if (configPath) {
+        const openclawFile = path.join(configPath, 'openclaw.json');
         try {
-          await fs.access(savedConfigFile);
-          const content = await fs.readFile(savedConfigFile, 'utf-8');
+          const content = await fs.readFile(openclawFile, 'utf-8');
           existingConfig = parseOpenClawConfig(content);
-          if (existingConfig.workspace) {
-            workspacePath = existingConfig.workspace;
-          }
-          // Supplementary scan of agent auth-profiles to fill in meta-only cases in global profiles
-          const agentAuth = await collectAuthProfiles(savedConfigPath);
-          const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
-          if (healthyAgentProfiles.length > 0) {
-            const agentProviders = healthyAgentProfiles.map((p: any) => String(p.provider || '').toLowerCase()).filter(Boolean);
-            existingConfig.providers = Array.from(new Set([...(existingConfig.providers || []), ...agentProviders]));
-            if (!existingConfig.authChoice) {
-              existingConfig.authChoice = inferAuthChoiceFromProfile(healthyAgentProfiles[0]);
-            }
-          }
-        } catch {
-          // Keep saved config path even if openclaw.json is not ready yet.
-        }
+          if (existingConfig.workspace) workspacePath = existingConfig.workspace;
+        } catch {}
       }
-    } catch {
-      // Ignore parse/read failures and continue with discovery.
-    }
+    } catch {}
 
-    if (!workspacePath) {
-      try {
-        await fs.access(possibleWorkspace);
-        workspacePath = possibleWorkspace;
-      } catch(e) {}
-    }
-
-    const possibleConfigPath = path.join(possibleWorkspace, 'openclaw.json');
-    if (!configPath) {
-      try {
-        await fs.access(possibleConfigPath);
-        configPath = possibleWorkspace;
-        const content = await fs.readFile(possibleConfigPath, 'utf-8');
-        existingConfig = parseOpenClawConfig(content);
-        if (existingConfig.workspace) workspacePath = existingConfig.workspace;
-        // Supplementary scan of agent auth-profiles (fallback path also applies)
-        const agentAuth = await collectAuthProfiles(possibleWorkspace);
-        const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
-        if (healthyAgentProfiles.length > 0) {
-          const agentProviders = healthyAgentProfiles.map((p: any) => String(p.provider || '').toLowerCase()).filter(Boolean);
-          existingConfig.providers = Array.from(new Set([...(existingConfig.providers || []), ...agentProviders]));
-          if (!existingConfig.authChoice) {
-            existingConfig.authChoice = inferAuthChoiceFromProfile(healthyAgentProfiles[0]);
-          }
-        }
-      } catch(e) {}
-    }
-
-    if (!corePath) {
-      for (const scope of searchScopes) {
-        try {
-          const files = await fs.readdir(scope);
-          for (const file of files) {
-            if (file.toLowerCase().includes('clawdbot') || file.toLowerCase().includes('openclaw')) {
-              const fullPath = path.join(scope, file);
-              const stats = await fs.stat(fullPath);
-              if (stats.isDirectory()) {
-                try {
-                  await fs.access(path.join(fullPath, 'package.json'));
-                  corePath = fullPath;
-                  break;
-                } catch(e) {}
-              }
-            }
-          }
-          if (corePath) break;
-        } catch(e) {}
-      }
-    }
-
-    // Core skills = only scan corePath/skills/, ignore extensions/ (avoid provider adapter pollution)
+    // Still scan for skills IF paths were explicitly provided in config
     const coreSkills = corePath ? await scanSkillsInDir(path.join(corePath, 'skills')) : [];
-    // Workspace skills = only scan user-configured workspacePath, no fallback paths
     const workspaceSkills = workspacePath ? await scanInstalledSkills(workspacePath) : [];
 
     return { 
         code: 0, 
-        stdout: JSON.stringify({ corePath, configPath, workspacePath: workspacePath || possibleWorkspace, existingConfig: { ...existingConfig, workspaceSkills }, coreSkills }),
+        stdout: JSON.stringify({ corePath, configPath, workspacePath, existingConfig: { ...existingConfig, workspaceSkills }, coreSkills }),
         exitCode: 0
     };
   }
@@ -3809,7 +3842,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
 
       // Get target path
-      const configPath = path.join(CONFIG_DIR, 'config.json');
+      const configPath = getClawlaunchFile();
       let targetBaseDir = '';
       try {
         const content = await fs.readFile(configPath, 'utf-8');
@@ -3839,7 +3872,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const skillPath = fullCommand.replace('skill:delete ', '').trim();
       if (!skillPath) throw new Error(t('main.ipc.errors.missingPath'));
 
-      const launcherConfigPath = path.join(CONFIG_DIR, 'config.json');
+      const launcherConfigPath = getClawlaunchFile();
       let configuredWorkspacePath = '';
       let configuredConfigPath = '';
       try {
