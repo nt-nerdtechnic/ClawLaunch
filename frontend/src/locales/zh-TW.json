@@ -59,7 +59,11 @@
       "scheduledRuns": "近期排程執行",
       "successError": "成功 / 異常",
       "devEvents": "開發事件",
-      "activePending": "執行中 / 待處理"
+      "activePending": "執行中 / 待處理",
+      "activityTimeline": "作業時間軸",
+      "systemServices": "系統服務",
+      "crontabEntries": "系統排程",
+      "cronSchedules": "應用排程"
     },
     "actions": {
       "refresh": "重新整理",
@@ -443,7 +447,9 @@
     "watchdogDisabled": "外部 Terminal 模式 watchdog 已停用（依設定）",
     "portForceKilled": "已強制關閉 Port {{port}} 相關程序（PID: {{pids}}）{{suffix}}",
     "portKillAttempted": "已嘗試強制關閉 Port {{port}} 相關程序。",
-    "partialKillFailed": "，但仍有部分 PID 關閉失敗。"
+    "partialKillFailed": "，但仍有部分 PID 關閉失敗。",
+    "gatewayStarted": "Gateway 服務啟動完成",
+    "noConfigPathReset": "未偵測到配置路徑，已重置狀態"
   },
   "wizard": {
     "steps": {
@@ -655,7 +661,8 @@
     }
   },
   "skillManager": {
-    "title": "技能插件矩陣",
+    "title": "OpenClaw 專業技能矩陣",
+    "subtitle": "管理與導入自動化擴充功能",
     "activeCount": "已啟用 {{count}} 項",
     "rescanTooltip": "重新掃描工作區技能",
     "deepConfig": "深度配置細節",
@@ -682,13 +689,20 @@
       "electronUnavailable": "electronAPI 不可用，請確認 Electron 環境正確啟動。",
       "parseError": "技能資料解析失敗，請重試。",
       "scanFailed": "掃描失敗，請重試。",
-      "unknownScanError": "掃描時發生未知錯誤。"
+      "unknownScanError": "掃描時發生未知錯誤。",
+      "noDetails": "尚無詳細資訊",
+      "systemRequired": "系統核心功能，不可刪除"
     },
     "actions": {
       "import": "匯入手邊技能",
       "remove": "移除技能",
       "viewDetails": "檢視詳情"
     },
+    "installed": "目前已安裝",
+    "readyToInstall": "準備安裝",
+    "coreBrowserSkill": "網路導航核心 (Browser)",
+    "coreCodingSkill": "開發自動化 (Coding)",
+    "coreMonitorSkill": "系統健康監控 (Monitor)",
     "skills": {
       "browser": {
         "desc": "控制瀏覽器執行網頁操作",
@@ -709,6 +723,30 @@
       "cron": {
         "desc": "監管背景排程與心跳機制",
         "details": "管理 Moltbot 的週期性自定義任務。"
+      },
+      "telegram": {
+        "title": "Telegram 連結插件",
+        "desc": "OpenClaw 最推薦的通訊管道，支援完整的隱私對話與指令互動。"
+      },
+      "discord": {
+        "title": "Discord 連結插件",
+        "desc": "入駐 Discord 伺服器，支援多頻道協作與複雜權限管理。"
+      },
+      "whatsapp": {
+        "title": "WhatsApp 連結插件",
+        "desc": "整合 WhatsApp 商業帳號，讓 AI 直接在您的通訊軟體回覆。"
+      },
+      "obsidian": {
+        "title": "Obsidian 知識庫",
+        "desc": "同步您的 Obsidian 筆記，讓 AI 具備持久的第二大腦記憶。"
+      },
+      "notion": {
+        "title": "Notion 協同官",
+        "desc": "自動整理任務並更新頁面，與 Notion 專案深度整合。"
+      },
+      "maps": {
+        "title": "Google Maps 探路者",
+        "desc": "搜尋地點、查詢營業時間與路況，生活機能一把罩。"
       }
     }
   },
@@ -1029,6 +1067,7 @@
     }
   },
   "auth": {
+    "onboardLaunched": "已啟動配置導引程序，完成後可回設定頁刷新授權清單。",
     "errors": {
       "loadProfilesFailed": "讀取授權清單失敗",
       "missingCorePath": "缺少 Core Path，無法啟動完整導引",
@@ -1343,7 +1382,10 @@
       "executing": "執行中",
       "execute": "執行",
       "static": "靜態",
-      "dynamic": "動態"
+      "dynamic": "動態",
+      "cancel": "取消",
+      "collapse": "摺疊",
+      "expandAll": "全部展開"
     },
     "punctuation": {
       "comma": "、"

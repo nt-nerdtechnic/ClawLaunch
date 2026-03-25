@@ -234,12 +234,12 @@
       },
       "queue": "排队 {{count}}",
       "roles": {
-        "main": "主控中樞 / Lead Supervisor",
-        "panda": "策略規劃 / Strategy",
-        "monkey": "工程實作 / Builder",
-        "owl": "數據審計 / Auditor",
-        "fox": "快速響應 / Ops",
-        "fallback": "執行單元 / Operator"
+        "main": "主控中枢 / Lead Supervisor",
+        "panda": "策略规划 / Strategy",
+        "monkey": "工程实作 / Builder",
+        "owl": "数据审计 / Auditor",
+        "fox": "快速响应 / Ops",
+        "fallback": "执行单元 / Operator"
       }
     },
     "taskSection": {
@@ -278,42 +278,42 @@
     },
     "liveStream": "Live Stream",
     "decision": {
-      "healthSummary": "健康總覽",
-      "alertsQueue": "告警佇列",
+      "healthSummary": "健康总览",
+      "alertsQueue": "告警队列",
       "taskHeartbeat": "配置审计日志",
-      "connectionHealth": "連線健康度",
+      "connectionHealth": "连接健康度",
       "checkedToday": "今日写入数",
       "eligibleToday": "今日异动路径",
       "startedToday": "今日可疑变更",
       "heartbeatConnected": "已接入配置审计日志",
       "heartbeatLoading": "正在读取配置审计日志",
       "heartbeatDegraded": "找不到配置审计日志",
-      "connectedRatio": "{{connected}}/{{total}} 已連線",
-      "jumpTo": "跳轉至 {{target}}",
+      "connectedRatio": "{{connected}}/{{total}} 已连接",
+      "jumpTo": "跳转至 {{target}}",
       "status": {
-        "connected": "已連線",
-        "degraded": "降級"
+        "connected": "已连接",
+        "degraded": "降级"
       },
       "health": {
-        "gatewayRunning": "Gateway 已连线且运行中。",
-        "gatewayStopped": "Gateway 未连线或尚未启动。",
+        "gatewayRunning": "Gateway 已连接且运行中。",
+        "gatewayStopped": "Gateway 未连接或尚未启动。",
         "configState": "已对位 {{count}} / 3 个核心路径。",
         "runtimeFreshness": "快照更新于 {{sec}} 秒前。",
         "runtimeMissing": "尚未取得 runtime 快照。"
       },
       "filters": {
         "all": "全部",
-        "info": "資訊",
+        "info": "信息",
         "warn": "警告",
-        "actionRequired": "需處理",
-        "empty": "目前此級別沒有告警。"
+        "actionRequired": "需处理",
+        "empty": "目前此级别没有告警。"
       },
       "targets": {
-        "healthSummary": "健康總覽",
-        "actionCenter": "待審批中心",
-        "staffGrid": "活躍團隊",
-        "liveStream": "即時日誌",
-        "connectionHealth": "連線健康度"
+        "healthSummary": "健康总览",
+        "actionCenter": "待审批中心",
+        "staffGrid": "活跃团队",
+        "liveStream": "实时日志",
+        "connectionHealth": "连接健康度"
       },
       "connection": {
         "node": "Node.js Runtime",
@@ -329,18 +329,18 @@
         "heartbeat": "配置审计日志"
       },
       "alerts": {
-        "snapshotWaiting": "等待快照資料",
-        "snapshotWaitingDesc": "尚未取得 runtime 快照，顯示為初始狀態。",
-        "noActiveSessions": "沒有活躍 Session",
-        "noActiveSessionsDesc": "目前沒有可觀測的執行會話，可能尚未啟動或資料源降級。",
-        "pendingApprovals": "有待審批動作",
-        "pendingApprovalsDesc": "待處理審批 {{count}} 筆。",
-        "runtimeIssues": "Runtime 異常",
+        "snapshotWaiting": "等待快照数据",
+        "snapshotWaitingDesc": "尚未取得 runtime 快照，显示为初始状态。",
+        "noActiveSessions": "没有活跃 Session",
+        "noActiveSessionsDesc": "目前没有可观测的执行会话，可能尚未启动或数据源降级。",
+        "pendingApprovals": "有待审批动作",
+        "pendingApprovalsDesc": "待处理审批 {{count}} 笔。",
+        "runtimeIssues": "Runtime 异常",
         "runtimeIssuesDesc": "Blocked {{blocked}} / Error {{error}}。",
-        "budgetRisk": "Budget 風險",
+        "budgetRisk": "Budget 风险",
         "budgetRiskDesc": "Over {{over}} / Warn {{warn}}。",
-        "allClear": "目前無高優先告警",
-        "allClearDesc": "系統指標平穩，可持續觀察。",
+        "allClear": "目前无高优先告警",
+        "allClearDesc": "系统指标平稳，可持续观察。",
         "taskBlockedByHeartbeat": "任务心跳超时",
         "taskBlockedByHeartbeatDesc": "有 {{count}} 笔任务因长时间未更新被标记为 blocked。"
       }
@@ -436,8 +436,10 @@
       "portKillError": "关闭 Port {{port}} 相关程序时发生错误"
     },
     "warnings": {
-      "missingConfigPath": "警告: 未设置 Config Path，Gateway 将使用預设 ~/.openclaw 设置。若同时执行多个 OpenClaw 实例，可能导致设置冲突。建议在“Launcher 设置”中明确指定 Config Path。"
+      "missingConfigPath": "警告: 未设置 Config Path，Gateway 将使用默认 ~/.openclaw 设置。若同时执行多个 OpenClaw 实例，可能导致设置冲突。建议在“Launcher 设置”中明确指定 Config Path。"
     },
+    "gatewayStarted": ">>> Gateway 服务已启动（PID: {{pid}}）",
+    "noConfigPathReset": ">>> 未检测到 Config Path，系统将不强制重置 gateway 端口，继续使用当前配置。",
     "portKilled": "已先行关闭 Port {{port}} 相关程序（PID: {{pids}}）",
     "watchdogEnabled": "已启用外部 Terminal 模式 Gateway watchdog（HTTP 健康检查 + 自动重启）",
     "watchdogDisabled": "外部 Terminal 模式 watchdog 已停用（依设置）",
@@ -508,26 +510,26 @@
       "enterBtn": "进入主仪表板"
     },
     "ui": {
-      "finalLaunchTitle": "最終啟動設定 (Final Launch)",
-      "finalLaunchDesc": "這是最後一步。背景服務安裝選項只會在這裡出現並生效。",
-      "startFinalCheck": "開始最終啟動檢查",
+      "finalLaunchTitle": "最终启动设定 (Final Launch)",
+      "finalLaunchDesc": "这是最后一步。背景服务安装选项只在这里出现并生效。",
+      "startFinalCheck": "开始最终启动检查",
       "errorDebugLog": "Error Debug Log",
-      "partialFailureTitle": "部分服務未就緒 (Partial Services Down)",
-      "partialFailureDesc": "檢查發現部分服務探測異常，您可以在 Dashboard 中手動啟動。",
+      "partialFailureTitle": "部分服务未就绪 (Partial Services Down)",
+      "partialFailureDesc": "检查发现部分服务探测异常，您可以在 Dashboard 中手动启动。",
       "launchCheckLogs": "Launch Check Logs",
-      "partialFailureHint": "提示：您可以重試檢查，或直接進入 Dashboard。",
-      "retryCheck": "重試檢查 (Retry)",
-      "enterDashboard": "進入 Dashboard",
-      "verificationPulse": "驗證進度 (Verification Pulse)",
+      "partialFailureHint": "提示：您可以重试检查，或直接进入 Dashboard。",
+      "retryCheck": "重试检查 (Retry)",
+      "enterDashboard": "进入 Dashboard",
+      "verificationPulse": "验证进度 (Verification Pulse)",
       "openclawLaunchLogs": "OpenClaw Launch Logs",
-      "configSummary": "系統配置摘要 (Config Summary)",
-      "userProfile": "用戶定位",
-      "existingInstall": "已有安裝 (Existing)",
-      "newProject": "新建專案 (New)",
-      "soulCore": "靈魂核心",
-      "communicationTerminal": "通訊終端",
-      "installedSkills": "已安裝技能",
-      "skillModules": "{{count}} 項模組",
+      "configSummary": "系统配置摘要 (Config Summary)",
+      "userProfile": "用户定位",
+      "existingInstall": "已有安装 (Existing)",
+      "newProject": "新建专案 (New)",
+      "soulCore": "灵魂核心",
+      "communicationTerminal": "通讯终端",
+      "installedSkills": "已安装技能",
+      "skillModules": "{{count}} 项模块",
       "unknown": "Unknown"
     }
   },
@@ -611,8 +613,8 @@
       "tokenCommandHint": "步骤：① 点击「执行指令」打开终端 → ② 在终端按指示完成授权 → ③ 复制输出的 Token → ④ 粘贴到上方「API 密钥」栏位后按授权。",
       "noApiKeyNeeded": "✓ 此授权模式无需输入 API 密钥。按下授权后将进行对应的验证流程（如自动打开浏览器或本地服务）。",
       "vllmModelHint": "⚠️ 默认模型名称仅为示例（vllm/mistral-7b），请至「设置 → 模型」页面修改为实际部署的模型名称。",
-      "oauthRetryHint": "OAuth 流程若中途取消或失敗，可點擊下方按鈕重新開啟授權流程。",
-      "retryOAuthBtn": "重新授權",
+      "oauthRetryHint": "OAuth 流程若中途取消或失败，可点击下方按钮重新开启授权流程。",
+      "retryOAuthBtn": "重新授权",
       "confirmAuthContinue": "確認核心授權並繼續",
       "aligningSoulFrequency": "對齊靈魂頻率中...",
       "choiceDesc": {
@@ -629,9 +631,9 @@
         "ollamaLocal": "本地運行開源模型 (11434 端口)，隱私至上",
         "vllmLocal": "自定義本地伺服器 / OpenAI 相容介面",
         "chutesOauth": "透過 Chutes OAuth 登入",
-        "moonshotApiKey": "輸入 Kimi API Key",
-        "openrouterApiKey": "支援多種模型，包含 Llama 3",
-        "xaiApiKey": "輸入 Grok API Key",
+        "moonshotApiKey": "输入 Kimi API Key",
+        "openrouterApiKey": "支持多种模型，包含 Llama 3",
+        "xaiApiKey": "输入 Grok API Key",
         "qwenPortalDevice": "通过 Qwen Portal Device Code 授权登录"
       },
       "choiceHelp": {
@@ -642,9 +644,9 @@
         "openrouter": "統一 API 閘道",
         "qwen": "Qwen / 阿里云通义系列"
       },
-      "tokenFlowTitle": "Claude Token 授權流程",
-      "neuralLinking": "「神經連結建立中，請保持頻率一致...」",
-      "injectingSoul": "「正在將靈魂注入機甲核心...」"
+      "tokenFlowTitle": "Claude Token 授权流程",
+      "neuralLinking": "「神经连接建立中，请保持频率一致...」",
+      "injectingSoul": "「正在将灵魂注入机甲核心...」"
     },
     "daemon": {
       "title": "后台 Gateway 服务",
@@ -674,15 +676,15 @@
       "loadCoreError": "无法取得核心技能清单，请尝试重新扫描。",
       "scanningWorkspace": "正在扫描工作区技能…",
       "emptyWorkspace": "目前工作区尚未安装任何扩充技能。将 skill 文件夹放入工作区的 <0>skills/</0> 目录后，按右上角重新整理即可挂载。",
-      "importing": "正在匯入技能...",
+      "importing": "正在导入技能...",
       "deleting": "正在移除技能...",
-      "importSuccess": "技能匯入成功！",
-      "importError": "匯入失敗：{{msg}}",
-      "deleteConfirm": "確定要移除技能「{{name}}」嗎？這將會刪除工作區內的資料夾且無法還原。",
-      "electronUnavailable": "electronAPI 不可用，請確認 Electron 環境正確啟動。",
-      "parseError": "技能資料解析失敗，請重試。",
-      "scanFailed": "掃描失敗，請重試。",
-      "unknownScanError": "掃描時發生未知錯誤。"
+      "importSuccess": "技能导入成功！",
+      "importError": "导入失败：{{msg}}",
+      "deleteConfirm": "确定要移除技能「{{name}}」吗？这将会删除工作区内的文件夹且无法还原。",
+      "electronUnavailable": "electronAPI 不可用，请确认 Electron 环境正确启动。",
+      "parseError": "技能资料解析失败，请重试。",
+      "scanFailed": "扫描失败，请重试。",
+      "unknownScanError": "扫描时发生未知错误。"
     },
     "skills": {
       "browser": {
@@ -707,9 +709,9 @@
       }
     },
     "actions": {
-      "import": "匯入手邊技能",
+      "import": "导入手边技能",
       "remove": "移除技能",
-      "viewDetails": "檢視詳情"
+      "viewDetails": "查看详情"
     }
   },
   "analytics": {
@@ -800,264 +802,31 @@
       "riskOwnership": "风险归属"
     }
   },
-  "setupMessaging": {
-    "title": "繫結您的通訊頻道 (Bonding Channel)",
-    "titleLocked": "通訊頻率已鎖定",
-    "subtitle": "OpenClaw 需要一個加密頻道與您建立心靈感應",
-    "subtitleLocked": "「機甲通訊模組已就緒，等待最後指令...」",
-    "detectedConfig": "偵測到的通訊配置",
-    "readyChannel": "準備繫結的頻道",
-    "reselectChannel": "重新選擇頻道",
-    "tokenLabelSuffix": "Token",
-    "synced": "已同步",
-    "bindingLogs": "頻道繫結中 (Real-time Logs)",
-    "bindingSyncLogs": "頻道繫結同步中 (Real-time Logs)",
-    "step1": "選擇對接頻道 (Channel)",
-    "guideTitle": "教學攻略",
-    "noTokenNeeded": "✓ 此频道无须在此输入 Token。稍后扫描 QR Code 即可完成连线。",
-    "postSetupHint": {
-      "irc": "⚠️ IRC 需在 openclaw.json 中额外设置 server / port / nick / channel 等字段，Token 字段可留空，继续后请至「Runtime Config」页面完成设置。",
-      "signal": "⚠️ Signal 需通过 signal-cli 先完成手机号注册（signal-cli register / verify），完成后 OpenClaw 才能连线。Token 字段可留空，稍后依 signal-cli 引导操作。",
-      "imessage": "⚠️ iMessage 支持为实验性功能，仅适用于 macOS，且需在系统偏好设置中允许访问「信息」App。Token 字段可留空，稍后依 CLI 引导完成设置。"
-    },
-    "pathNames": {
-      "core": "Core Path",
-      "config": "Config Path",
-      "workspace": "Workspace Path"
-    },
-    "errors": {
-      "pathRequired": "請先完成路徑設定：{{paths}}"
-    },
-    "platformFallback": "telegram",
-    "actions": {
-      "confirmContinue": "確認通訊設定並繼續",
-      "syncing": "正在同步頻道頻率...",
-      "binding": "正在繫結通訊頻率...",
-      "authorizeBond": "授權並繫結頻道 (Authorize & Bond)"
-    },
-    "channels": {
-      "telegram": {
-        "desc": "Bot API， 最推薦的加密頻道",
-        "placeholder": "12345678:ABCDefgh...",
-        "keyLabel": "Bot API Token"
-      },
-      "whatsapp": {
-        "desc": "WhatsApp Web QR 連結模式",
-        "placeholder": "無須輸入，稍後掃描 QR Code",
-        "keyLabel": "WhatsApp Account ID (可選留空)"
-      },
-      "discord": {
-        "desc": "穩定支援的 Bot API",
-        "placeholder": "Discord Bot Token...",
-        "keyLabel": "Bot Token"
-      },
-      "irc": {
-        "desc": "連線至傳統 IRC 伺服器網域",
-        "placeholder": "irc.libera.chat:6697...",
-        "keyLabel": "IRC Server / Nick (稍後詳細設定)"
-      },
-      "googlechat": {
-        "desc": "Google Workspace Webhook",
-        "placeholder": "Google Chat Webhook URL...",
-        "keyLabel": "Webhook URL"
-      },
-      "slack": {
-        "desc": "原生 Socket Mode 支援",
-        "placeholder": "xoxb-xxxx-xxxx...",
-        "keyLabel": "Bot Token (xoxb-...)",
-        "appTokenLabel": "App-Level Token（Socket Mode）",
-        "appTokenPlaceholder": "xapp-1-xxxx-xxxx...",
-        "appTokenHint": "Socket Mode 需要同时提供 Bot Token 和 App-Level Token（xapp-）。请至 Slack App 设置 → Socket Mode 生成。"
-      },
-      "signal": {
-        "desc": "透過 signal-cli 連接，高隱私",
-        "placeholder": "Signal REST API URL 或留空",
-        "keyLabel": "Signal Config (稍後詳細設定)"
-      },
-      "imessage": {
-        "desc": "實驗性支援 (imsg)",
-        "placeholder": "稍後設定",
-        "keyLabel": "iMessage ID (稍後詳細設定)"
-      },
-      "line": {
-        "desc": "LINE Messaging API Webhook",
-        "placeholder": "LINE Channel Access Token...",
-        "keyLabel": "Channel Access Token"
-      }
-    },
-    "guide": {
-      "howToGetTelegram": "如何獲取 Telegram Token?",
-      "step1Prefix": "在 Telegram 搜尋 ",
-      "step1Suffix": " 並點擊 Start。",
-      "step2Prefix": "發送指令 ",
-      "step2Suffix": " 並依照指示為您的龍蝦命名（需以 _bot 結尾）。",
-      "step3": "完成後，BotFather 會給您一串 API Token。請務必妥善保管，切勿外流。",
-      "tip": "小秘訣：這隻 Bot 將成為您與 OpenClaw 的專屬加密頻道，所有的分析回報都將在此進行。",
-      "confirm": "我了解了，去填寫"
-    }
-  },
-  "setupSkills": {
-    "title": "扩展您的龙虾超能力",
-    "subtitle": "从 ClawHub 勾选您想安装的额外技能{{detected}}。",
-    "detectedSuffix": "（已为您侦测到 {{count}} 个已安装技能）",
-    "manager": {
-      "title": "赋予您的龙虾超级能力",
-      "subtitle": "这里管理已安装技能：可扫描、导入、删除；能力开关请在仪表板技能管理中调整。",
-      "import": "导入技能",
-      "rescanTitle": "重新扫描技能",
-      "corePanelTitle": "核心技能 (Core Skills)",
-      "coreSoul": "灵魂核心 (Soul Core)",
-      "coreCli": "终端电桥 (CLI Bridge)",
-      "coreEmpty": "尚未检测到核心技能，请点击重新扫描。",
-      "workspaceSectionTitle": "工作区技能 (Workspace Skills)",
-      "removeTitle": "移除技能",
-      "removeConfirm": "确定要移除技能 {{name}} 吗？",
-      "fallbackDesc": "工作区技能。",
-      "defaultCategory": "PLUGIN",
-      "installed": "已安装",
-      "emptyTitle": "尚未检测到工作区技能",
-      "emptyDesc": "请先导入技能，或确认 skills 目录已存在于 Workspace 或 Config 路径后重新扫描。",
-      "next": "确认已安装技能并继续",
-      "syncing": "正在同步技能状态...",
-      "errorParse": "技能资料解析失败，请稍后再试。",
-      "errorScan": "扫描技能失败。",
-      "errorImport": "导入技能失败。",
-      "errorRemove": "移除技能失败。",
-      "errorMissingBaseDir": "尚未设置工作区或配置区路径，请先完成初始化。"
-    },
-    "coreLabel": "机甲核心 (已预设启动)",
-    "recommended": "推荐",
-    "installed": "目前已安装",
-    "readyToInstall": "准备安装",
-    "coreBrowserSkill": "网路导航核心 (Browser)",
-    "coreCodingSkill": "开发自动化 (Coding)",
-    "coreMonitorSkill": "系统健康监控 (Monitor)",
-    "skills": {
-      "telegram": {
-        "title": "Telegram 连结插件",
-        "desc": "OpenClaw 最推荐的通讯管道，支援完整的隐私对话与指令互动。"
-      },
-      "discord": {
-        "title": "Discord 连结插件",
-        "desc": "入驻 Discord 服务器，支援多频道协作与复杂权限管理。"
-      },
-      "whatsapp": {
-        "title": "WhatsApp 连结插件",
-        "desc": "整合 WhatsApp 商业帐号，让 AI 直接在您的通讯软体回覆。"
-      },
-      "obsidian": {
-        "title": "Obsidian 知识库",
-        "desc": "同步您的 Obsidian 笔记，让 AI 具备持久的第二大脑记忆。"
-      },
-      "notion": {
-        "title": "Notion 协同官",
-        "desc": "自动整理任务并更新页面，与 Notion 专案深度整合。"
-      },
-      "maps": {
-        "title": "Google Maps 探路者",
-        "desc": "搜寻地点、查询营业时间与路况，生活机能一把罩。"
-      }
-    }
-  },
-  "setupInitialize": {
-    "title": "建立您的專案基地",
-    "subtitle": "請指定三個關鍵目錄來存放您的核心、配置與工作空間。",
-    "selectVersion": "核心版本 (OpenClaw Branch / Tag)",
-    "versionSource": "GITHUB CLAW",
-    "latestSuffix": "(Latest)",
-    "downloadMethod": "下載與部署方式 (推薦網路環境較弱時使用 ZIP)",
-    "corePath": "主核心資料夾 (Core)",
-    "configPath": "設定資料夾 (Config)",
-    "workspacePath": "工作空間 (Workspace)",
-    "coreDesc": "OpenClaw 原始碼存放處",
-    "configDesc": "存放 openclaw.json 等設定檔",
-    "workspaceDesc": "存放技能(Skills)與暫存數據",
-    "selectBtn": "選擇目錄...",
-    "startBtn": "開始初始化並下載核心原始碼",
-    "startBtnDownload": "開始初始化並下載核心原始碼",
-    "initializing": "正在下載與初始化...",
-    "checkPaths": "正在校驗路徑...",
-    "pathNotEmpty": "此目錄非空，請選擇一個空的資料夾以避免檔案衝突。",
-    "pathWarning": "此目錄非空，將自動建立名為 '{{name}}' 的子資料夾進行初始化。",
-    "pathNotExist": "此目錄尚不存在，初始化時將自動建立。",
-    "success": "初始化完成！正在進入下一步...",
-    "error": "初始化失敗：{{msg}}",
-    "cancelBtn": "取消下載與初始化",
-    "cancelSuccess": ">>> 已取消下載進程並清理環境。",
-    "configPathWarning": "⚠️ 此目錄已有 OpenClaw 設定（含授權資料）。新建專案建議改用全新目錄，避免繼承舊授權。",
-    "zipModeTitle": "ZIP 極速下載模式",
-    "zipModeDesc": "💡 已為您選擇最穩定的傳輸方案，避開 Git 卡頓，確保部署成功。",
-    "summaryTitle": "Initialization Summary",
-    "summaryNoNewFiles": "Success. No new files were created in this run; existing paths were reused.",
-    "resolvedPaths": "Resolved Paths",
-    "pathCoreLabel": "core",
-    "pathConfigLabel": "config",
-    "pathWorkspaceLabel": "workspace",
-    "alreadyExisted": "Already Existed",
-    "nextStepBtn": "點擊此處繼續下一步 (Next Step)",
-    "logTitle": "OpenClaw Initialization",
-    "footerLabel": "OpenClaw Infrastructure Provisioning System"
-  },
-  "language": {
-    "toggleTitle": "切換語言 / Switch Language",
-    "labels": {
-      "zhTW": "繁體中文",
-      "zhCN": "简体中文",
-      "en": "English"
-    }
-  },
-  "updateBanner": {
-    "title": "發現龍蝦新演化 {{version}}",
-    "subtitle": "目前版本: {{version}} • 建議立即升級以同步最新底層協定",
-    "actions": {
-      "later": "先不要",
-      "updating": "正在升級核心...",
-      "updateNow": "立即升級"
-    },
-    "success": {
-      "title": "系統更新成功！",
-      "desc": "版本已升級至 {{version}}。請立即重啟以啟動新核心。",
-      "restartNow": "立即重啟"
-    },
-    "alerts": {
-      "updateFailed": "更新失敗，請檢查日誌輸出。",
-      "systemError": "更新系統異常。"
-    },
-    "logs": {
-      "title": "System Update Core Logs",
-      "start": "🚀 啟動系統更新程序..."
-    }
-  },
-  "auth": {
+  "runtime": {
     "errors": {
       "loadProfilesFailed": "读取授权列表失败",
       "missingCorePath": "缺少 Core Path，无法启动完整引导",
       "missingConfigPath": "缺少 Config Path，无法启动完整引导",
       "addAuthMissingConfig": "缺少 Config Path，无法新增授权",
       "addAuthMissingCore": "缺少 Core Path，无法新增授权",
-      "credentialRequired": "此授权方式需要输入凭证",
+      "credentialRequired": "此授权方式需要输入凭据",
       "emptyCommand": "请先输入要执行的指令",
       "commandExecError": "执行指令时发生错误",
+      "aligningChannels": "📡 正在封装通讯波段 ({{platform}})...",
+      "channelNormalized": "ℹ️ Channel ID {{raw}} 已规范化为 {{canonical}}。",
+      "enableChannelFailed": "⚠️ 无法预先启用 channels.{{platform}}.enabled=true，将直接尝试绑定频道。",
+      "channelEnabled": "✅ 已启用 channels.{{platform}}.enabled=true",
+      "legacyChannelFallback": "ℹ️ 侦测到旧版 Channel ID，兼容回退为 {{id}}。",
+      "channelAddFailed": "⚠️ channels add 失败 ({{summary}})",
+      "unsupportedChannelRetry": "↻ Channel ID {{id}} 不被支持，尝试兼容别名...",
+      "pluginRegistryFallback": "⚠️ channels add 遭遇 plugin registry 问题（Unknown channel），改以 config set 直接写入...",
+      "configSetDirectSuccess": "✅ 已透过 config set 直接写入 channels.{{platform}}.{{key}}（绕过 plugin registry 问题）",
+      "configSetFallbackFailed": "config-set fallback 失败 stderr: {{err}}",
+      "applyingGroupPolicy": "🛡️ 套用 {{platform}} 群组授权默认策略 (groupPolicy=open)...",
       "removeFailed": "移除授权失败",
       "addFailed": "新增授权失败",
       "onboardFailed": "启动完整引导失败",
-      "onboardLaunched": "已启动完整引导，完成后可回设置页刷新授权列表。"
-    }
-  },
-  "runtime": {
-    "errors": {
-      "missingConfigPath": "尚未设置 Config Path，无法读取 openclaw.json。",
-      "configNotFound": "找不到 openclaw.json：已搜索 {{path}}，均不存在或无法读取。",
-      "loadDynamicModelsFailed": "读取动态模型列表失败",
-      "missingCorePathAction": "缺少 Core Path，无法更新 OpenClaw 动态设置",
-      "missingConfigPathAction": "缺少 Config Path，无法更新 OpenClaw 动态设置",
-      "invalidPort": "Gateway Port 格式不正确，请填入正整数或留空（移除设置）。",
-      "emptyModel": "Model 不能为空值",
-      "unauthorizedModel": "所选模型与目前授权 provider 不相符，请改用授权列表中的模型。",
-      "updateModelFailed": "更新模型设置失败",
-      "updateTokenFailed": "更新 Telegram Bot Token 失败",
-      "updatePortFailed": "更新 Gateway Port 失败",
-      "saveLauncherFailed": "保存 Launcher 设置失败",
+      "onboardLaunched": "已启动完整引导，完成后可回设置页刷新授权列表。",
       "workspaceNotFound": "警告: Workspace Path 目录不存在：{{path}}。保存将继续，但请确认路径正确。",
       "configApplied": ">>> Runtime 设置已写入 openclaw.json。",
       "doctorFailed": "启动 doctor 诊断失败：{{msg}}",
@@ -1080,13 +849,13 @@
       "inputKey": "输入密钥",
       "tokenCmdLabel": "Token 生成指令",
       "tokenCmdHelp": "在新终端窗口中执行上述指令，取得 Token 后贴入上方栏位。",
-      "oauthDesc": "无需输入密钥。点击“新增授权”后将自动启动浏览器 OAuth 授权流程。",
-      "localSvcDesc": "此本地服务直接新增即可，无需 API 密钥。"
+      "oauthDesc": "无需输入密钥. 点击“新增授权”后将自动启动浏览器 OAuth 授权流程。",
+      "localSvcDesc": "此本地服务直接新增即可, 无需 API 密钥。"
     },
     "diag": {
       "title": "快捷诊断工具",
-      "desc": "以下指令将在独立 Terminal 窗口中执行，完成后按 Enter 关闭。",
-      "securityAudit": "资案稽核（自动修复）"
+      "desc": "以下指令将在独立 Terminal 窗口中执行, 完成后按 Enter 关闭。",
+      "securityAudit": "资安稽核（自动修复）"
     },
     "providers": {
       "telegram": {
@@ -1126,14 +895,14 @@
       },
       "anthropicCli": {
         "desc": "CLI 指令产生的验证 Token",
-        "help": "执行下方指令后，将产生的 Token 贴入栏位中。",
+        "help": "执行下方指令后, 将产生的 Token 贴入栏位中。",
         "placeholder": "claude setup-token 后取得的 Token"
       },
       "openai": {
         "desc": "OpenAI sk-... 密钥"
       },
       "openaiCodex": {
-        "desc": "浏览器 OAuth 授权，无须 Key"
+        "desc": "浏览器 OAuth 授权, 无须 Key"
       },
       "gemini": {
         "desc": "Gemini 官方密钥"
@@ -1160,10 +929,10 @@
         "desc": "xAI 平台密钥"
       },
       "chutes": {
-        "desc": "去中心化平台授权，无需 Key"
+        "desc": "去中心化平台授权, 无需 Key"
       },
       "ollama": {
-        "desc": "本地 Ollama 服务，无需密钥"
+        "desc": "本地 Ollama 服务, 无需密钥"
       },
       "vllm": {
         "desc": "自定义本地服务器"
@@ -1209,6 +978,25 @@
       "tokenAuthTitle": "Claude Token 授权流程",
       "channelTokenUpdated": ">>> {{id}} Bot Token 已更新。",
       "terminalWaitMsg": "程序结束。按 Enter 键关闭视窗..."
+    },
+    "channel": {
+      "title": "通讯频道配置 (Communication Channel)",
+      "platform": "频道类型 (Platform)",
+      "token": "访问凭证 (Token / Key)",
+      "groupPolicy": "群组权限策略 (Group Policy)",
+      "groupAllowFrom": "允许的群组 ID (Allow From)",
+      "groupPolicyOpen": "开放 (Open) - 允许所有私聊与群聊",
+      "groupPolicyAllowlist": "白名单 (Allowlist) - 仅限指定群组",
+      "groupPolicyNone": "关闭 (None) - 仅限私聊",
+      "help": "这些设置直接影响 OpenClaw 如何与 Telegram/Discord 等平台交互。"
+    },
+    "telegram": {
+      "management": "Telegram 账号管理",
+      "pairingMode": "配对模式 (Pairing Mode)",
+      "pairingModeDesc": "开启后，新用户需在 Dashboard 核准后才能使用 Bot。",
+      "status": "连接状态",
+      "connected": "已连接",
+      "disconnected": "未连接"
     }
   },
   "main": {
@@ -1307,6 +1095,26 @@
     }
   },
   "common": {
+    "labels": {
+      "confirm": "确认",
+      "cancel": "取消",
+      "success": "成功",
+      "error": "错误",
+      "warning": "警告",
+      "info": "信息",
+      "loading": "加载中...",
+      "saving": "保存中...",
+      "saved": "已保存",
+      "notParsed": "未解析到",
+      "oauthFlow": "OAuth 流程",
+      "noKeyRequired": "无须密钥",
+      "executing": "执行中",
+      "execute": "执行",
+      "static": "静态",
+      "dynamic": "动态",
+      "collapse": "折叠",
+      "expandAll": "全部展开"
+    },
     "time": {
       "every": "每 {{val}}",
       "soon": "即将",
@@ -1335,15 +1143,6 @@
       "loaded": "已载入",
       "unloaded": "未载入",
       "notInstalled": "未安装"
-    },
-    "labels": {
-      "notParsed": "未解析到",
-      "oauthFlow": "OAuth 流程",
-      "noKeyRequired": "无须密钥",
-      "executing": "执行中",
-      "execute": "执行",
-      "static": "静态",
-      "dynamic": "动态"
     },
     "punctuation": {
       "comma": "、"
