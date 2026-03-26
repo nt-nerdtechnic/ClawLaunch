@@ -14,7 +14,8 @@
       "skills": "Skill Manager",
       "settings": "Configuration",
       "launcherSettings": "Launcher Config",
-      "runtimeSettings": "Runtime Config"
+      "runtimeSettings": "Runtime Config",
+      "memory": "Memory & Data"
     },
     "headers": {
       "monitor": "Core Process Sentinel",
@@ -23,7 +24,8 @@
       "skills": "Skill Plugin Matrix",
       "settings": "Global Config Matrix",
       "launcherSettings": "Launcher Configuration",
-      "runtimeSettings": "openclaw.json Configuration"
+      "runtimeSettings": "openclaw.json Configuration",
+      "memory": "Memory & Data Browser"
     },
     "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
     "logoutTooltip": "Logout & Reconfigure",
@@ -181,7 +183,16 @@
     "errorGeneric": "Chat request failed, please retry",
     "unavailable": "Chat IPC is unavailable in this environment",
     "coreRequired": "Core is not running. Start Gateway (Core) before sending a chat message",
-    "inputHint": "Enter to send, Shift+Enter for newline"
+    "inputHint": "Enter to send, Shift+Enter for newline",
+    "sessions": {
+      "title": "Chat History",
+      "openPanel": "Switch Session",
+      "refresh": "Refresh",
+      "loading": "Loading...",
+      "empty": "No sessions found",
+      "manual": "Manual Input",
+      "useManual": "Use This Session"
+    }
   },
   "monitor": {
     "gatewayTitle": "Gateway Hub",
@@ -1459,5 +1470,33 @@
     "trend7d": "Trend (7d)",
     "security": "Security",
     "logs": "Logs"
+  },
+  "memory": {
+    "browser": "Memory Browser",
+    "refresh": "Re-scan",
+    "files": "files",
+    "searchPlaceholder": "Search files...",
+    "selectFile": "Select a file to view its content",
+    "selectFileHint": "Click on a memory or data file in the left panel",
+    "emptyFile": "(File is empty)",
+    "noWorkspace": "Workspace path not configured",
+    "noWorkspaceHint": "Please complete path setup in Launcher Config or onboarding",
+    "noGroups": "No memory directories found",
+    "dirNotFound": "Directory not found",
+    "empty": "Directory is empty",
+    "noMatch": "No matching files",
+    "revealInFinder": "Reveal in Finder",
+    "groups": {
+      "memory": "MEMORY (Long-term)",
+      "bootstrap": "BOOTSTRAP (Init Data)",
+      "identity": "IDENTITY (Agent Identity)",
+      "soul": "SOUL (Core Instructions)",
+      "user": "USER (User Data)",
+      "heartbeat": "HEARTBEAT (Heartbeat)",
+      "agentSessions": "Agent Sessions"
+    },
+    "errors": {
+      "readFailed": "Failed to read file"
+    }
   }
 }

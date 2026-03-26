@@ -1,6 +1,16 @@
 export {};
 
 declare global {
+  interface OpenClawSessionEntry {
+    sessionKey: string;
+    agentId: string;
+    sessionId: string;
+    displayName: string;
+    lastMessage: string;
+    lastTimestamp: string;
+    messageCount: number;
+  }
+
   interface OpenClawChatRequest {
     requestId: string;
     sessionKey: string;
@@ -66,6 +76,8 @@ declare global {
       }) => Promise<{ success: boolean; runtimeDir?: string; acks?: Record<string, { ackedAt: string; expiresAt: string }>; error?: string }>;
       invokeChat: (request: OpenClawChatRequest) => Promise<OpenClawChatResult>;
       abortChat: (requestId: string) => Promise<{ success: boolean; error?: string }>;
+      listChatSessions: () => Promise<{ code: number; stdout: string; stderr: string }>;
+      loadChatSession: (payload: { sessionKey: string; agentId: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
       onChatChunk: (callback: (chunk: OpenClawChatChunk) => void) => () => void;
     };
   }

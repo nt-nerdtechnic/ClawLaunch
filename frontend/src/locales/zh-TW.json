@@ -14,7 +14,8 @@
       "skills": "技能管理",
       "settings": "配置編輯",
       "launcherSettings": "啟動器配置",
-      "runtimeSettings": "龍蝦配置"
+      "runtimeSettings": "龍蝦配置",
+      "memory": "記憶資料"
     },
     "headers": {
       "monitor": "核心進程哨兵",
@@ -23,7 +24,8 @@
       "skills": "技能插件矩陣",
       "settings": "全局配置矩陣",
       "launcherSettings": "Launcher 配置",
-      "runtimeSettings": "openclaw.json 配置"
+      "runtimeSettings": "openclaw.json 配置",
+      "memory": "記憶體與資料瀏覽器"
     },
     "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
     "logoutTooltip": "登出並重新設定",
@@ -181,7 +183,16 @@
     "errorGeneric": "聊天請求失敗，請稍後重試",
     "unavailable": "目前環境無法呼叫聊天 IPC",
     "coreRequired": "核心尚未啟動，請先啟動 Gateway（Core）再送出對話",
-    "inputHint": "Enter 送出，Shift+Enter 換行"
+    "inputHint": "Enter 送出，Shift+Enter 換行",
+    "sessions": {
+      "title": "對話紀錄",
+      "openPanel": "切換對話",
+      "refresh": "重新整理",
+      "loading": "讀取中...",
+      "empty": "尚無 Session 紀錄",
+      "manual": "手動輸入",
+      "useManual": "套用此 Session"
+    }
   },
   "monitor": {
     "gatewayTitle": "Gateway 通訊中樞",
@@ -1496,5 +1507,33 @@
     "trend7d": "Trend (7d)",
     "security": "Security",
     "logs": "Logs"
+  },
+  "memory": {
+    "browser": "記憶體瀏覽器",
+    "refresh": "重新掃描",
+    "files": "個檔案",
+    "searchPlaceholder": "搜尋檔案...",
+    "selectFile": "選擇一個檔案以查看內容",
+    "selectFileHint": "從左側選單點選記憶與資料檔案",
+    "emptyFile": "（檔案內容為空）",
+    "noWorkspace": "尚未設定工作區路徑",
+    "noWorkspaceHint": "請先至「啟動器配置」或「onboarding」完成路徑設定",
+    "noGroups": "無法找到記憶相關目錄",
+    "dirNotFound": "目錄不存在",
+    "empty": "目錄為空",
+    "noMatch": "無符合結果",
+    "revealInFinder": "在 Finder 中顯示",
+    "groups": {
+      "memory": "MEMORY（長期記憶）",
+      "bootstrap": "BOOTSTRAP（啟動資料）",
+      "identity": "IDENTITY（身份定義）",
+      "soul": "SOUL（靈魂設定）",
+      "user": "USER（使用者資料）",
+      "heartbeat": "HEARTBEAT（心跳資料）",
+      "agentSessions": "Agent 會話紀錄"
+    },
+    "errors": {
+      "readFailed": "讀取檔案失敗"
+    }
   }
 }

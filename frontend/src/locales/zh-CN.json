@@ -14,7 +14,8 @@
       "skills": "技能管理",
       "settings": "配置编辑",
       "launcherSettings": "启动器配置",
-      "runtimeSettings": "Runtime 配置"
+      "runtimeSettings": "Runtime 配置",
+      "memory": "记忆与数据"
     },
     "headers": {
       "monitor": "核心进程哨兵",
@@ -23,7 +24,8 @@
       "skills": "技能插件矩阵",
       "settings": "全局配置矩阵",
       "launcherSettings": "Launcher 配置",
-      "runtimeSettings": "openclaw.json 配置"
+      "runtimeSettings": "openclaw.json 配置",
+      "memory": "记忆体与数据浏览器"
     },
     "logoutConfirm": "确定要重置并返回引导流程吗？目前的配置将被保留，但您需要重新完成设定步骤。",
     "logoutTooltip": "登出并重新设定",
@@ -177,7 +179,16 @@
     "errorGeneric": "聊天请求失败，请稍后重试",
     "unavailable": "当前环境无法调用聊天 IPC",
     "coreRequired": "核心尚未启动，请先启动 Gateway（Core）再发送对话",
-    "inputHint": "Enter 发送，Shift+Enter 换行"
+    "inputHint": "Enter 发送，Shift+Enter 换行",
+    "sessions": {
+      "title": "对话记录",
+      "openPanel": "切换对话",
+      "refresh": "重新整理",
+      "loading": "读取中...",
+      "empty": "暂无 Session 记录",
+      "manual": "手动输入",
+      "useManual": "套用此 Session"
+    }
   },
   "monitor": {
     "gatewayTitle": "Gateway 通讯中枢",
@@ -1253,5 +1264,33 @@
     "trend7d": "Trend (7d)",
     "security": "Security",
     "logs": "Logs"
+  },
+  "memory": {
+    "browser": "记忆体浏览器",
+    "refresh": "重新扫描",
+    "files": "个文件",
+    "searchPlaceholder": "搜索文件...",
+    "selectFile": "选择一个文件以查看内容",
+    "selectFileHint": "从左侧菜单点选记忆与数据文件",
+    "emptyFile": "（文件内容为空）",
+    "noWorkspace": "尚未配置工作区路径",
+    "noWorkspaceHint": "请先在「启动器配置」或「引导流程」完成路径设置",
+    "noGroups": "无法找到记忆相关目录",
+    "dirNotFound": "目录不存在",
+    "empty": "目录为空",
+    "noMatch": "无匹配结果",
+    "revealInFinder": "在 Finder 中显示",
+    "groups": {
+      "memory": "MEMORY（长期记忆）",
+      "bootstrap": "BOOTSTRAP（启动数据）",
+      "identity": "IDENTITY（身份定义）",
+      "soul": "SOUL（灵魂设置）",
+      "user": "USER（用户数据）",
+      "heartbeat": "HEARTBEAT（心跳数据）",
+      "agentSessions": "Agent 会话记录"
+    },
+    "errors": {
+      "readFailed": "读取文件失败"
+    }
   }
 }

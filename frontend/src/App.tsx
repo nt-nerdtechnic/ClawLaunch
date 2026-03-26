@@ -25,6 +25,7 @@ import { MonitorPage } from './pages/MonitorPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { ControlCenterPage } from './pages/ControlCenterPage';
+import { MemoryPage } from './pages/MemoryPage';
 
 type ModelOptionGroup = {
   provider: string;
@@ -621,6 +622,7 @@ function App() {
           <NavItem icon={<Activity size={18}/>} label={t('app.tabs.monitor')} active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} />
           <NavItem icon={<BarChart3 size={18}/>} label={t('app.tabs.analytics')} active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
           <NavItem icon={<Radar size={18}/>} label={t('app.tabs.controlCenter')} active={activeTab === 'controlCenter'} onClick={() => setActiveTab('controlCenter')} />
+          <NavItem icon={<Brain size={18}/>} label={t('app.tabs.memory')} active={activeTab === 'memory'} onClick={() => setActiveTab('memory')} />
           <NavItem icon={<Boxes size={18}/>} label={t('app.tabs.skills')} active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
           <NavItem icon={<Database size={18}/>} label={t('app.tabs.runtimeSettings')} active={activeTab === 'runtimeSettings'} onClick={() => setActiveTab('runtimeSettings')} />
         </nav>
@@ -641,7 +643,7 @@ function App() {
         <header className="h-20 border-b border-slate-200 dark:border-slate-800/50 flex items-center px-10 justify-between relative backdrop-blur-md bg-white/20 dark:bg-slate-950/20">
           <div>
             <h2 className="font-bold text-xl text-slate-900 dark:text-slate-100 uppercase tracking-tight">
-              {activeTab === 'monitor' ? t('app.headers.monitor') : activeTab === 'controlCenter' ? t('app.headers.controlCenter') : activeTab === 'analytics' ? t('app.headers.analytics') : activeTab === 'skills' ? t('app.headers.skills') : activeTab === 'launcherSettings' ? t('app.headers.launcherSettings') : t('app.headers.runtimeSettings')}
+              {activeTab === 'monitor' ? t('app.headers.monitor') : activeTab === 'controlCenter' ? t('app.headers.controlCenter') : activeTab === 'analytics' ? t('app.headers.analytics') : activeTab === 'skills' ? t('app.headers.skills') : activeTab === 'launcherSettings' ? t('app.headers.launcherSettings') : activeTab === 'memory' ? t('app.headers.memory') : t('app.headers.runtimeSettings')}
             </h2>
           </div>
           <div className="flex items-center space-x-4">
@@ -860,6 +862,7 @@ function App() {
           })()}
           {activeTab === 'controlCenter' && <ControlCenterPage onRefreshSnapshot={syncSnapshot} stateDir={resolvedConfigDir || undefined} />}
           {activeTab === 'skills' && <SkillsPage />}
+          {activeTab === 'memory' && <MemoryPage config={config} />}
 
           {activeTab === 'analytics' && (
             <ViewErrorBoundary

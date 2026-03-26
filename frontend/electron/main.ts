@@ -1217,6 +1217,19 @@ const extractMessageText = (message: any): string => {
   return '';
 };
 
+// Derive a human-readable display name from a session key and its metadata
+const deriveSessionDisplayName = (sessionKey: string, meta: any): string => {
+  if (meta?.displayName && typeof meta.displayName === 'string') return meta.displayName;
+  const parts = sessionKey.split(':');
+  if (parts.length < 3) return sessionKey;
+  const type = parts[2];
+  const rest = parts.slice(3).join(':');
+  if (type === 'main') return 'Direct';
+  if (type === 'telegram') return `Telegram ${rest}`;
+  if (type === 'cron') return rest ? `Cron ${rest.slice(0, 8)}` : 'Cron';
+  return rest || sessionKey;
+};
+
 const isAssistantMessage = (message: any): boolean => {
   if (!message || typeof message !== 'object') return false;
   const role = String(message.role || message.type || message.author?.role || '').toLowerCase();
@@ -5029,6 +5042,189 @@ ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
+  }
+});
+
+// ── openclaw:sessions.list ────────────────────────────────────────────────────
+// List sessions by reading agents/*/sessions/sessions.json (authoritative index)
+ipcMain.handle('openclaw:sessions.list', async () => {
+  try {
+    const { stateDir } = await readLauncherConfigPaths();
+    const base = stateDir || path.join(HOME, '.openclaw');
+    const agentsDir = path.join(base, 'agents');
+
+    const sessions: Array<{
+      sessionKey: string;
+      agentId: string;
+      sessionId: string;
+      displayName: string;
+      lastMessage: string;
+      lastTimestamp: string;
+      messageCount: number;
+    }> = [];
+
+    let agentIds: string[] = [];
+    try {
+      agentIds = await fs.readdir(agentsDir);
+    } catch {
+      return { code: 0, stdout: JSON.stringify([]), stderr: '' };
+    }
+
+    for (const agentId of agentIds) {
+      const sessionsDir = path.join(agentsDir, agentId, 'sessions');
+      const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
+
+      let sessionsIndex: Record<string, any> = {};
+      try {
+        const raw = await fs.readFile(sessionsJsonPath, 'utf-8');
+        sessionsIndex = JSON.parse(raw);
+      } catch {
+        continue; // no sessions.json for this agent
+      }
+
+      for (const [sessionKey, meta] of Object.entries(sessionsIndex) as [string, any][]) {
+        const sessionId = String(meta?.sessionId || '');
+        if (!sessionId) continue;
+
+        // Prefer explicit sessionFile, fallback to <sessionId>.jsonl
+        const sessionFile: string = (typeof meta?.sessionFile === 'string' && meta.sessionFile)
+          ? meta.sessionFile
+          : path.join(sessionsDir, `${sessionId}.jsonl`);
+
+        let content = '';
+        try {
+          content = await fs.readFile(sessionFile, 'utf-8');
+        } catch {
+          // JSONL not yet written (e.g., Telegram group never messaged); include with metadata only
+          sessions.push({
+            sessionKey,
+            agentId,
+            sessionId,
+            displayName: deriveSessionDisplayName(sessionKey, meta),
+            lastMessage: '',
+            lastTimestamp: String(meta?.updatedAt || ''),
+            messageCount: 0,
+          });
+          continue;
+        }
+
+        const lines = content.split(/\r?\n/).filter(Boolean);
+        let lastMessage = '';
+        let lastTimestamp = '';
+        let messageCount = 0;
+
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.type !== 'message') continue;
+            messageCount++;
+            if (entry.timestamp) lastTimestamp = String(entry.timestamp);
+            const role = entry.message?.role;
+            if (role === 'assistant' || role === 'user') {
+              const text = extractMessageText(entry.message);
+              if (text) lastMessage = text.slice(0, 100);
+            }
+          } catch {
+            /* skip malformed line */
+          }
+        }
+
+        sessions.push({
+          sessionKey,
+          agentId,
+          sessionId,
+          displayName: deriveSessionDisplayName(sessionKey, meta),
+          lastMessage,
+          lastTimestamp: lastTimestamp || String(meta?.updatedAt || ''),
+          messageCount,
+        });
+      }
+    }
+
+    // Sort by lastTimestamp descending (numeric ms or ISO string)
+    sessions.sort((a, b) => {
+      const ta = Number(a.lastTimestamp) || new Date(a.lastTimestamp).getTime() || 0;
+      const tb = Number(b.lastTimestamp) || new Date(b.lastTimestamp).getTime() || 0;
+      return tb - ta;
+    });
+
+    return { code: 0, stdout: JSON.stringify(sessions), stderr: '' };
+  } catch (e: any) {
+    return { code: 1, stdout: '', stderr: e?.message || 'Unknown error' };
+  }
+});
+
+// ── openclaw:session.load ─────────────────────────────────────────────────────
+// Load full message history for a given session key by looking up sessions.json
+ipcMain.handle('openclaw:session.load', async (_event, payload: { sessionKey: string; agentId: string }) => {
+  try {
+    const sessionKey = String(payload?.sessionKey || '').trim();
+    const agentId = String(payload?.agentId || '').trim();
+    if (!sessionKey || !agentId) {
+      return { code: 1, stdout: '', stderr: 'Missing sessionKey or agentId' };
+    }
+
+    const { stateDir } = await readLauncherConfigPaths();
+    const base = stateDir || path.join(HOME, '.openclaw');
+    const sessionsDir = path.join(base, 'agents', agentId, 'sessions');
+
+    // Look up sessions.json to find the correct JSONL file for this session key
+    let sessionFile = '';
+    try {
+      const raw = await fs.readFile(path.join(sessionsDir, 'sessions.json'), 'utf-8');
+      const index = JSON.parse(raw) as Record<string, any>;
+      const meta = index[sessionKey];
+      if (meta?.sessionFile && typeof meta.sessionFile === 'string') {
+        sessionFile = meta.sessionFile;
+      } else if (meta?.sessionId) {
+        sessionFile = path.join(sessionsDir, `${meta.sessionId}.jsonl`);
+      }
+    } catch {
+      // fallback: treat sessionKey as UUID directly (legacy)
+      sessionFile = path.join(sessionsDir, `${sessionKey}.jsonl`);
+    }
+    if (!sessionFile) {
+      return { code: 0, stdout: JSON.stringify([]), stderr: '' };
+    }
+
+    let content = '';
+    try {
+      content = await fs.readFile(sessionFile, 'utf-8');
+    } catch {
+      return { code: 0, stdout: JSON.stringify([]), stderr: '' };
+    }
+
+    const messages: Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+    }> = [];
+
+    const lines = content.split(/\r?\n/).filter(Boolean);
+    let idx = 0;
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type !== 'message') continue;
+        const role = entry.message?.role as string;
+        if (role !== 'user' && role !== 'assistant') continue;
+        const text = extractMessageText(entry.message);
+        if (!text) continue;
+        messages.push({
+          id: String(entry.id || entry.message?.id || `loaded-${agentId}-${idx++}`),
+          role: role as 'user' | 'assistant',
+          content: text,
+          timestamp: String(entry.timestamp || ''),
+        });
+      } catch {
+        /* skip malformed line */
+      }
+    }
+
+    return { code: 0, stdout: JSON.stringify(messages), stderr: '' };
+  } catch (e: any) {
+    return { code: 1, stdout: '', stderr: e?.message || 'Unknown error' };
   }
 });
 
