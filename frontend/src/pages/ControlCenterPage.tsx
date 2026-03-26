@@ -157,6 +157,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [observedEvents, setObservedEvents] = useState<ObservedEvent[]>([]);
   const [loading, setLoading]         = useState(false);
   const [cronLoading, setCronLoading] = useState(false);
+  const [systemLoading, setSystemLoading] = useState(false);
   const [scanning, setScanning]       = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [error, setError]             = useState('');
@@ -501,6 +502,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 </button>
                 <button
                   onClick={() => void refresh()}
+                  title={t('controlCenter.actions.refresh')}
                   className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all"
                 >
                   <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
@@ -690,6 +692,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </button>
                     );
                   })}
+                  <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
+                  <button
+                    onClick={async () => { setSystemLoading(true); await loadSystem(); setSystemLoading(false); }}
+                    title={t('controlCenter.actions.refresh')}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
+                  >
+                    <RefreshCw size={9} className={systemLoading ? 'animate-spin' : ''} />
+                  </button>
                 </div>
               </div>
               {launchAgents.length === 0 ? (
@@ -761,6 +771,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </button>
                     );
                   })}
+                  <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
+                  <button
+                    onClick={async () => { setSystemLoading(true); await loadSystem(); setSystemLoading(false); }}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
+                  >
+                    <RefreshCw size={9} className={systemLoading ? 'animate-spin' : ''} />
+                  </button>
                 </div>
               </div>
               {crontabEntries.length === 0 ? (
@@ -836,6 +853,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
                   <button
                     onClick={async () => { setCronLoading(true); await loadCron(); setCronLoading(false); }}
+                    title={t('controlCenter.actions.refresh')}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
                   >
                     <RefreshCw size={9} className={cronLoading ? 'animate-spin' : ''} />

@@ -18,6 +18,8 @@ interface UpdateInfo {
   latest: string;
   htmlUrl: string;
   upToDate: boolean;
+  changelog?: string;
+  publishedAt?: string;
   noReleases?: boolean;
 }
 
@@ -274,19 +276,35 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                 </div>
               )}
               {updateState === 'available' && updateInfo && (
-                <div className="mt-1 flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                    <AlertCircle size={12} />
-                    {t('settings.checkUpdateAvailable', { version: updateInfo.latest })}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => window.electronAPI.openExternal(updateInfo.htmlUrl)}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    <Download size={11} />
-                    {t('settings.checkUpdateDownload')}
-                  </button>
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                      <AlertCircle size={12} />
+                      {t('settings.checkUpdateAvailable', { version: updateInfo.latest })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => window.electronAPI.openExternal(updateInfo.htmlUrl)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      <Download size={11} />
+                      {t('settings.checkUpdateDownload')}
+                    </button>
+                  </div>
+                  
+                  {updateInfo.changelog && (
+                    <div className="rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 p-4 animate-in fade-in slide-in-from-top-1 duration-300">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex justify-between items-center">
+                        <span>{t('settings.checkUpdateChangelog')}</span>
+                        {updateInfo.publishedAt && (
+                          <span>{new Date(updateInfo.publishedAt).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed font-sans whitespace-pre-wrap max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                        {updateInfo.changelog}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {updateState === 'error' && (

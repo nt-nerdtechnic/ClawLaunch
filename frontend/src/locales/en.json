@@ -6,7 +6,7 @@
     "online": "ONLINE",
     "gatewayActive": "GATEWAY ACTIVE",
     "standby": "STANDBY",
-    "version": "VER 2026.1.0",
+    "version": "VER {{version}}",
     "tabs": {
       "monitor": "Process Monitor",
       "controlCenter": "Task Board",
@@ -394,6 +394,7 @@
     "checkUpdateAvailable": "New version available: {{version}}",
     "checkUpdateDownload": "Download",
     "checkUpdateError": "Failed to check for updates",
+    "checkUpdateChangelog": "Release Notes",
     "autoRestartGatewayTitle": "Auto-Restart Gateway (on crash)",
     "autoRestartGatewayDesc": "Applied to non-daemon mode; auto-restarts on crash.",
     "installDaemonTitle": "Background Service (Daemon)",

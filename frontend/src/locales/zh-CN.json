@@ -6,7 +6,7 @@
     "online": "ONLINE",
     "gatewayActive": "GATEWAY ACTIVE",
     "standby": "STANDBY",
-    "version": "VER 2026.1.0",
+    "version": "VER {{version}}",
     "tabs": {
       "monitor": "进程监控",
       "controlCenter": "任务看板",
@@ -390,6 +390,7 @@
     "checkUpdateAvailable": "有新版本可用: {{version}}",
     "checkUpdateDownload": "前往下载",
     "checkUpdateError": "无法检查更新",
+    "checkUpdateChangelog": "更新日志",
     "autoRestartGatewayTitle": "自动重启 Gateway（崩溃时）",
     "autoRestartGatewayDesc": "套用于非 daemon 模式；异常退出时会依启动模式进行自动重启。",
     "installDaemonTitle": "背景服务 (Daemon)",

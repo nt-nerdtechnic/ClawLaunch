@@ -53,6 +53,7 @@ interface Config {
   workspacePath: string; // Workspace area
   theme?: 'light' | 'dark'; // Persisted theme
   language?: string; // Persisted language
+  appVersion?: string; // Persisted app version
 }
 
 export interface ReadModelSession {
@@ -265,6 +266,7 @@ export const useStore = create<AppState>((set) => ({
     configPath: '',
     workspacePath: '',
     language: localStorage.getItem('i18nextLng') || 'zh-TW',
+    appVersion: '',
   },
   detectedConfig: null,
   detectingPaths: false,

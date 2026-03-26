@@ -2894,6 +2894,10 @@ ipcMain.handle('dialog:selectDirectory', async () => {
 ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []) => {
   const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
 
+  if (fullCommand === 'app:get-version') {
+    return { code: 0, stdout: app.getVersion(), stderr: '', exitCode: 0 };
+  }
+
   if (fullCommand === 'app:check-update') {
     try {
       const current = app.getVersion();
@@ -2921,8 +2925,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
       const latest = String(releases[0].tag_name || '').replace(/^v/, '');
       const htmlUrl = String(releases[0].html_url || '');
+      const changelog = String(releases[0].body || '');
+      const publishedAt = String(releases[0].published_at || '');
       const isNewer = !!latest && latest !== current;
-      return { code: 0, stdout: JSON.stringify({ current, latest, htmlUrl, upToDate: !isNewer }), stderr: '', exitCode: 0 };
+      return { code: 0, stdout: JSON.stringify({ current, latest, htmlUrl, changelog, publishedAt, upToDate: !isNewer }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'update check failed', exitCode: 1 };
     }
@@ -3734,8 +3740,11 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         if (parsed?.configPath) {
           activateConfigPath(String(parsed.configPath)).catch(() => {});
         }
-      } catch {}
-      return { code: 0, stdout: content, stderr: '', exitCode: 0 };
+        // Always inject current app version into the result
+        return { code: 0, stdout: JSON.stringify({ ...parsed, appVersion: app.getVersion() }), stderr: '', exitCode: 0 };
+      } catch {
+        return { code: 0, stdout: content, stderr: '', exitCode: 0 };
+      }
     } catch (e: any) {
       return { code: 1, stdout: '{}', stderr: 'No config file found', exitCode: 1 };
     }

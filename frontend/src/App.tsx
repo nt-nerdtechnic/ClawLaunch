@@ -614,7 +614,7 @@ function App() {
           </div>
           <div>
             <div className="font-bold text-lg leading-none tracking-tight">Openclaw</div>
-            <div className="text-[10px] text-blue-500 font-mono uppercase tracking-widest">Launch Pad</div>
+            <div className="text-[10px] text-blue-500 font-mono uppercase tracking-widest">{t('app.version', { version: config.appVersion || '...' })}</div>
           </div>
         </div>
         
@@ -633,7 +633,7 @@ function App() {
         </div>
 
         <div className="pt-4 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-600 px-2 flex justify-between items-center font-mono">
-          <span>{t('app.version')}</span>
+          <span>{t('app.version', { version: config.appVersion || '...' })}</span>
           <span className="flex items-center"><div className="w-2 h-2 rounded-full bg-emerald-500 mr-1 animate-pulse"></div> {t('app.online')}</span>
         </div>
       </div>
