@@ -62,8 +62,8 @@ function extToType(name: string): MemoryFile['type'] {
 // Dirs created by openclaw init that we already enumerate as named groups
 const KNOWN_WORKSPACE_DIRS = new Set([
   'MEMORY', 'MEMORY_DAILY', 'BOOTSTRAP', 'IDENTITY', 'SOUL', 'USER', 'HEARTBEAT',
-  'DOCUMENTS', 'ASSETS', 'CONTEXT', 'MODELS', 'SCRIPTS', 'DATA',
-  'SKILLS', 'EXTENSIONS', 'AGENT', 'AGENTS',
+  'TOOLS', 'AGENTS', 'DOCUMENTS', 'ASSETS', 'CONTEXT', 'MODELS', 'SCRIPTS', 'DATA',
+  'SKILLS', 'EXTENSIONS', 'AGENT',
 ]);
 
 // ── MemoryPage ─────────────────────────────────────────────────────────────
@@ -98,7 +98,78 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     const defs: Omit<MemoryGroup, 'files' | 'loading' | 'error' | 'exists'>[] = [];
 
     if (workspacePath) {
-      // ── Soul Section ───────────────────────────────────────────────────
+      // ── Soul Section ── Bootstrap 初始化順序 ──────────────────────────
+      // 1. AGENTS.md - 工作區主說明書，Session 啟動規則
+      defs.push({
+        label: t('memory.groups.agents'),
+        dirPath: `${workspacePath}/AGENTS`,
+        singleFile: `${workspacePath}/AGENTS.md`,
+        icon: <Brain size={15} />,
+        accent: 'text-purple-400',
+        description: t('memory.groupHints.agents'),
+        section: 'soul',
+      });
+      // 2. SOUL.md - Agent 人格、行為準則
+      defs.push({
+        label: t('memory.groups.soul'),
+        dirPath: `${workspacePath}/SOUL`,
+        singleFile: `${workspacePath}/SOUL.md`,
+        icon: <FileText size={15} />,
+        accent: 'text-pink-400',
+        description: t('memory.groupHints.soul'),
+        section: 'soul',
+      });
+      // 3. IDENTITY.md - Agent 身份設定
+      defs.push({
+        label: t('memory.groups.identity'),
+        dirPath: `${workspacePath}/IDENTITY`,
+        singleFile: `${workspacePath}/IDENTITY.md`,
+        icon: <HardDrive size={15} />,
+        accent: 'text-sky-400',
+        description: t('memory.groupHints.identity'),
+        section: 'soul',
+      });
+      // 4. USER.md - 使用者資訊
+      defs.push({
+        label: t('memory.groups.user'),
+        dirPath: `${workspacePath}/USER`,
+        singleFile: `${workspacePath}/USER.md`,
+        icon: <FileText size={15} />,
+        accent: 'text-orange-400',
+        description: t('memory.groupHints.user'),
+        section: 'soul',
+      });
+      // 5. TOOLS.md - 可用工具清單
+      defs.push({
+        label: t('memory.groups.tools'),
+        dirPath: `${workspacePath}/TOOLS`,
+        singleFile: `${workspacePath}/TOOLS.md`,
+        icon: <FileJson size={15} />,
+        accent: 'text-amber-400',
+        description: t('memory.groupHints.tools'),
+        section: 'soul',
+      });
+      // 6. HEARTBEAT.md - 心跳/狀態追蹤
+      defs.push({
+        label: t('memory.groups.heartbeat'),
+        dirPath: `${workspacePath}/HEARTBEAT`,
+        singleFile: `${workspacePath}/HEARTBEAT.md`,
+        icon: <Clock size={15} />,
+        accent: 'text-red-400',
+        description: t('memory.groupHints.heartbeat'),
+        section: 'soul',
+      });
+      // 7. BOOTSTRAP.md - 首次啟動引導（讀完後刪除）
+      defs.push({
+        label: t('memory.groups.bootstrap'),
+        dirPath: `${workspacePath}/BOOTSTRAP`,
+        singleFile: `${workspacePath}/BOOTSTRAP.md`,
+        icon: <Database size={15} />,
+        accent: 'text-emerald-400',
+        description: t('memory.groupHints.bootstrap'),
+        section: 'soul',
+      });
+      // ── Memory Section ─────────────────────────────────────────────────
       // Long-term memory: single MEMORY.md file
       defs.push({
         label: t('memory.groups.memory'),
@@ -117,51 +188,6 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         accent: 'text-violet-400',
         description: t('memory.groupHints.memoryDaily'),
         section: 'docs',
-      });
-      defs.push({
-        label: t('memory.groups.bootstrap'),
-        dirPath: `${workspacePath}/BOOTSTRAP`,
-        singleFile: `${workspacePath}/BOOTSTRAP.md`,
-        icon: <Database size={15} />,
-        accent: 'text-emerald-400',
-        description: t('memory.groupHints.bootstrap'),
-        section: 'soul',
-      });
-      defs.push({
-        label: t('memory.groups.identity'),
-        dirPath: `${workspacePath}/IDENTITY`,
-        singleFile: `${workspacePath}/IDENTITY.md`,
-        icon: <HardDrive size={15} />,
-        accent: 'text-sky-400',
-        description: t('memory.groupHints.identity'),
-        section: 'soul',
-      });
-      defs.push({
-        label: t('memory.groups.soul'),
-        dirPath: `${workspacePath}/SOUL`,
-        singleFile: `${workspacePath}/SOUL.md`,
-        icon: <FileText size={15} />,
-        accent: 'text-pink-400',
-        description: t('memory.groupHints.soul'),
-        section: 'soul',
-      });
-      defs.push({
-        label: t('memory.groups.user'),
-        dirPath: `${workspacePath}/USER`,
-        singleFile: `${workspacePath}/USER.md`,
-        icon: <FileText size={15} />,
-        accent: 'text-orange-400',
-        description: t('memory.groupHints.user'),
-        section: 'soul',
-      });
-      defs.push({
-        label: t('memory.groups.heartbeat'),
-        dirPath: `${workspacePath}/HEARTBEAT`,
-        singleFile: `${workspacePath}/HEARTBEAT.md`,
-        icon: <Clock size={15} />,
-        accent: 'text-red-400',
-        description: t('memory.groupHints.heartbeat'),
-        section: 'soul',
       });
 
       // ── Document Section ───────────────────────────────────────────────
@@ -443,19 +469,19 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
             : <ChevronRight size={12} className="text-slate-400 flex-shrink-0" />
           }
           <span className={`flex-shrink-0 ${group.accent}`}>{group.icon}</span>
-          <CustomTooltip content={group.description} className="flex-1 min-w-0" delay={0.1}>
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">
-                {group.label}
-              </span>
+          <div className="flex-1 min-w-0 flex items-center gap-1.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">
+              {group.label}
+            </span>
+            <CustomTooltip content={group.description} delay={0.1}>
               <span 
                 className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help transition-colors flex-shrink-0"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Info size={13} />
               </span>
-            </div>
-          </CustomTooltip>
+            </CustomTooltip>
+          </div>
           <span className="text-[10px] font-mono text-slate-400 ml-auto flex-shrink-0">
             {group.loading
               ? <Loader2 size={10} className="animate-spin" />
