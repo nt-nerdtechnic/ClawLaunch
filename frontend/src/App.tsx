@@ -737,7 +737,7 @@ function App() {
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/40 p-4">
-                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 mb-2">Process Detail</div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 mb-2">{t('app.processDetail', 'Process Detail')}</div>
                   <pre className="text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all font-mono leading-relaxed">
                     {gatewayConflictModal.detail}
                   </pre>

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface LogEntry {
   text: string;
@@ -21,6 +22,7 @@ interface TerminalLogProps {
  */
 const TerminalLog: React.FC<TerminalLogProps> = ({ logs, height = 'h-40', title = 'Terminal Output', showControls = true, timeline = [], dailyDigest = '' }) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const { t } = useTranslation();
 
     const formatTime = (value?: string) => {
         if (!value) return '--:--:--';
@@ -89,14 +91,14 @@ const TerminalLog: React.FC<TerminalLogProps> = ({ logs, height = 'h-40', title 
 
             {dailyDigest && (
                 <div className="mb-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Daily Digest</div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">{t('terminal.dailyDigest', 'Daily Digest')}</div>
                     <pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-300">{dailyDigest}</pre>
                 </div>
             )}
 
             {timeline.length > 0 && (
                 <div className="mb-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Audit Timeline</div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{t('terminal.auditTimeline', 'Audit Timeline')}</div>
                     <div className="max-h-40 overflow-y-auto space-y-1.5">
                         {timeline.slice(-20).map((item) => (
                             <div key={item.id} className="text-[11px] leading-relaxed">

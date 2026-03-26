@@ -88,7 +88,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                 />
                 <button
                   onClick={() => onBrowsePath('corePath')}
-                  title="Browse folder"
+                  title={t('settings.browseFolder', 'Browse folder')}
                   className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
                 >
                   <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
@@ -111,7 +111,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                 />
                 <button
                   onClick={() => onBrowsePath('configPath')}
-                  title="Browse folder"
+                  title={t('settings.browseFolder', 'Browse folder')}
                   className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
                 >
                   <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
@@ -134,7 +134,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                 />
                 <button
                   onClick={() => onBrowsePath('workspacePath')}
-                  title="Browse folder"
+                  title={t('settings.browseFolder', 'Browse folder')}
                   className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
                 >
                   <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />

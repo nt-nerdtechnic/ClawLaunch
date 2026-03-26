@@ -1,5 +1,16 @@
 {
+  "miniView": {
+    "latticeStatus": "Lattice 狀態"
+  },
+  "common": {
+    "toggleTheme": "切換主題"
+  },
+  "terminal": {
+    "dailyDigest": "每日摘要",
+    "auditTimeline": "稽核時間軸"
+  },
   "app": {
+    "processDetail": "進程詳情",
     "title": "Openclaw",
     "subtitle": "Launch Pad",
     "switchMiniMode": "切換小窗模式",
@@ -179,6 +190,8 @@
     "noAgents": "目前沒有活躍的 Agent"
   },
   "chat": {
+    "justNow": "剛剛",
+    "messageSuffix": "則",
     "title": "核心對話",
     "open": "開啟聊天",
     "close": "關閉聊天",
@@ -380,6 +393,7 @@
     }
   },
   "settings": {
+    "browseFolder": "瀏覽資料夾",
     "botToken": "Telegram Bot Token",
     "botTokenPlaceholder": "輸入您的 Bot Token...",
     "inferenceEngine": "Primary Inference Engine",

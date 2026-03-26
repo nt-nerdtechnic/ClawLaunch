@@ -20,7 +20,7 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
           <div className="relative">
             <div className={`w-3 h-3 rounded-full ${running ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.6)] animate-pulse' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
           </div>
-          <span className="text-[11px] font-black tracking-[0.2em] text-slate-500 dark:text-slate-400 uppercase">Lattice Status</span>
+          <span className="text-[11px] font-black tracking-[0.2em] text-slate-500 dark:text-slate-400 uppercase">{t('miniView.latticeStatus', 'Lattice Status')}</span>
         </div>
         <button onClick={onExpand} className="text-slate-400 dark:text-slate-600 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
             <Settings2 size={16} />

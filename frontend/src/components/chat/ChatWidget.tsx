@@ -31,7 +31,7 @@ const formatTime = (createdAt: number) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-const formatRelativeTime = (timestamp: string): string => {
+const formatRelativeTime = (timestamp: string, t?: any): string => {
   if (!timestamp) return '';
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return '';
@@ -39,7 +39,7 @@ const formatRelativeTime = (timestamp: string): string => {
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
-  if (minutes < 1) return '剛剛';
+  if (minutes < 1) return t ? t('chat.justNow', '剛剛') : '剛剛';
   if (minutes < 60) return `${minutes}m`;
   if (hours < 24) return `${hours}h`;
   return `${days}d`;
@@ -408,8 +408,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                         <p className="mt-0.5 truncate font-mono text-[9px] text-slate-400 dark:text-slate-500" title={s.sessionKey}>{s.sessionKey}</p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-0.5">
-                        <span className="text-[8px] text-slate-400">{formatRelativeTime(s.lastTimestamp)}</span>
-                        <span className="text-[8px] text-slate-300 dark:text-slate-600">{s.messageCount}則</span>
+                        <span className="text-[8px] text-slate-400">{formatRelativeTime(s.lastTimestamp, t)}</span>
+                        <span className="text-[8px] text-slate-300 dark:text-slate-600">{s.messageCount} {t('chat.messageSuffix', '則')}</span>
                       </div>
                     </div>
                     {s.lastMessage && (

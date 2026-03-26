@@ -1,9 +1,11 @@
 import { Sun, Moon } from 'lucide-react';
 import { useStore } from '../store';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 export function ThemeToggle() {
   const { theme, setTheme } = useStore();
+  const { t } = useTranslation();
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -13,7 +15,7 @@ export function ThemeToggle() {
     <button
       onClick={toggleTheme}
       className="relative w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors overflow-hidden"
-      aria-label="Toggle theme"
+      aria-label={t('common.toggleTheme', 'Toggle theme')}
     >
       <AnimatePresence mode="wait" initial={false}>
         <motion.div

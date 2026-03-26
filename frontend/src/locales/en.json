@@ -1,5 +1,16 @@
 {
+  "miniView": {
+    "latticeStatus": "Lattice Status"
+  },
+  "common": {
+    "toggleTheme": "Toggle theme"
+  },
+  "terminal": {
+    "dailyDigest": "Daily Digest",
+    "auditTimeline": "Audit Timeline"
+  },
   "app": {
+    "processDetail": "Process Detail",
     "title": "Openclaw",
     "subtitle": "Launch Pad",
     "switchMiniMode": "Toggle Mini Mode",
@@ -179,6 +190,8 @@
     "noAgents": "No active agents"
   },
   "chat": {
+    "justNow": "Just now",
+    "messageSuffix": " messages",
     "title": "Core Chat",
     "open": "Open Chat",
     "close": "Close Chat",
@@ -380,6 +393,7 @@
     }
   },
   "settings": {
+    "browseFolder": "Browse folder",
     "botToken": "Telegram Bot Token",
     "botTokenPlaceholder": "Enter your Bot Token...",
     "inferenceEngine": "Primary Inference Engine",
