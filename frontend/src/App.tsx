@@ -4,6 +4,7 @@ import { MiniView } from './components/MiniView';
 import { ThemeToggle } from './components/ThemeToggle';
 import { LanguageToggle } from './components/LanguageToggle';
 import { ChatWidget } from './components/chat/ChatWidget';
+import PixelOfficeWidget from './components/pixel-office/PixelOfficeWidget';
 import { useTranslation } from 'react-i18next';
 // @ts-ignore
 import SetupWizard from './components/onboarding/SetupWizard';
@@ -581,6 +582,7 @@ function App() {
     return (
       <>
         <MiniView running={running} onToggle={handleToggleGatewayWithStopModal} onExpand={toggleViewMode} />
+        <PixelOfficeWidget compact />
         <ChatWidget compact />
       </>
     );
@@ -961,6 +963,7 @@ function App() {
           )}
         </div>
       </main>
+      <PixelOfficeWidget />
       <ChatWidget />
     </div>
   );

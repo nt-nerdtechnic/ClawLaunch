@@ -166,6 +166,18 @@
       "start": "Start"
     }
   },
+  "pixelOffice": {
+    "open": "Open Pixel Office",
+    "close": "Close Pixel Office",
+    "title": "Agent Office",
+    "agentWorking": "Working",
+    "agentIdle": "Idle",
+    "agentWalking": "Moving",
+    "sessions": "Sessions",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "noAgents": "No active agents"
+  },
   "chat": {
     "title": "Core Chat",
     "open": "Open Chat",

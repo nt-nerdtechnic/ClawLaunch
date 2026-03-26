@@ -162,6 +162,18 @@
       "start": "启动"
     }
   },
+  "pixelOffice": {
+    "open": "打开像素办公室",
+    "close": "关闭像素办公室",
+    "title": "Agent 办公室",
+    "agentWorking": "工作中",
+    "agentIdle": "空闲",
+    "agentWalking": "移动中",
+    "sessions": "对话",
+    "tokens": "Tokens",
+    "cost": "费用",
+    "noAgents": "当前没有活跃的 Agent"
+  },
   "chat": {
     "title": "核心对话",
     "open": "开启聊天",

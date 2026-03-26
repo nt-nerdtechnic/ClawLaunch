@@ -166,6 +166,18 @@
       "start": "啟動"
     }
   },
+  "pixelOffice": {
+    "open": "開啟像素辦公室",
+    "close": "關閉像素辦公室",
+    "title": "Agent 辦公室",
+    "agentWorking": "工作中",
+    "agentIdle": "閒置",
+    "agentWalking": "移動中",
+    "sessions": "對話",
+    "tokens": "Tokens",
+    "cost": "費用",
+    "noAgents": "目前沒有活躍的 Agent"
+  },
   "chat": {
     "title": "核心對話",
     "open": "開啟聊天",
