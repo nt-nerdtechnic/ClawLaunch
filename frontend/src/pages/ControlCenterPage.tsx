@@ -175,6 +175,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     TASK_STATUS_CFG.done.label = t('common.status.done');
   }, [t]);
 
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const execCmd = useCallback(async (cmd: string) => {
     const res = await window.electronAPI.exec(cmd);
     if ((res.code ?? res.exitCode) !== 0) throw new Error(res.stderr || 'command failed');
@@ -420,35 +427,43 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           { 
             label: t('controlCenter.kpi.activityTimeline', '作業時間軸'), 
             value: kpi.activityTimeline, 
-            color: 'text-indigo-600 dark:text-indigo-400' 
+            color: 'text-indigo-600 dark:text-indigo-400',
+            targetId: 'activity-timeline-section'
           },
           { 
             label: t('controlCenter.kpi.systemServices', '系統服務'), 
             value: kpi.systemServices.total, 
-            color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400' 
+            color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400',
+            targetId: 'system-services-section'
           },
           { 
             label: t('controlCenter.kpi.crontabEntries', '系統排程'), 
             value: kpi.crontabEntriesCount, 
-            color: 'text-blue-600 dark:text-blue-400' 
+            color: 'text-blue-600 dark:text-blue-400',
+            targetId: 'system-crontab-section'
           },
           { 
             label: t('controlCenter.kpi.cronSchedules', '應用排程'), 
             value: kpi.cronSchedules.total, 
-            color: 'text-violet-600 dark:text-violet-400' 
+            color: 'text-violet-600 dark:text-violet-400',
+            targetId: 'application-scheduling-section'
           },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[22px] p-4 shadow-sm text-center">
-            <div className={`text-2xl font-black ${color}`}>{value}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5 tracking-wide">{label}</div>
-          </div>
+        ].map(({ label, value, color, targetId }) => (
+          <button 
+            key={label} 
+            onClick={() => scrollToSection(targetId)}
+            className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[22px] p-4 shadow-sm text-center transition-all hover:scale-[1.02] hover:shadow-md hover:bg-white dark:hover:bg-slate-800/40 group active:scale-95"
+          >
+            <div className={`text-2xl font-black ${color} group-hover:drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] transition-all`}>{value}</div>
+            <div className="text-[10px] text-slate-500 mt-0.5 tracking-wide group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">{label}</div>
+          </button>
         ))}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
         {/* ── Left: Mixed activity timeline ──────────────────────────────── */}
-        <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden">
+        <div id="activity-timeline-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
           <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(99,102,241,0.5),transparent)' }} />
           <div className="p-6 space-y-3">
 
@@ -666,7 +681,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         <div className="flex flex-col gap-4">
 
           {/* Layer 1: System services */}
-          <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
+          <div id="system-services-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(16,185,129,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
               <div className="flex items-center gap-2 mb-3">
@@ -745,7 +760,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           </div>
 
           {/* Layer 2: crontab */}
-          <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
+          <div id="system-crontab-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(245,158,11,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
               <div className="flex items-center gap-2 mb-3">
@@ -821,7 +836,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           </div>
 
           {/* Layer 3: OpenClaw scheduling */}
-          <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden">
+          <div id="application-scheduling-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(139,92,246,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
               <div className="flex items-center justify-between mb-1">

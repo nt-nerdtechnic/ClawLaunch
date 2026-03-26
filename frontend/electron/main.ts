@@ -1285,7 +1285,7 @@ const fetchLatestAssistantText = async (runtimePrefix: string, gatewayUrlArg: st
   const historyParams: Record<string, any> = { sessionKey };
   if (agentId) historyParams.agentId = agentId;
 
-  const historyCommand = `${runtimePrefix} gateway call chat.history${gatewayUrlArg}${gatewayAuthArg} --params ${shellQuote(JSON.stringify(historyParams))}`;
+  const historyCommand = `${runtimePrefix} gateway call${gatewayUrlArg}${gatewayAuthArg} chat.history --params ${shellQuote(JSON.stringify(historyParams))}`;
   const historyRes = await runShellCommand(historyCommand);
   if (historyRes.code !== 0) {
     return { ok: false as const, text: '', error: historyRes.stderr || 'chat.history failed' };
@@ -3296,28 +3296,41 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   if (fullCommand === 'system:launchagents:list') {
     try {
       const home = process.env['HOME'] || '';
-      const knownAgents = [
-        { label: 'ai.openclaw.gateway',  plist: path.join(home, 'Library/LaunchAgents/ai.openclaw.gateway.plist'),  name: 'OpenClaw Gateway' },
-        { label: 'ai.openclaw.watchdog', plist: path.join(home, 'Library/LaunchAgents/ai.openclaw.watchdog.plist'), name: 'OpenClaw Watchdog' },
-      ];
+      const agentsDir = path.join(home, 'Library/LaunchAgents');
+      
+      const friendlyNames: Record<string, string> = {
+        'ai.openclaw.gateway': 'OpenClaw Gateway',
+        'ai.openclaw.watchdog': 'OpenClaw Watchdog',
+      };
+
+      let files: string[] = [];
+      try {
+        files = await fs.readdir(agentsDir);
+      } catch {
+        // Directory might not exist
+      }
+
+      const plistFiles = files.filter(f => f.endsWith('.plist'));
       const launchctlRes = await runSilent('launchctl list');
       const listOutput = launchctlRes.stdout;
 
-      const agents = await Promise.all(knownAgents.map(async (agent) => {
-        // Whether plist exists
+      const agents = await Promise.all(plistFiles.map(async (filename) => {
+        const label = filename.replace('.plist', '');
+        const plistPath = path.join(agentsDir, filename);
+        const name = friendlyNames[label] || label;
+
         let plistExists = false;
         let keepAlive = false;
         let comment = '';
         try {
-          const raw = await fs.readFile(agent.plist, 'utf-8');
+          const raw = await fs.readFile(plistPath, 'utf-8');
           plistExists = true;
           keepAlive = raw.includes('<key>KeepAlive</key>');
           const commentMatch = raw.match(/<key>Comment<\/key>\s*<string>([^<]+)<\/string>/);
           if (commentMatch) comment = commentMatch[1];
         } catch { /* plist missing */ }
 
-        // launchctl status
-        const line = listOutput.split('\n').find(l => l.includes(agent.label));
+        const line = listOutput.split('\n').find(l => l.includes(label));
         let running = false;
         let pid: number | null = null;
         let exitCode: number | null = null;
@@ -3328,10 +3341,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           running = pid !== null && !isNaN(pid);
         }
 
-        return { label: agent.label, name: agent.name, plistExists, keepAlive, comment, loaded: !!line, running, pid, exitCode };
+        return { label, name, plistExists, keepAlive, comment, loaded: !!line, running, pid, exitCode };
       }));
 
-      return { code: 0, stdout: JSON.stringify({ agents: agents.filter(a => a.plistExists || a.loaded) }), stderr: '', exitCode: 0 };
+      return { code: 0, stdout: JSON.stringify({ agents }), stderr: '', exitCode: 0 };
     } catch (e: any) {
       return { code: 1, stdout: '', stderr: e?.message || 'launchagents list failed', exitCode: 1 };
     }
@@ -4881,7 +4894,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
   const mode: 'gateway' = 'gateway';
   const reason = '';
 
-  const gatewayCommand = `${runtime.openclawPrefix} gateway call chat.send${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} --params ${shellQuote(JSON.stringify(params))}`;
+  const gatewayCommand = `${runtime.openclawPrefix} gateway call${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} chat.send --params ${shellQuote(JSON.stringify(params))}`;
   const selectedCommand = gatewayCommand;
 
   const emitChunk = (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => {
@@ -5042,7 +5055,7 @@ ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
     if (chatState.runId) abortParams.runId = chatState.runId;
     if (chatState.agentId) abortParams.agentId = chatState.agentId;
 
-    const abortCommand = `${runtime.openclawPrefix} gateway call chat.abort${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} --params ${shellQuote(JSON.stringify(abortParams))}`;
+    const abortCommand = `${runtime.openclawPrefix} gateway call${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} chat.abort --params ${shellQuote(JSON.stringify(abortParams))}`;
     const abortRes = await runShellCommand(abortCommand);
     if (abortRes.code !== 0) {
       return { success: false, error: abortRes.stderr || 'Failed to abort chat run' };
