@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Brain, RefreshCw, FolderOpen, FileText, FileJson, ChevronRight,
   ChevronDown, AlertCircle, Loader2, Eye, Database,
-  HardDrive, Clock, Search, X, Pencil, PencilOff, Save, Info,
+  HardDrive, Clock, Search, X, Pencil, PencilOff, Save, Info, CalendarDays,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ConfigService } from '../services/configService';
@@ -29,7 +29,7 @@ interface MemoryGroup {
   error: string;
   exists: boolean;
   description: string;
-  section: 'soul' | 'docs';
+  section: 'soul' | 'docs' | 'uncategorized';
 }
 
 interface MemoryPageProps {
@@ -58,6 +58,13 @@ function extToType(name: string): MemoryFile['type'] {
   if (name.endsWith('.txt')) return 'txt';
   return 'other';
 }
+
+// Dirs created by openclaw init that we already enumerate as named groups
+const KNOWN_WORKSPACE_DIRS = new Set([
+  'MEMORY', 'MEMORY_DAILY', 'BOOTSTRAP', 'IDENTITY', 'SOUL', 'USER', 'HEARTBEAT',
+  'DOCUMENTS', 'ASSETS', 'CONTEXT', 'MODELS', 'SCRIPTS', 'DATA',
+  'SKILLS', 'EXTENSIONS', 'AGENT', 'AGENTS',
+]);
 
 // ── MemoryPage ─────────────────────────────────────────────────────────────
 
@@ -92,14 +99,24 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
 
     if (workspacePath) {
       // ── Soul Section ───────────────────────────────────────────────────
+      // Long-term memory: single MEMORY.md file
       defs.push({
         label: t('memory.groups.memory'),
-        dirPath: `${workspacePath}/MEMORY`,
+        dirPath: '',
         singleFile: `${workspacePath}/MEMORY.md`,
         icon: <Brain size={15} />,
         accent: 'text-purple-400',
         description: t('memory.groupHints.memory'),
         section: 'soul',
+      });
+      // Short-term / daily memory: memory/ directory
+      defs.push({
+        label: t('memory.groups.memoryDaily'),
+        dirPath: `${workspacePath}/memory`,
+        icon: <CalendarDays size={15} />,
+        accent: 'text-violet-400',
+        description: t('memory.groupHints.memoryDaily'),
+        section: 'docs',
       });
       defs.push({
         label: t('memory.groups.bootstrap'),
@@ -205,7 +222,49 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
   // ── Scan single directory ─────────────────────────────────────────────────
 
   const scanDir = useCallback(async (dirPath: string, singleFile?: string): Promise<{ exists: boolean; files: MemoryFile[]; error: string }> => {
-    // If singleFile is provided: check it first; fall through to dir scan if missing
+    // Priority: directory scan first (may contain many files); singleFile is fallback only
+    try {
+      // Check if directory exists
+      const existRes = await window.electronAPI.exec(`test -d ${shellQuote(dirPath)} && echo EXISTS || echo MISSING`);
+      if (existRes.code === 0 && existRes.stdout.trim() === 'EXISTS') {
+        // List files with stat info - name, size, modified
+        const findCmd = `find ${shellQuote(dirPath)} -maxdepth 4 -type f \\( -name "*.md" -o -name "*.json" -o -name "*.txt" \\) 2>/dev/null | head -80`;
+        const findRes = await window.electronAPI.exec(findCmd);
+        const paths = findRes.stdout.trim().split('\n').filter(Boolean);
+
+        if (paths.length > 0) {
+          // Get stat for each file to retrieve size and modified time
+          const statCmd = `stat -f '%z\t%Sm\t%N' -t '%Y-%m-%d %H:%M' ${paths.map(p => shellQuote(p)).join(' ')} 2>/dev/null`;
+          const statRes = await window.electronAPI.exec(statCmd);
+          const statLines = statRes.stdout.trim().split('\n').filter(Boolean);
+
+          const files: MemoryFile[] = statLines.map((line) => {
+            const parts = line.split('\t');
+            const sz = parseInt(parts[0] || '0', 10);
+            const mod = parts[1] || '';
+            const fp = parts[2] || '';
+            const name = fp.split('/').pop() || fp;
+            return {
+              name,
+              fullPath: fp,
+              size: isNaN(sz) ? 0 : sz,
+              modified: mod,
+              type: extToType(name),
+            };
+          }).filter(f => f.fullPath);
+
+          files.sort((a, b) => b.modified.localeCompare(a.modified));
+          return { exists: true, files, error: '' };
+        }
+
+        // Directory exists but empty — still mark exists
+        return { exists: true, files: [], error: '' };
+      }
+    } catch (e: any) {
+      return { exists: false, files: [], error: (e as Error).message };
+    }
+
+    // Directory not found — try singleFile as fallback
     if (singleFile) {
       const fileCheck = await window.electronAPI.exec(`test -f ${shellQuote(singleFile)} && echo EXISTS || echo MISSING`);
       if (fileCheck.code === 0 && fileCheck.stdout.trim() === 'EXISTS') {
@@ -224,49 +283,9 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
           };
         }
       }
-      // singleFile not found — fall through to directory check
     }
 
-    try {
-      // Check if directory exists
-      const existRes = await window.electronAPI.exec(`test -d ${shellQuote(dirPath)} && echo EXISTS || echo MISSING`);
-      if (existRes.code !== 0 || existRes.stdout.trim() !== 'EXISTS') {
-        return { exists: false, files: [], error: '' };
-      }
-
-      // List files with stat info - name, size, modified
-      const findCmd = `find ${shellQuote(dirPath)} -maxdepth 4 -type f \\( -name "*.md" -o -name "*.json" -o -name "*.txt" \\) 2>/dev/null | head -80`;
-      const findRes = await window.electronAPI.exec(findCmd);
-      const paths = findRes.stdout.trim().split('\n').filter(Boolean);
-      if (paths.length === 0) return { exists: true, files: [], error: '' };
-
-      // Get stat for each file to retrieve size and modified time
-      const statCmd = `stat -f '%z\t%Sm\t%N' -t '%Y-%m-%d %H:%M' ${paths.map(p => shellQuote(p)).join(' ')} 2>/dev/null`;
-      const statRes = await window.electronAPI.exec(statCmd);
-      const statLines = statRes.stdout.trim().split('\n').filter(Boolean);
-
-      const files: MemoryFile[] = statLines.map((line) => {
-        const parts = line.split('\t');
-        const sz = parseInt(parts[0] || '0', 10);
-        const mod = parts[1] || '';
-        const fp = parts[2] || '';
-        const name = fp.split('/').pop() || fp;
-        return {
-          name,
-          fullPath: fp,
-          size: isNaN(sz) ? 0 : sz,
-          modified: mod,
-          type: extToType(name),
-        };
-      }).filter(f => f.fullPath);
-
-      // Sort: most-recently modified first
-      files.sort((a, b) => b.modified.localeCompare(a.modified));
-
-      return { exists: true, files, error: '' };
-    } catch (e: any) {
-      return { exists: false, files: [], error: e.message };
-    }
+    return { exists: false, files: [], error: '' };
   }, []);
 
   // ── Full scan ─────────────────────────────────────────────────────────────
@@ -279,17 +298,47 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     // Initialize groups as loading
     setGroups(defs.map(d => ({ ...d, files: [], loading: true, error: '', exists: false, description: d.description || '', section: d.section })));
 
-    const results = await Promise.all(
+    const standardResults = await Promise.all(
       defs.map(async (def) => {
         const { exists, files, error } = await scanDir(def.dirPath, def.singleFile);
         return { ...def, files, loading: false, error, exists };
       })
     );
 
-    setGroups(results);
+    // ── Scan for uncategorized top-level dirs ──────────────────────────────
+    const uncategorizedResults: MemoryGroup[] = [];
+    if (workspacePath) {
+      const listRes = await window.electronAPI.exec(
+        `find ${shellQuote(workspacePath)} -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort`
+      );
+      const extraDirs = listRes.stdout.trim().split('\n').filter(Boolean).filter(d => {
+        const name = d.split('/').pop() || '';
+        return !KNOWN_WORKSPACE_DIRS.has(name.toUpperCase()) && !name.startsWith('.');
+      });
+      for (const dirPath of extraDirs) {
+        const { exists, files, error } = await scanDir(dirPath);
+        if (exists && files.length > 0) {
+          const name = dirPath.split('/').pop() || dirPath;
+          uncategorizedResults.push({
+            label: name,
+            dirPath,
+            icon: <FolderOpen size={15} />,
+            accent: 'text-slate-400',
+            description: name,
+            section: 'uncategorized',
+            files,
+            loading: false,
+            error,
+            exists,
+          });
+        }
+      }
+    }
+
+    setGroups([...standardResults, ...uncategorizedResults]);
     setLastScanAt(new Date().toLocaleTimeString());
     setTotalScanning(false);
-  }, [buildGroupDefs, scanDir]);
+  }, [buildGroupDefs, scanDir, workspacePath]);
 
   useEffect(() => {
     if (workspacePath || configPath) {
@@ -539,17 +588,47 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
 
         {/* Groups */}
         <div className="flex-1 overflow-y-auto pb-4">
-          {/* Soul Section */}
-          <div className="px-4 py-2 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
-            {t('memory.sections.soul')}
-          </div>
-          {groups.filter(g => g.section === 'soul').map(renderGroup)}
+          {/* Soul Section — always show all core groups */}
+          {(() => {
+            const soulGroups = groups.filter(g => g.section === 'soul');
+            if (soulGroups.length === 0 && !totalScanning) return null;
+            return (
+              <>
+                <div className="px-4 py-2 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
+                  {t('memory.sections.soul')}
+                </div>
+                {soulGroups.map(renderGroup)}
+              </>
+            );
+          })()}
 
-          {/* Document Section */}
-          <div className="px-4 py-2 mt-4 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-t border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
-            {t('memory.sections.docs')}
-          </div>
-          {groups.filter(g => g.section === 'docs').map(renderGroup)}
+          {/* Document Section — only visible groups */}
+          {(() => {
+            const docsGroups = groups.filter(g => g.section === 'docs' && (g.loading || g.exists));
+            if (docsGroups.length === 0 && !totalScanning) return null;
+            return (
+              <>
+                <div className="px-4 py-2 mt-4 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-t border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
+                  {t('memory.sections.docs')}
+                </div>
+                {docsGroups.map(renderGroup)}
+              </>
+            );
+          })()}
+
+          {/* Uncategorized Section — extra dirs found in workspace */}
+          {(() => {
+            const uncatGroups = groups.filter(g => g.section === 'uncategorized');
+            if (uncatGroups.length === 0) return null;
+            return (
+              <>
+                <div className="px-4 py-2 mt-4 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-t border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
+                  {t('memory.sections.uncategorized')}
+                </div>
+                {uncatGroups.map(renderGroup)}
+              </>
+            );
+          })()}
 
           {!totalScanning && groups.length === 0 && (
             <div className="p-6 text-center">

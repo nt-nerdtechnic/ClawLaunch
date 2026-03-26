@@ -1264,7 +1264,8 @@
     "browser": "数据管理区",
     "sections": {
       "soul": "灵魂管理区",
-      "docs": "文件管理区"
+      "docs": "文件管理区",
+      "uncategorized": "未分类"
     },
     "refresh": "重新扫描",
     "files": "个文件",
@@ -1286,6 +1287,7 @@
     "saved": "已保存 ✓",
     "groups": {
       "memory": "MEMORY（长期记忆）",
+      "memoryDaily": "memory（短期日志）",
       "bootstrap": "BOOTSTRAP（启动数据）",
       "identity": "IDENTITY（身份定义）",
       "soul": "SOUL（灵魂设置）",
@@ -1301,6 +1303,7 @@
     },
     "groupHints": {
       "memory": "存储 Agent 的长期记忆、对话上下文或特定知识。",
+      "memoryDaily": "每日自动生成的短期记忆，以日期命名，记录当日运行状态与重要事件。",
       "bootstrap": "启动时的初始化设置与预定义行为规范。",
       "identity": "定义 Agent 的角色、性格、权限等级等身份特征。",
       "soul": "存放 Agent 的核心逻辑或高度敏感的配置。",

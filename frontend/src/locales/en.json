@@ -1489,7 +1489,8 @@
     "browser": "Data Management Area",
     "sections": {
       "soul": "Soul Management",
-      "docs": "Document Management"
+      "docs": "Document Management",
+      "uncategorized": "Uncategorized"
     },
     "refresh": "Re-scan",
     "files": "files",
@@ -1511,6 +1512,7 @@
     "saved": "Saved ✓",
     "groups": {
       "memory": "MEMORY (Long-term)",
+      "memoryDaily": "memory (Daily Log)",
       "bootstrap": "BOOTSTRAP (Init Data)",
       "identity": "IDENTITY (Agent Identity)",
       "soul": "SOUL (Core Instructions)",
@@ -1526,6 +1528,7 @@
     },
     "groupHints": {
       "memory": "Stores the agent's long-term memory, conversation context, or specific knowledge.",
+      "memoryDaily": "Auto-generated daily memory logs, named by date, recording daily operations and key events.",
       "bootstrap": "Initialization settings and predefined behavioral norms at startup.",
       "identity": "Defines the agent's role, personality, permission level, and other identity features.",
       "soul": "Stores the agent's core logic or highly sensitive configurations.",

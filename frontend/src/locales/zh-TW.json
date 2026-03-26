@@ -1497,10 +1497,12 @@
     "browser": "資料管理區",
     "sections": {
       "soul": "靈魂管理區",
-      "docs": "文件管理區"
+      "docs": "文件管理區",
+      "uncategorized": "未分類"
     },
     "groups": {
       "memory": "MEMORY（長期記憶）",
+      "memoryDaily": "memory（短期日誌）",
       "bootstrap": "BOOTSTRAP（啟動資料）",
       "identity": "IDENTITY（身份定義）",
       "soul": "SOUL（靈魂設定）",
@@ -1515,6 +1517,7 @@
     },
     "groupHints": {
       "memory": "存放 Agent 的長期記憶、對話上下文或特定知識。",
+      "memoryDaily": "每日自動產生的短期記憶，以日期命名，記錄當日運行狀態與重要事件。",
       "bootstrap": "啟動時的初始化設定與預定義行為規範。",
       "identity": "定義 Agent 的角色、性格、權限等級等身份特徵。",
       "soul": "存放 Agent 的核心邏輯或高度敏感的配置。",
