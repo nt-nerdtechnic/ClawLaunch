@@ -1261,7 +1261,11 @@
     "logs": "Logs"
   },
   "memory": {
-    "browser": "记忆体浏览器",
+    "browser": "数据管理区",
+    "sections": {
+      "soul": "灵魂管理区",
+      "docs": "文件管理区"
+    },
     "refresh": "重新扫描",
     "files": "个文件",
     "searchPlaceholder": "搜索文件...",
@@ -1287,7 +1291,13 @@
       "soul": "SOUL（灵魂设置）",
       "user": "USER（用户数据）",
       "heartbeat": "HEARTBEAT（心跳数据）",
-      "agentSessions": "Agent 会话记录"
+      "agentSessions": "Agent 会话记录",
+      "documents": "DOCUMENTS（文件库）",
+      "assets": "ASSETS（多媒体资产）",
+      "context": "CONTEXT（上下文资料）",
+      "models": "MODELS（局部模型数据）",
+      "scripts": "SCRIPTS（自定义脚本）",
+      "data": "DATA（通用数据库）"
     },
     "groupHints": {
       "memory": "存储 Agent 的长期记忆、对话上下文或特定知识。",
@@ -1295,7 +1305,13 @@
       "identity": "定义 Agent 的角色、性格、权限等级等身份特征。",
       "soul": "存放 Agent 的核心逻辑或高度敏感的配置。",
       "user": "与特定用户相关的偏好设置或互动记录。",
-      "heartbeat": "系统的心跳记录与操作审计历史。"
+      "heartbeat": "系统的心跳记录与操作审计历史。",
+      "documents": "存放项目相关的各类说明文件、合同或规格书。",
+      "assets": "存放图片、视频、音档等静态多媒体文件。",
+      "context": "存放用于扩充 AI 背景知识、特定领域知识的参考资料。",
+      "models": "存放训练完成的模型文件、权重或相关参数。",
+      "scripts": "存放项目專用の处理脚本、自动化代码片段。",
+      "data": "存放各类原始数据、平衡表或大型结构化资料。"
     },
     "errors": {
       "readFailed": "读取文件失败",

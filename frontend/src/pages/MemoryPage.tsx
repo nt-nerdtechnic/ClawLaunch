@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ConfigService } from '../services/configService';
+import { CustomTooltip } from '../components/common/CustomTooltip';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ interface MemoryGroup {
   error: string;
   exists: boolean;
   description: string;
+  section: 'soul' | 'docs';
 }
 
 interface MemoryPageProps {
@@ -89,7 +91,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     const defs: Omit<MemoryGroup, 'files' | 'loading' | 'error' | 'exists'>[] = [];
 
     if (workspacePath) {
-      // MEMORY may be a directory or a single .md file — try both
+      // ── Soul Section ───────────────────────────────────────────────────
       defs.push({
         label: t('memory.groups.memory'),
         dirPath: `${workspacePath}/MEMORY`,
@@ -97,6 +99,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         icon: <Brain size={15} />,
         accent: 'text-purple-400',
         description: t('memory.groupHints.memory'),
+        section: 'soul',
       });
       defs.push({
         label: t('memory.groups.bootstrap'),
@@ -105,6 +108,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         icon: <Database size={15} />,
         accent: 'text-emerald-400',
         description: t('memory.groupHints.bootstrap'),
+        section: 'soul',
       });
       defs.push({
         label: t('memory.groups.identity'),
@@ -113,6 +117,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         icon: <HardDrive size={15} />,
         accent: 'text-sky-400',
         description: t('memory.groupHints.identity'),
+        section: 'soul',
       });
       defs.push({
         label: t('memory.groups.soul'),
@@ -121,6 +126,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         icon: <FileText size={15} />,
         accent: 'text-pink-400',
         description: t('memory.groupHints.soul'),
+        section: 'soul',
       });
       defs.push({
         label: t('memory.groups.user'),
@@ -129,6 +135,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         icon: <FileText size={15} />,
         accent: 'text-orange-400',
         description: t('memory.groupHints.user'),
+        section: 'soul',
       });
       defs.push({
         label: t('memory.groups.heartbeat'),
@@ -137,6 +144,58 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         icon: <Clock size={15} />,
         accent: 'text-red-400',
         description: t('memory.groupHints.heartbeat'),
+        section: 'soul',
+      });
+
+      // ── Document Section ───────────────────────────────────────────────
+      const docPath = `${workspacePath}/DOCUMENTS`;
+      defs.push({
+        label: t('memory.groups.documents'),
+        dirPath: docPath,
+        icon: <FolderOpen size={15} />,
+        accent: 'text-blue-400',
+        description: t('memory.groupHints.documents'),
+        section: 'docs',
+      });
+      defs.push({
+        label: t('memory.groups.assets'),
+        dirPath: `${workspacePath}/ASSETS`,
+        icon: <Database size={15} />,
+        accent: 'text-indigo-400',
+        description: t('memory.groupHints.assets'),
+        section: 'docs',
+      });
+      defs.push({
+        label: t('memory.groups.context'),
+        dirPath: `${workspacePath}/CONTEXT`,
+        icon: <FileText size={15} />,
+        accent: 'text-cyan-400',
+        description: t('memory.groupHints.context'),
+        section: 'docs',
+      });
+      defs.push({
+        label: t('memory.groups.models'),
+        dirPath: `${workspacePath}/MODELS`,
+        icon: <Database size={15} />,
+        accent: 'text-teal-400',
+        description: t('memory.groupHints.models'),
+        section: 'docs',
+      });
+      defs.push({
+        label: t('memory.groups.scripts'),
+        dirPath: `${workspacePath}/SCRIPTS`,
+        icon: <FileJson size={15} />,
+        accent: 'text-amber-400',
+        description: t('memory.groupHints.scripts'),
+        section: 'docs',
+      });
+      defs.push({
+        label: t('memory.groups.data'),
+        dirPath: `${workspacePath}/DATA`,
+        icon: <Database size={15} />,
+        accent: 'text-slate-400',
+        description: t('memory.groupHints.data'),
+        section: 'docs',
       });
     }
 
@@ -218,7 +277,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
 
     setTotalScanning(true);
     // Initialize groups as loading
-    setGroups(defs.map(d => ({ ...d, files: [], loading: true, error: '', exists: false, description: d.description || '' })));
+    setGroups(defs.map(d => ({ ...d, files: [], loading: true, error: '', exists: false, description: d.description || '', section: d.section })));
 
     const results = await Promise.all(
       defs.map(async (def) => {
@@ -318,6 +377,88 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     });
   };
 
+  const renderGroup = (group: MemoryGroup) => {
+    const filtered = filterFiles(group.files);
+    const isExpanded = expandedGroups.has(group.dirPath);
+
+    return (
+      <div key={group.dirPath} className="border-b border-slate-100 dark:border-slate-800/50 last:border-0">
+        {/* Group header */}
+        <button
+          type="button"
+          onClick={() => toggleGroup(group.dirPath)}
+          className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors text-left"
+        >
+          {isExpanded
+            ? <ChevronDown size={12} className="text-slate-400 flex-shrink-0" />
+            : <ChevronRight size={12} className="text-slate-400 flex-shrink-0" />
+          }
+          <span className={`flex-shrink-0 ${group.accent}`}>{group.icon}</span>
+          <CustomTooltip content={group.description} className="flex-1 min-w-0" delay={0.1}>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">
+                {group.label}
+              </span>
+              <span 
+                className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help transition-colors flex-shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Info size={13} />
+              </span>
+            </div>
+          </CustomTooltip>
+          <span className="text-[10px] font-mono text-slate-400 ml-auto flex-shrink-0">
+            {group.loading
+              ? <Loader2 size={10} className="animate-spin" />
+              : group.exists
+                ? group.files.length
+                : '—'
+            }
+          </span>
+        </button>
+
+        {/* Files list */}
+        {isExpanded && (
+          <div className="pb-1">
+            {group.loading && (
+              <div className="px-6 py-2">
+                <Loader2 size={13} className="animate-spin text-slate-400 mx-auto" />
+              </div>
+            )}
+            {!group.loading && !group.exists && (
+              <div className="px-6 py-2 text-[11px] text-slate-400 italic">{t('memory.dirNotFound')}</div>
+            )}
+            {!group.loading && group.exists && filtered.length === 0 && (
+              <div className="px-6 py-2 text-[11px] text-slate-400 italic">
+                {group.files.length === 0 ? t('memory.empty') : t('memory.noMatch')}
+              </div>
+            )}
+            {!group.loading && filtered.map(file => (
+              <button
+                key={file.fullPath}
+                type="button"
+                onClick={() => openFile(file)}
+                className={`w-full flex items-center gap-2 px-6 py-2 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors text-left group ${
+                  selectedFile?.fullPath === file.fullPath
+                    ? 'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-blue-500'
+                    : 'border-l-2 border-transparent'
+                }`}
+              >
+                <span className="flex-shrink-0">{fileIcon(file.type)}</span>
+                <span className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 truncate font-medium">
+                  {file.name}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {formatBytes(file.size)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Total stats ───────────────────────────────────────────────────────────
 
   const totalFiles = groups.reduce((n, g) => n + g.files.length, 0);
@@ -398,89 +539,17 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
 
         {/* Groups */}
         <div className="flex-1 overflow-y-auto pb-4">
-          {groups.map(group => {
-            const filtered = filterFiles(group.files);
-            const isExpanded = expandedGroups.has(group.dirPath);
+          {/* Soul Section */}
+          <div className="px-4 py-2 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
+            {t('memory.sections.soul')}
+          </div>
+          {groups.filter(g => g.section === 'soul').map(renderGroup)}
 
-            return (
-              <div key={group.dirPath} className="border-b border-slate-100 dark:border-slate-800/50 last:border-0">
-                {/* Group header */}
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.dirPath)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors text-left"
-                >
-                  {isExpanded
-                    ? <ChevronDown size={12} className="text-slate-400 flex-shrink-0" />
-                    : <ChevronRight size={12} className="text-slate-400 flex-shrink-0" />
-                  }
-                  <span className={`flex-shrink-0 ${group.accent}`}>{group.icon}</span>
-                  <span className="flex-1 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate flex items-center gap-1.5">
-                    {group.label}
-                    <span 
-                      className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help transition-colors"
-                      title={group.description}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Info size={11} />
-                    </span>
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400 ml-auto flex-shrink-0">
-                    {group.loading
-                      ? <Loader2 size={10} className="animate-spin" />
-                      : group.exists
-                        ? group.files.length
-                        : '—'
-                    }
-                  </span>
-                </button>
-
-                {/* Files list */}
-                {isExpanded && (
-                  <div className="pb-1">
-                    {group.loading && (
-                      <div className="px-6 py-2">
-                        <Loader2 size={13} className="animate-spin text-slate-400 mx-auto" />
-                      </div>
-                    )}
-                    {!group.loading && !group.exists && (
-                      <div className="px-6 py-2 text-[11px] text-slate-400 italic">{t('memory.dirNotFound')}</div>
-                    )}
-                    {!group.loading && group.error && (
-                      <div className="px-6 py-2 text-[11px] text-red-400 flex items-center gap-1">
-                        <AlertCircle size={11} /> {group.error}
-                      </div>
-                    )}
-                    {!group.loading && group.exists && filtered.length === 0 && (
-                      <div className="px-6 py-2 text-[11px] text-slate-400 italic">
-                        {searchQuery ? t('memory.noMatch') : t('memory.empty')}
-                      </div>
-                    )}
-                    {!group.loading && filtered.map(file => (
-                      <button
-                        key={file.fullPath}
-                        type="button"
-                        onClick={() => openFile(file)}
-                        className={`w-full flex items-center gap-2 px-6 py-2 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors text-left group ${
-                          selectedFile?.fullPath === file.fullPath
-                            ? 'bg-blue-50 dark:bg-blue-950/30 border-l-2 border-blue-500'
-                            : 'border-l-2 border-transparent'
-                        }`}
-                      >
-                        <span className="flex-shrink-0">{fileIcon(file.type)}</span>
-                        <span className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 truncate font-medium">
-                          {file.name}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {formatBytes(file.size)}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {/* Document Section */}
+          <div className="px-4 py-2 mt-4 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-t border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
+            {t('memory.sections.docs')}
+          </div>
+          {groups.filter(g => g.section === 'docs').map(renderGroup)}
 
           {!totalScanning && groups.length === 0 && (
             <div className="p-6 text-center">

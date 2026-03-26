@@ -1486,7 +1486,11 @@
     "logs": "Logs"
   },
   "memory": {
-    "browser": "Memory Browser",
+    "browser": "Data Management Area",
+    "sections": {
+      "soul": "Soul Management",
+      "docs": "Document Management"
+    },
     "refresh": "Re-scan",
     "files": "files",
     "searchPlaceholder": "Search files...",
@@ -1512,7 +1516,13 @@
       "soul": "SOUL (Core Instructions)",
       "user": "USER (User Data)",
       "heartbeat": "HEARTBEAT (Heartbeat)",
-      "agentSessions": "Agent Sessions"
+      "agentSessions": "Agent Sessions",
+      "documents": "DOCUMENTS (Docs)",
+      "assets": "ASSETS (Multimedia)",
+      "context": "CONTEXT (Knowledge)",
+      "models": "MODELS (Model Data)",
+      "scripts": "SCRIPTS (Scripts)",
+      "data": "DATA (Datasets)"
     },
     "groupHints": {
       "memory": "Stores the agent's long-term memory, conversation context, or specific knowledge.",
@@ -1520,7 +1530,13 @@
       "identity": "Defines the agent's role, personality, permission level, and other identity features.",
       "soul": "Stores the agent's core logic or highly sensitive configurations.",
       "user": "User-specific preferences or interaction records.",
-      "heartbeat": "System heartbeat records and operation audit history."
+      "heartbeat": "System heartbeat records and operation audit history.",
+      "documents": "Various descriptive documents, contracts, or specifications related to the project.",
+      "assets": "Images, videos, audio, and other static multimedia files.",
+      "context": "Reference materials used to extend AI background knowledge or domain knowledge.",
+      "models": "Trained model files, weights, or related parameters.",
+      "scripts": "Project-specific processing scripts and automation code snippets.",
+      "data": "Various raw data, balance sheets, or large structured data."
     },
     "errors": {
       "readFailed": "Failed to read file",

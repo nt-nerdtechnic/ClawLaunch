@@ -1203,40 +1203,11 @@
       "minimaxOauthCn": {
         "desc": "中國區平台 Token"
       },
-      "moonshot": {
-        "desc": "Moonshot 平台密鑰"
-      },
       "xai": {
         "desc": "xAI 平台密鑰"
-      },
-      "chutes": {
-        "desc": "去中心化平台授權，無須 Key"
-      },
-      "ollama": {
-        "desc": "本地 Ollama 服務，無須密鑰"
-      },
-      "vllm": {
-        "desc": "自定義本地伺服器"
-      },
-      "qwen": {
-        "desc": "Qwen 通義千問密鑰"
       }
     },
     "channel": {
-      "management": "通訊頻道管理",
-      "desc": "設定 AI 代理與外部通訊軟體的連接方式。",
-      "configuredTokens": "已配置 Token",
-      "noKeyNeeded": "{{name}} 不需要密鑰",
-      "noKeyDesc": "此頻道無須輸入 Token 即可直接運作。",
-      "applyToken": "儲存頻道 Token",
-      "applyingToken": "儲存中...",
-      "appliedToken": "已成功套用",
-      "telegramTokenHelp": "請在 @BotFather 取得 Token。",
-      "title": "通訊頻道配置 (Communication Channel)",
-      "platform": "頻道類型 (Platform)",
-      "token": "存取憑證 (Token / Key)",
-      "groupPolicy": "群組權限策略 (Group Policy)",
-      "groupAllowFrom": "允許的群組 ID (Allow From)",
       "groupPolicyOpen": "開放 (Open) - 允許所有私聊與群聊",
       "groupPolicyAllowlist": "白名單 (Allowlist) - 僅限指定群組",
       "groupPolicyNone": "關閉 (None) - 僅限私聊",
@@ -1523,7 +1494,39 @@
     "logs": "Logs"
   },
   "memory": {
-    "browser": "記憶體瀏覽器",
+    "browser": "資料管理區",
+    "sections": {
+      "soul": "靈魂管理區",
+      "docs": "文件管理區"
+    },
+    "groups": {
+      "memory": "MEMORY（長期記憶）",
+      "bootstrap": "BOOTSTRAP（啟動資料）",
+      "identity": "IDENTITY（身份定義）",
+      "soul": "SOUL（靈魂設定）",
+      "user": "USER（用戶資料）",
+      "heartbeat": "HEARTBEAT（心跳資料）",
+      "documents": "DOCUMENTS（文件庫）",
+      "assets": "ASSETS（多媒體資產）",
+      "context": "CONTEXT（上下文資料）",
+      "models": "MODELS（局部模型資料）",
+      "scripts": "SCRIPTS（自定義腳本）",
+      "data": "DATA（通用資料庫）"
+    },
+    "groupHints": {
+      "memory": "存放 Agent 的長期記憶、對話上下文或特定知識。",
+      "bootstrap": "啟動時的初始化設定與預定義行為規範。",
+      "identity": "定義 Agent 的角色、性格、權限等級等身份特徵。",
+      "soul": "存放 Agent 的核心邏輯或高度敏感的配置。",
+      "user": "與特定用戶相關的偏好設定或互動記錄。",
+      "heartbeat": "系統的心跳記錄與操作審計歷史。",
+      "documents": "存放專案相關的各類說明文件、合約或規格書。",
+      "assets": "存放圖片、影片、音檔等靜態多媒體檔案。",
+      "context": "存放用於擴充 AI 背景知識、特定領域知識的參考資料。",
+      "models": "存放訓練完成的模型檔案、權重或相關參數。",
+      "scripts": "存放專案專用的處理腳本、自動化程式碼片段。",
+      "data": "存放各類原始資料、資料表或大型結構化資料。"
+    },
     "refresh": "重新掃描",
     "files": "個檔案",
     "searchPlaceholder": "搜尋檔案...",
@@ -1542,23 +1545,6 @@
     "saving": "儲存中...",
     "cancelEdit": "取消",
     "saved": "已儲存 ✓",
-    "groups": {
-      "memory": "MEMORY（長期記憶）",
-      "bootstrap": "BOOTSTRAP（啟動資料）",
-      "identity": "IDENTITY（身份定義）",
-      "soul": "SOUL（靈魂設定）",
-      "user": "USER（使用者資料）",
-      "heartbeat": "HEARTBEAT（心跳資料）",
-      "agentSessions": "Agent 會話紀錄"
-    },
-    "groupHints": {
-      "memory": "儲存 Agent 的長期記憶、對話上下文或特定知識。",
-      "bootstrap": "啟動時的初始化設定與預定義行為規範。",
-      "identity": "定義 Agent 的角色、性格、權限等級等身份特徵。",
-      "soul": "存放 Agent 的核心邏輯或高度敏感的配置。",
-      "user": "與特定使用者相關的偏好設定或互動紀錄。",
-      "heartbeat": "系統的心跳記錄與操作審計歷史。"
-    },
     "errors": {
       "readFailed": "讀取檔案失敗",
       "saveFailed": "儲存檔案失敗"
