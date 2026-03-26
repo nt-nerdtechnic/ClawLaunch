@@ -216,6 +216,23 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     persistRecentList('chat_recent_agents', nextAgents);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (sessionPanelOpen) {
+          setSessionPanelOpen(false);
+          return;
+        }
+        if (chat.isOpen) {
+          setChatOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [chat.isOpen, sessionPanelOpen, setChatOpen]);
+
   const handleSend = async () => {
     const message = inputValue.trim();
     if (!message || chat.isStreaming) return;

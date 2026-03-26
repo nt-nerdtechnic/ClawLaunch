@@ -1194,7 +1194,16 @@
       "applyingToken": "Applying...",
       "appliedToken": "Applied",
       "applyToken": "Apply Token",
-      "telegramTokenHelp": "Telegram token can also be saved via Save button"
+      "telegramTokenHelp": "Telegram token can also be saved via Save button",
+      "title": "Communication Channel Configuration",
+      "platform": "Platform",
+      "token": "Access Token / Key",
+      "groupPolicy": "Group Policy",
+      "groupAllowFrom": "Allow From (Group IDs)",
+      "groupPolicyOpen": "Open - Allow all private & group chats",
+      "groupPolicyAllowlist": "Allowlist - Only specific groups",
+      "groupPolicyNone": "None - Private chat only",
+      "help": "These settings affect how OpenClaw interacts with platforms like Telegram or Discord."
     },
     "telegram": {
       "management": "Telegram Pairing Management",
@@ -1205,7 +1214,12 @@
       "approving": "Approving...",
       "rejecting": "Rejecting...",
       "authorizedUsers": "Authorized Users",
-      "noAuthorizedUsers": "No authorized Telegram accounts yet."
+      "noAuthorizedUsers": "No authorized Telegram accounts yet.",
+      "pairingMode": "Pairing Mode",
+      "pairingModeDesc": "When enabled, new users must be approved in the Dashboard to use the Bot.",
+      "status": "Connection Status",
+      "connected": "Connected",
+      "disconnected": "Disconnected"
     },
     "actions": {
       "onboardTitle": "OpenClaw Full Onboarding Guide",
@@ -1486,6 +1500,11 @@
     "empty": "Directory is empty",
     "noMatch": "No matching files",
     "revealInFinder": "Reveal in Finder",
+    "edit": "Edit",
+    "save": "Save",
+    "saving": "Saving...",
+    "cancelEdit": "Cancel",
+    "saved": "Saved ✓",
     "groups": {
       "memory": "MEMORY (Long-term)",
       "bootstrap": "BOOTSTRAP (Init Data)",
@@ -1495,8 +1514,17 @@
       "heartbeat": "HEARTBEAT (Heartbeat)",
       "agentSessions": "Agent Sessions"
     },
+    "groupHints": {
+      "memory": "Stores the agent's long-term memory, conversation context, or specific knowledge.",
+      "bootstrap": "Initialization settings and predefined behavioral norms at startup.",
+      "identity": "Defines the agent's role, personality, permission level, and other identity features.",
+      "soul": "Stores the agent's core logic or highly sensitive configurations.",
+      "user": "User-specific preferences or interaction records.",
+      "heartbeat": "System heartbeat records and operation audit history."
+    },
     "errors": {
-      "readFailed": "Failed to read file"
+      "readFailed": "Failed to read file",
+      "saveFailed": "Failed to save file"
     }
   }
 }

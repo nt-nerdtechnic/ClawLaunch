@@ -5306,6 +5306,21 @@ ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
   }
 });
 
+ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') {
+      return { success: false, error: 'Missing file path' };
+    }
+    const resolved = filePath.startsWith('~/')
+      ? path.join(app.getPath('home'), filePath.slice(2))
+      : filePath;
+    await fs.writeFile(resolved, content, 'utf-8');
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+});
+
 // ── Activity Engine IPC ───────────────────────────────────────────────────────
 
 ipcMain.handle('activity:events:list', async (_event, payload?: string) => {

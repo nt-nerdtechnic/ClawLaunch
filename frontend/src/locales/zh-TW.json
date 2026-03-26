@@ -1231,7 +1231,16 @@
       "applyToken": "儲存頻道 Token",
       "applyingToken": "儲存中...",
       "appliedToken": "已成功套用",
-      "telegramTokenHelp": "請在 @BotFather 取得 Token。"
+      "telegramTokenHelp": "請在 @BotFather 取得 Token。",
+      "title": "通訊頻道配置 (Communication Channel)",
+      "platform": "頻道類型 (Platform)",
+      "token": "存取憑證 (Token / Key)",
+      "groupPolicy": "群組權限策略 (Group Policy)",
+      "groupAllowFrom": "允許的群組 ID (Allow From)",
+      "groupPolicyOpen": "開放 (Open) - 允許所有私聊與群聊",
+      "groupPolicyAllowlist": "白名單 (Allowlist) - 僅限指定群組",
+      "groupPolicyNone": "關閉 (None) - 僅限私聊",
+      "help": "這些設定直接影響 OpenClaw 如何與 Telegram/Discord 等平台互動。"
     },
     "telegram": {
       "management": "Telegram 終端管理",
@@ -1242,7 +1251,12 @@
       "approving": "核准中...",
       "rejecting": "拒絕中...",
       "authorizedUsers": "已授權使用者",
-      "noAuthorizedUsers": "尚無已授權的使用者。"
+      "noAuthorizedUsers": "尚無已授權的使用者。",
+      "pairingMode": "配對模式 (Pairing Mode)",
+      "pairingModeDesc": "開啟後，新使用者需在 Dashboard 核准後才能使用 Bot。",
+      "status": "連線狀態",
+      "connected": "已連線",
+      "disconnected": "未連線"
     },
     "actions": {
       "onboardTitle": "OpenClaw 完整授權導引",
@@ -1523,6 +1537,11 @@
     "empty": "目錄為空",
     "noMatch": "無符合結果",
     "revealInFinder": "在 Finder 中顯示",
+    "edit": "編輯",
+    "save": "儲存",
+    "saving": "儲存中...",
+    "cancelEdit": "取消",
+    "saved": "已儲存 ✓",
     "groups": {
       "memory": "MEMORY（長期記憶）",
       "bootstrap": "BOOTSTRAP（啟動資料）",
@@ -1532,8 +1551,17 @@
       "heartbeat": "HEARTBEAT（心跳資料）",
       "agentSessions": "Agent 會話紀錄"
     },
+    "groupHints": {
+      "memory": "儲存 Agent 的長期記憶、對話上下文或特定知識。",
+      "bootstrap": "啟動時的初始化設定與預定義行為規範。",
+      "identity": "定義 Agent 的角色、性格、權限等級等身份特徵。",
+      "soul": "存放 Agent 的核心邏輯或高度敏感的配置。",
+      "user": "與特定使用者相關的偏好設定或互動紀錄。",
+      "heartbeat": "系統的心跳記錄與操作審計歷史。"
+    },
     "errors": {
-      "readFailed": "讀取檔案失敗"
+      "readFailed": "讀取檔案失敗",
+      "saveFailed": "儲存檔案失敗"
     }
   }
 }

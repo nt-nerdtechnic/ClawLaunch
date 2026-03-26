@@ -961,7 +961,16 @@
       "applyingToken": "套用中...",
       "appliedToken": "已套用",
       "applyToken": "套用 Token",
-      "telegramTokenHelp": "Telegram Token 亦可通过下方“保存”按钮一起写入"
+      "telegramTokenHelp": "Telegram Token 亦可通过下方“保存”按钮一起写入",
+      "title": "通讯频道配置 (Communication Channel)",
+      "platform": "频道类型 (Platform)",
+      "token": "访问凭证 (Token / Key)",
+      "groupPolicy": "群组权限策略 (Group Policy)",
+      "groupAllowFrom": "允许的群组 ID (Allow From)",
+      "groupPolicyOpen": "开放 (Open) - 允许所有 private 與群聊",
+      "groupPolicyAllowlist": "白名单 (Allowlist) - 仅限指定群组",
+      "groupPolicyNone": "关闭 (None) - 仅限私聊",
+      "help": "这些设置直接影响 OpenClaw 如何与 Telegram/Discord 等平台交互。"
     },
     "telegram": {
       "management": "Telegram 配对管理",
@@ -972,7 +981,12 @@
       "approving": "核准中...",
       "rejecting": "拒绝中...",
       "authorizedUsers": "已授权使用者",
-      "noAuthorizedUsers": "尚无已授权 Telegram 账号。"
+      "noAuthorizedUsers": "尚无已授权 Telegram 账号。",
+      "pairingMode": "配对模式 (Pairing Mode)",
+      "pairingModeDesc": "开启后，新用户需在 Dashboard 核准后才能使用 Bot。",
+      "status": "连接状态",
+      "connected": "已连接",
+      "disconnected": "未连接"
     },
     "actions": {
       "onboardTitle": "OpenClaw 完整授权导引",
@@ -989,25 +1003,6 @@
       "tokenAuthTitle": "Claude Token 授权流程",
       "channelTokenUpdated": ">>> {{id}} Bot Token 已更新。",
       "terminalWaitMsg": "程序结束。按 Enter 键关闭视窗..."
-    },
-    "channel": {
-      "title": "通讯频道配置 (Communication Channel)",
-      "platform": "频道类型 (Platform)",
-      "token": "访问凭证 (Token / Key)",
-      "groupPolicy": "群组权限策略 (Group Policy)",
-      "groupAllowFrom": "允许的群组 ID (Allow From)",
-      "groupPolicyOpen": "开放 (Open) - 允许所有私聊与群聊",
-      "groupPolicyAllowlist": "白名单 (Allowlist) - 仅限指定群组",
-      "groupPolicyNone": "关闭 (None) - 仅限私聊",
-      "help": "这些设置直接影响 OpenClaw 如何与 Telegram/Discord 等平台交互。"
-    },
-    "telegram": {
-      "management": "Telegram 账号管理",
-      "pairingMode": "配对模式 (Pairing Mode)",
-      "pairingModeDesc": "开启后，新用户需在 Dashboard 核准后才能使用 Bot。",
-      "status": "连接状态",
-      "connected": "已连接",
-      "disconnected": "未连接"
     }
   },
   "main": {
@@ -1280,6 +1275,11 @@
     "empty": "目录为空",
     "noMatch": "无匹配结果",
     "revealInFinder": "在 Finder 中显示",
+    "edit": "编辑",
+    "save": "保存",
+    "saving": "保存中...",
+    "cancelEdit": "取消",
+    "saved": "已保存 ✓",
     "groups": {
       "memory": "MEMORY（长期记忆）",
       "bootstrap": "BOOTSTRAP（启动数据）",
@@ -1289,8 +1289,17 @@
       "heartbeat": "HEARTBEAT（心跳数据）",
       "agentSessions": "Agent 会话记录"
     },
+    "groupHints": {
+      "memory": "存储 Agent 的长期记忆、对话上下文或特定知识。",
+      "bootstrap": "启动时的初始化设置与预定义行为规范。",
+      "identity": "定义 Agent 的角色、性格、权限等级等身份特征。",
+      "soul": "存放 Agent 的核心逻辑或高度敏感的配置。",
+      "user": "与特定用户相关的偏好设置或互动记录。",
+      "heartbeat": "系统的心跳记录与操作审计历史。"
+    },
     "errors": {
-      "readFailed": "读取文件失败"
+      "readFailed": "读取文件失败",
+      "saveFailed": "保存文件失败"
     }
   }
 }

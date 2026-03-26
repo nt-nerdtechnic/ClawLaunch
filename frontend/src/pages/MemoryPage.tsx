@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Brain, RefreshCw, FolderOpen, FileText, FileJson, ChevronRight,
   ChevronDown, AlertCircle, Loader2, Eye, Database,
-  HardDrive, Clock, Search, X,
+  HardDrive, Clock, Search, X, Pencil, PencilOff, Save, Info,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ConfigService } from '../services/configService';
@@ -27,6 +27,7 @@ interface MemoryGroup {
   loading: boolean;
   error: string;
   exists: boolean;
+  description: string;
 }
 
 interface MemoryPageProps {
@@ -75,6 +76,13 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
   const [totalScanning, setTotalScanning] = useState(false);
   const [lastScanAt, setLastScanAt] = useState<string>('');
 
+  // ── Edit state ───────────────────────────────────────────────────────────
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   // ── Build group definitions from config ──────────────────────────────────
 
   const buildGroupDefs = useCallback((): Omit<MemoryGroup, 'files' | 'loading' | 'error' | 'exists'>[] => {
@@ -88,6 +96,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         singleFile: `${workspacePath}/MEMORY.md`,
         icon: <Brain size={15} />,
         accent: 'text-purple-400',
+        description: t('memory.groupHints.memory'),
       });
       defs.push({
         label: t('memory.groups.bootstrap'),
@@ -95,6 +104,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         singleFile: `${workspacePath}/BOOTSTRAP.md`,
         icon: <Database size={15} />,
         accent: 'text-emerald-400',
+        description: t('memory.groupHints.bootstrap'),
       });
       defs.push({
         label: t('memory.groups.identity'),
@@ -102,6 +112,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         singleFile: `${workspacePath}/IDENTITY.md`,
         icon: <HardDrive size={15} />,
         accent: 'text-sky-400',
+        description: t('memory.groupHints.identity'),
       });
       defs.push({
         label: t('memory.groups.soul'),
@@ -109,6 +120,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         singleFile: `${workspacePath}/SOUL.md`,
         icon: <FileText size={15} />,
         accent: 'text-pink-400',
+        description: t('memory.groupHints.soul'),
       });
       defs.push({
         label: t('memory.groups.user'),
@@ -116,6 +128,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         singleFile: `${workspacePath}/USER.md`,
         icon: <FileText size={15} />,
         accent: 'text-orange-400',
+        description: t('memory.groupHints.user'),
       });
       defs.push({
         label: t('memory.groups.heartbeat'),
@@ -123,6 +136,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         singleFile: `${workspacePath}/HEARTBEAT.md`,
         icon: <Clock size={15} />,
         accent: 'text-red-400',
+        description: t('memory.groupHints.heartbeat'),
       });
     }
 
@@ -204,7 +218,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
 
     setTotalScanning(true);
     // Initialize groups as loading
-    setGroups(defs.map(d => ({ ...d, files: [], loading: true, error: '', exists: false })));
+    setGroups(defs.map(d => ({ ...d, files: [], loading: true, error: '', exists: false, description: d.description || '' })));
 
     const results = await Promise.all(
       defs.map(async (def) => {
@@ -214,9 +228,6 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     );
 
     setGroups(results);
-    // Auto-expand groups that exist and have files
-    const toExpand = new Set(results.filter(g => g.exists && g.files.length > 0).map(g => g.dirPath));
-    setExpandedGroups(toExpand);
     setLastScanAt(new Date().toLocaleTimeString());
     setTotalScanning(false);
   }, [buildGroupDefs, scanDir]);
@@ -227,12 +238,52 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     }
   }, [workspacePath, configPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Save file content ─────────────────────────────────────────────────────
+
+  const saveFile = useCallback(async () => {
+    if (!selectedFile) return;
+    setIsSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    try {
+      const res = await window.electronAPI.writeFile(selectedFile.fullPath, editContent);
+      if (res.success) {
+        setFileContent(editContent);
+        setIsEditing(false);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
+        // refresh size shown in sidebar by triggering a re-scan
+        runScan();
+      } else {
+        setSaveError(res.error || t('memory.errors.saveFailed'));
+      }
+    } catch (e: any) {
+      setSaveError(e.message);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedFile, editContent, t, runScan]);
+
+  const enterEditMode = useCallback(() => {
+    setEditContent(fileContent);
+    setSaveError('');
+    setSaveSuccess(false);
+    setIsEditing(true);
+  }, [fileContent]);
+
+  const cancelEdit = useCallback(() => {
+    setIsEditing(false);
+    setSaveError('');
+  }, []);
+
   // ── Read file content ─────────────────────────────────────────────────────
 
   const openFile = useCallback(async (file: MemoryFile) => {
     setSelectedFile(file);
     setFileContent('');
     setFileError('');
+    setIsEditing(false);
+    setSaveError('');
     setFileLoading(true);
     try {
       const res = await window.electronAPI.exec(`cat ${shellQuote(file.fullPath)} 2>/dev/null`);
@@ -364,8 +415,15 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
                     : <ChevronRight size={12} className="text-slate-400 flex-shrink-0" />
                   }
                   <span className={`flex-shrink-0 ${group.accent}`}>{group.icon}</span>
-                  <span className="flex-1 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">
+                  <span className="flex-1 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate flex items-center gap-1.5">
                     {group.label}
+                    <span 
+                      className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help transition-colors"
+                      title={group.description}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Info size={11} />
+                    </span>
                   </span>
                   <span className="text-[10px] font-mono text-slate-400 ml-auto flex-shrink-0">
                     {group.loading
@@ -456,7 +514,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
                   <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">{selectedFile.fullPath}</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+              <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                 <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
                   <HardDrive size={10} /> {formatBytes(selectedFile.size)}
                 </span>
@@ -466,14 +524,57 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
                 <button
                   type="button"
                   onClick={() => void window.electronAPI.exec(`open ${shellQuote(selectedFile.fullPath.replace(/\/[^/]+$/, ''))}`)}
-                  className="text-[11px] text-slate-500 hover:text-blue-500 transition-colors flex items-center gap-1"
+                  className="p-1 text-slate-500 hover:text-blue-500 transition-colors rounded"
                   title={t('memory.revealInFinder')}
                 >
                   <FolderOpen size={12} />
                 </button>
+
+                {/* Edit toggle — only for .md and .txt files */}
+                {(selectedFile.type === 'md' || selectedFile.type === 'txt') && !isEditing && (
+                  <button
+                    type="button"
+                    onClick={enterEditMode}
+                    disabled={fileLoading}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40"
+                    title={t('memory.edit')}
+                  >
+                    <Pencil size={11} />
+                    <span>{t('memory.edit')}</span>
+                  </button>
+                )}
+
+                {isEditing && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={saveFile}
+                      disabled={isSaving}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+                    >
+                      {isSaving
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <Save size={11} />}
+                      <span>{isSaving ? t('memory.saving') : t('memory.save')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-500 hover:text-red-500 transition-colors"
+                    >
+                      <PencilOff size={11} />
+                      <span>{t('memory.cancelEdit')}</span>
+                    </button>
+                  </>
+                )}
+
+                {saveSuccess && !isEditing && (
+                  <span className="text-[11px] text-emerald-500 font-medium animate-in fade-in duration-300">{t('memory.saved')}</span>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => { setSelectedFile(null); setFileContent(''); }}
+                  onClick={() => { setSelectedFile(null); setFileContent(''); setIsEditing(false); }}
                   className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-400"
                 >
                   <X size={13} />
@@ -482,28 +583,45 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto flex flex-col">
               {fileLoading && (
                 <div className="flex items-center justify-center h-40">
                   <Loader2 size={20} className="animate-spin text-slate-400" />
                 </div>
               )}
               {!fileLoading && fileError && (
-                <div className="flex items-center gap-2 p-4 bg-red-50 dark:bg-red-950/20 rounded-xl text-red-500 text-sm">
+                <div className="m-6 flex items-center gap-2 p-4 bg-red-50 dark:bg-red-950/20 rounded-xl text-red-500 text-sm">
                   <AlertCircle size={16} />
                   {fileError}
                 </div>
               )}
-              {!fileLoading && !fileError && (
-                <pre className={`text-[12px] leading-relaxed font-mono whitespace-pre-wrap break-words ${
-                  selectedFile.type === 'md'
-                    ? 'text-slate-700 dark:text-slate-300'
-                    : selectedFile.type === 'json'
-                      ? 'text-emerald-700 dark:text-emerald-300'
-                      : 'text-slate-600 dark:text-slate-400'
-                }`}>
-                  {fileContent || <span className="text-slate-400 italic">{t('memory.emptyFile')}</span>}
-                </pre>
+              {!fileLoading && saveError && (
+                <div className="mx-6 mt-4 flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 rounded-xl text-red-500 text-xs">
+                  <AlertCircle size={13} />
+                  {saveError}
+                </div>
+              )}
+              {!fileLoading && !fileError && !isEditing && (
+                <div className="p-6">
+                  <pre className={`text-[12px] leading-relaxed font-mono whitespace-pre-wrap break-words ${
+                    selectedFile.type === 'md'
+                      ? 'text-slate-700 dark:text-slate-300'
+                      : selectedFile.type === 'json'
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : 'text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {fileContent || <span className="text-slate-400 italic">{t('memory.emptyFile')}</span>}
+                  </pre>
+                </div>
+              )}
+              {!fileLoading && !fileError && isEditing && (
+                <textarea
+                  value={editContent}
+                  onChange={e => setEditContent(e.target.value)}
+                  spellCheck={false}
+                  className="flex-1 w-full h-full min-h-[400px] p-6 text-[12px] leading-relaxed font-mono bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 resize-none outline-none border-0 focus:ring-0"
+                  style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                />
               )}
             </div>
           </>
