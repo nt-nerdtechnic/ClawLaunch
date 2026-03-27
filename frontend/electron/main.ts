@@ -1292,125 +1292,185 @@ const extractRunIdFromSendPayload = (payload: any): string => {
   return typeof maybeRunId === 'string' ? maybeRunId : '';
 };
 
-const computeDeltaText = (previous: string, current: string): string => {
-  if (!current) return '';
-  if (!previous) return current;
-  if (current.startsWith(previous)) {
-    return current.slice(previous.length);
-  }
+// ── Gateway WebSocket Client ─────────────────────────────────────────────────
+// Replaces CLI polling: connects directly to Gateway for real-time streaming.
+class GatewayWSClient {
+  private ws: WebSocket | null = null;
+  private pending = new Map<string, {
+    resolve: (v: any) => void;
+    reject: (e: Error) => void;
+    timeoutId: ReturnType<typeof setTimeout>;
+  }>();
+  private reqCounter = 0;
+  private chatListeners = new Map<string, (payload: any) => void>();
+  private connectNonce: string | null = null;
+  private connectSent = false;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private token: string | undefined;
+  onConnected?: () => void;
+  onDisconnected?: () => void;
 
-  const maxPrefix = Math.min(previous.length, current.length);
-  let sameCount = 0;
-  while (sameCount < maxPrefix && previous[sameCount] === current[sameCount]) {
-    sameCount++;
-  }
-  return current.slice(sameCount);
-};
+  // ── Protocol: { type:'req', id, method, params } / { type:'res', id, ok, payload, error } / { type:'event', event, payload }
+  connect(wsUrl: string, token?: string): void {
+    this.token = token;
+    this.connectNonce = null;
+    this.connectSent = false;
 
-const fetchLatestAssistantText = async (runtimePrefix: string, sessionKey: string, agentId?: string) => {
-  // OpenClaw chat.history API typically expects only 'sessionKey' at root.
-  // If agentId is provided, we should ensure the sessionKey reflects the agent context 
-  // if it's not already part of the key. However, for the purpose of fixing the 
-  // 'unexpected property' error, we simply provide the sessionKey.
-  const historyParams: Record<string, any> = { sessionKey };
-
-  const historyCommand = `${runtimePrefix} gateway call chat.history --params ${shellQuote(JSON.stringify(historyParams))}`;
-  const historyRes = await runShellCommand(historyCommand);
-  if (historyRes.code !== 0) {
-    return { ok: false as const, text: '', error: historyRes.stderr || 'chat.history failed' };
-  }
-
-  const parsed = parseGatewayCallStdoutJson(historyRes.stdout);
-  if (!parsed) {
-    return { ok: false as const, text: '', error: 'chat.history returned non-JSON output' };
-  }
-
-  return { ok: true as const, text: extractLatestAssistantTextFromHistoryPayload(parsed), error: '' };
-};
-
-const waitForAssistantFinalByHistory = async ({
-  request,
-  runtimePrefix,
-  baseline,
-  emitChunk,
-}: {
-  request: OpenClawChatInvokeRequest;
-  runtimePrefix: string;
-  baseline: string;
-  emitChunk: (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => void;
-}) => {
-  const pollIntervalMs = 550;
-  const stableWindowMs = 1500;
-  const firstTokenTimeoutMs = 12000;
-  const timeoutMs = 65000;
-  const startAt = Date.now();
-  let lastObserved = baseline;
-  let lastChangeAt = Date.now();
-  let hasResponseDelta = false;
-
-  while (Date.now() - startAt < timeoutMs) {
-    const chatState = activeChatRequests.get(request.requestId);
-    if (!chatState) {
-      emitChunk({ done: true, mode: 'gateway', reason: '' });
+    // Use globalThis.WebSocket (Node 22+) or fall back to nothing (Electron has it built-in)
+    const WS: any = (globalThis as any).WebSocket;
+    if (!WS) {
+      emitShellStdout('[gateway-ws] WebSocket not available in this environment\n', 'stderr');
+      this.onDisconnected?.();
       return;
     }
 
-    if (chatState.aborted) {
-      emitChunk({ done: true, mode: 'gateway', reason: '' });
-      return;
-    }
+    const ws: WebSocket = new WS(wsUrl);
+    this.ws = ws;
 
-    const historyRes = await fetchLatestAssistantText(runtimePrefix, request.sessionKey, request.agentId);
-    if (!historyRes.ok) {
-      emitChunk({
-        error: historyRes.error,
-        done: true,
-        mode: 'gateway',
-        reason: '',
-      });
-      return;
-    }
+    ws.addEventListener('open', () => {
+      // Queue a fallback connect in case server doesn't send challenge
+      this.connectTimer = setTimeout(() => { void this.sendConnect(); }, 1000);
+    });
 
-    if (historyRes.text !== lastObserved) {
-      const delta = computeDeltaText(lastObserved, historyRes.text);
-      lastObserved = historyRes.text;
-      lastChangeAt = Date.now();
-      hasResponseDelta = true;
-      if (delta) {
-        emitChunk({ delta, mode: 'gateway', reason: '' });
+    ws.addEventListener('message', (event: MessageEvent) => {
+      let frame: any;
+      try { frame = JSON.parse(String(event.data)); } catch { return; }
+      this.handleFrame(frame);
+    });
+
+    ws.addEventListener('close', () => {
+      if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+      this.ws = null;
+      this.rejectAllPending('WebSocket disconnected');
+      this.onDisconnected?.();
+    });
+
+    ws.addEventListener('error', (err: any) => {
+      emitShellStdout(`[gateway-ws] socket error: ${String(err?.message || err)}\n`, 'stderr');
+    });
+  }
+
+  disconnect(): void {
+    if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+    const ws = this.ws;
+    this.ws = null;
+    try { (ws as any)?.close(); } catch {}
+    this.rejectAllPending('Client disconnected');
+  }
+
+  /** Send a request and wait for matching { type:'res' } response */
+  request<T = unknown>(method: string, params?: unknown): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (!this.isConnected) {
+        reject(new Error('Gateway WebSocket not connected'));
+        return;
       }
+      const id = `r${++this.reqCounter}-${Date.now()}`;
+      const timeoutId = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Gateway request timed out: ${method}`));
+      }, 30000);
+      this.pending.set(id, { resolve: resolve as (v: any) => void, reject, timeoutId });
+      try {
+        (this.ws as any).send(JSON.stringify({ type: 'req', id, method, params: params ?? null }));
+      } catch (e: any) {
+        clearTimeout(timeoutId);
+        this.pending.delete(id);
+        reject(new Error(`Gateway send failed: ${e.message}`));
+      }
+    });
+  }
+
+  subscribeChatEvent(sessionKey: string, listener: (payload: any) => void): () => void {
+    this.chatListeners.set(sessionKey, listener);
+    return () => this.chatListeners.delete(sessionKey);
+  }
+
+  get isConnected(): boolean {
+    const ws = this.ws as any;
+    if (!ws) return false;
+    return ws.readyState === 1; // WebSocket.OPEN
+  }
+
+  private async sendConnect(): Promise<void> {
+    if (this.connectSent) return;
+    this.connectSent = true;
+    if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+
+    const params: Record<string, any> = {
+      minProtocol: 3,
+      maxProtocol: 3,
+      client: {
+        id: 'cli',
+        version: app.getVersion() || 'dev',
+        platform: process.platform,
+        mode: 'cli',
+      },
+      role: 'operator',
+      scopes: ['operator.admin', 'operator.approvals'],
+      caps: [],
+      auth: this.token ? { token: this.token } : undefined,
+    };
+
+    try {
+      await this.request<any>('connect', params);
+      this.onConnected?.();
+    } catch (e: any) {
+      emitShellStdout(`[gateway-ws] connect request rejected: ${e.message}\n`, 'stderr');
+      (this.ws as any)?.close(4008, 'connect failed');
+    }
+  }
+
+  private handleFrame(frame: any): void {
+    if (frame.type === 'event') {
+      const evt = frame.event;
+      if (evt === 'connect.challenge') {
+        const nonce = typeof frame.payload?.nonce === 'string' ? frame.payload.nonce : null;
+        if (nonce) {
+          this.connectNonce = nonce;
+          void this.sendConnect();
+        }
+        return;
+      }
+      if (evt === 'chat') {
+        this.dispatchChatEvent(frame.payload);
+      }
+      return;
     }
 
-    if (!hasResponseDelta && Date.now() - startAt >= firstTokenTimeoutMs) {
-      const finalHistory = await fetchLatestAssistantText(runtimePrefix, request.sessionKey, request.agentId);
-      if (finalHistory.ok && finalHistory.text !== lastObserved) {
-        const finalDelta = computeDeltaText(lastObserved, finalHistory.text);
-        lastObserved = finalHistory.text;
-        if (finalDelta) {
-          emitChunk({ delta: finalDelta, mode: 'gateway', reason: '' });
+    if (frame.type === 'res') {
+      const pending = this.pending.get(frame.id);
+      if (pending) {
+        clearTimeout(pending.timeoutId);
+        this.pending.delete(frame.id);
+        if (frame.ok) {
+          pending.resolve(frame.payload ?? null);
+        } else {
+          pending.reject(new Error(String(frame.error?.message || frame.error || 'Gateway error')));
         }
       }
-      emitChunk({ done: true, mode: 'gateway', reason: '' });
       return;
     }
-
-    if (hasResponseDelta && Date.now() - lastChangeAt >= stableWindowMs) {
-      const finalHistory = await fetchLatestAssistantText(runtimePrefix, request.sessionKey, request.agentId);
-      if (finalHistory.ok && finalHistory.text !== lastObserved) {
-        const finalDelta = computeDeltaText(lastObserved, finalHistory.text);
-        lastObserved = finalHistory.text;
-        if (finalDelta) {
-          emitChunk({ delta: finalDelta, mode: 'gateway', reason: '' });
-        }
-      }
-      emitChunk({ done: true, mode: 'gateway', reason: '' });
-      return;
-    }
-
-    await sleep(pollIntervalMs);
   }
 
-  emitChunk({ done: true, mode: 'gateway', reason: '' });
+  private dispatchChatEvent(payload: any): void {
+    const sessionKey = String(payload?.sessionKey || '');
+    if (sessionKey && this.chatListeners.has(sessionKey)) {
+      this.chatListeners.get(sessionKey)!(payload);
+    } else if (!sessionKey) {
+      for (const listener of this.chatListeners.values()) {
+        listener(payload);
+      }
+    }
+  }
+
+  private rejectAllPending(reason: string): void {
+    for (const [, pending] of this.pending) {
+      clearTimeout(pending.timeoutId);
+      pending.reject(new Error(reason));
+    }
+    this.pending.clear();
+  }
 }
 
 async function resolveOpenClawRuntime() {
@@ -1447,8 +1507,78 @@ async function resolveOpenClawRuntime() {
     configFilePath,
     gatewayUrlArg,
     gatewayAuthArg,
+    gatewayPort: String(openclawConfig?.gateway?.port ?? '').trim(),
+    gatewayToken: gatewayCredentials.token || '',
     openclawPrefix: `${cdPrefix}${envPrefix}pnpm openclaw`,
   };
+}
+
+// ── Gateway WebSocket singleton ───────────────────────────────────────────────
+let gwsClient: GatewayWSClient | null = null;
+
+async function ensureGatewayWsConnected(): Promise<{ ok: boolean; error?: string }> {
+  if (gwsClient?.isConnected) return { ok: true };
+
+  // Disconnect any stale client before creating a new one
+  gwsClient?.disconnect();
+  gwsClient = null;
+
+  const runtime = await resolveOpenClawRuntime();
+  const { gatewayPort, gatewayToken } = runtime;
+
+  if (!gatewayPort || !/^\d+$/.test(gatewayPort)) {
+    const err = 'No gateway port configured in openclaw.json (gateway.port)';
+    emitShellStdout(`[gateway-ws] ${err}\n`, 'stderr');
+    return { ok: false, error: err };
+  }
+
+  const portNum = Number.parseInt(gatewayPort, 10);
+  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    return { ok: false, error: `Invalid gateway port: ${gatewayPort}` };
+  }
+
+  const wsUrl = `ws://127.0.0.1:${gatewayPort}`;
+  emitShellStdout(`[gateway-ws] connecting to ${wsUrl}${gatewayToken ? ' (with token)' : ''}\n`, 'stdout');
+
+  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    const client = new GatewayWSClient();
+    let settled = false;
+
+    const settle = (result: { ok: boolean; error?: string }) => {
+      if (settled) return;
+      settled = true;
+      if (result.ok) {
+        gwsClient = client;
+        gwsClient.onDisconnected = () => {
+          emitShellStdout('[gateway-ws] disconnected\n', 'stderr');
+          sendToRenderer('openclaw:gateway.status', { connected: false });
+        };
+        emitShellStdout('[gateway-ws] connected\n', 'stdout');
+        sendToRenderer('openclaw:gateway.status', { connected: true });
+      } else {
+        emitShellStdout(`[gateway-ws] failed: ${result.error}\n`, 'stderr');
+        client.disconnect();
+      }
+      resolve(result);
+    };
+
+    // 15 second timeout to accommodate Gateway startup delay + challenge handshake
+    const timer = setTimeout(() => {
+      settle({ ok: false, error: 'WebSocket connection timeout (15s)' });
+    }, 15000);
+
+    client.onConnected = () => {
+      clearTimeout(timer);
+      settle({ ok: true });
+    };
+
+    client.onDisconnected = () => {
+      clearTimeout(timer);
+      settle({ ok: false, error: `WebSocket connection refused (port ${gatewayPort})` });
+    };
+
+    client.connect(wsUrl, gatewayToken || undefined);
+  });
 }
 
 function validateVersionRef(raw: string): string {
@@ -1519,6 +1649,8 @@ async function resolveDevServerUrl(): Promise<string> {
 function killAllSubprocesses() {
   stopGatewayWatchdog('kill-all-subprocesses');
   stopGatewayHttpWatchdog('kill-all-subprocesses');
+  gwsClient?.disconnect();
+  gwsClient = null;
   for (const proc of activeProcesses) {
     try {
       if (!proc.killed) {
@@ -4906,14 +5038,6 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
   }
 
   const messageId = `${request.requestId}-assistant`;
-  const params: Record<string, any> = {
-    sessionKey: request.sessionKey,
-    message: request.message,
-    deliver: Boolean(request.deliver),
-    idempotencyKey: request.requestId,
-  };
-  // agentId should not be passed at the root of params for chat.send
-  // if (request.agentId) params.agentId = request.agentId;
 
   if (request.forceLocal) {
     return {
@@ -4939,35 +5063,24 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     };
   }
 
-  const mode: 'gateway' = 'gateway';
-  const reason = '';
-
-  const gatewayCommand = `${runtime.openclawPrefix} gateway call chat.send --params ${shellQuote(JSON.stringify(params))}`;
-  const selectedCommand = gatewayCommand;
-
-  const emitChunk = (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => {
-    sendToRenderer('openclaw:chat.chunk', {
-      requestId: request.requestId,
-      messageId,
-      delta: payload.delta || '',
-      done: payload.done,
-      error: payload.error,
-      mode: payload.mode,
-      reason: payload.reason,
-    });
-  };
-
-  const baselineRes = await fetchLatestAssistantText(runtime.openclawPrefix, request.sessionKey, request.agentId);
-  if (!baselineRes.ok) {
+  const wsResult = await ensureGatewayWsConnected();
+  if (!wsResult.ok) {
     return {
       success: false,
       requestId: request.requestId,
       messageId,
-      mode,
-      reason,
-      error: baselineRes.error,
+      mode: 'gateway' as const,
+      reason: 'gateway-ws-unavailable',
+      error: wsResult.error || 'Cannot connect to gateway WebSocket',
     };
   }
+
+  const params: Record<string, any> = {
+    sessionKey: request.sessionKey,
+    message: request.message,
+    deliver: Boolean(request.deliver),
+    idempotencyKey: request.requestId,
+  };
 
   activeChatRequests.set(request.requestId, {
     sessionKey: request.sessionKey,
@@ -4975,126 +5088,74 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     aborted: false,
   });
 
-  if (!request.stream) {
-    const sendRes = await runShellCommand(selectedCommand);
-    if (sendRes.code !== 0) {
-      activeChatRequests.delete(request.requestId);
-      return {
-        success: false,
-        requestId: request.requestId,
-        messageId,
-        mode,
-        reason,
-        error: sendRes.stderr || 'Chat invoke failed',
-      };
-    }
+  const emitChunk = (payload: { delta?: string; done?: boolean; state?: string; error?: string }) => {
+    sendToRenderer('openclaw:chat.chunk', {
+      requestId: request.requestId,
+      messageId,
+      delta: payload.delta || '',
+      done: payload.done,
+      state: payload.state,
+      error: payload.error,
+      mode: 'gateway' as const,
+      reason: '',
+    });
+  };
 
-    const sendParsed = parseGatewayCallStdoutJson(sendRes.stdout);
-    const runId = extractRunIdFromSendPayload(sendParsed);
+  // Subscribe to WebSocket chat events for this session
+  const unsubscribe = gwsClient!.subscribeChatEvent(request.sessionKey, (payload: any) => {
+    const chatState = activeChatRequests.get(request.requestId);
+    if (!chatState) return;
+    if (chatState.aborted) {
+      unsubscribe();
+      activeChatRequests.delete(request.requestId);
+      return;
+    }
+    const state = String(payload?.state || '');
+    if (state === 'delta') {
+      const delta = extractMessageText(payload?.message);
+      if (delta) emitChunk({ delta, state: 'delta' });
+    } else if (state === 'final') {
+      unsubscribe();
+      emitChunk({ done: true, state: 'final' });
+      activeChatRequests.delete(request.requestId);
+    } else if (state === 'aborted') {
+      unsubscribe();
+      emitChunk({ done: true, state: 'aborted' });
+      activeChatRequests.delete(request.requestId);
+    } else if (state === 'error') {
+      const errorMsg = String(payload?.error || payload?.message || 'Chat error');
+      unsubscribe();
+      emitChunk({ error: errorMsg, done: true, state: 'error' });
+      activeChatRequests.delete(request.requestId);
+    }
+  });
+
+  try {
+    const sendResult = await gwsClient!.request<any>('chat.send', params);
+    const runId = extractRunIdFromSendPayload(sendResult);
     if (runId) {
       const state = activeChatRequests.get(request.requestId);
       if (state) activeChatRequests.set(request.requestId, { ...state, runId });
     }
-
-    const timeoutMs = 65000;
-    const firstTokenTimeoutMs = 12000;
-    const stableWindowMs = 1500;
-    const startAt = Date.now();
-    let finalText = baselineRes.text;
-    let lastChangeAt = Date.now();
-    let hasResponseDelta = false;
-    while (Date.now() - startAt < timeoutMs) {
-      const state = activeChatRequests.get(request.requestId);
-      if (!state || state.aborted) break;
-
-      const historyRes = await fetchLatestAssistantText(runtime.openclawPrefix, request.sessionKey, request.agentId);
-      if (!historyRes.ok) {
-        activeChatRequests.delete(request.requestId);
-        return {
-          success: false,
-          requestId: request.requestId,
-          messageId,
-          mode,
-          reason,
-          error: historyRes.error,
-        };
-      }
-
-      if (historyRes.text !== finalText) {
-        finalText = historyRes.text;
-        lastChangeAt = Date.now();
-        hasResponseDelta = true;
-      }
-
-      if (!hasResponseDelta && Date.now() - startAt >= firstTokenTimeoutMs) {
-        break;
-      }
-
-      if (hasResponseDelta && Date.now() - lastChangeAt >= stableWindowMs) {
-        break;
-      }
-
-      await sleep(550);
-    }
-
-    const finalHistoryRes = await fetchLatestAssistantText(runtime.openclawPrefix, request.sessionKey, request.agentId);
-    if (finalHistoryRes.ok && finalHistoryRes.text !== finalText) {
-      finalText = finalHistoryRes.text;
-    }
-
+  } catch (e: any) {
+    unsubscribe();
     activeChatRequests.delete(request.requestId);
-
-    return {
-      success: true,
-      requestId: request.requestId,
-      messageId,
-      content: finalText,
-      mode,
-      reason,
-    };
-  }
-
-  const sendRes = await runShellCommand(selectedCommand);
-  if (sendRes.code !== 0) {
-    activeChatRequests.delete(request.requestId);
-    emitChunk({
-      error: sendRes.stderr || 'Chat invoke failed',
-      done: true,
-      mode,
-      reason,
-    });
     return {
       success: false,
       requestId: request.requestId,
       messageId,
-      mode,
-      reason,
-      error: sendRes.stderr || 'Chat invoke failed',
+      mode: 'gateway' as const,
+      reason: '',
+      error: e.message || 'Failed to send chat message',
     };
   }
-
-  const sendParsed = parseGatewayCallStdoutJson(sendRes.stdout);
-  const runId = extractRunIdFromSendPayload(sendParsed);
-  if (runId) {
-    const state = activeChatRequests.get(request.requestId);
-    if (state) activeChatRequests.set(request.requestId, { ...state, runId });
-  }
-
-  waitForAssistantFinalByHistory({
-    request,
-    runtimePrefix: runtime.openclawPrefix,
-    baseline: baselineRes.text,
-    emitChunk,
-  }).finally(() => {
-    activeChatRequests.delete(request.requestId);
-  });
 
   return {
     success: true,
     requestId: request.requestId,
     messageId,
-    mode,
-    reason,
+    mode: 'gateway' as const,
+    reason: '',
   };
 });
 
@@ -5106,22 +5167,33 @@ ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
 
   activeChatRequests.set(requestId, { ...chatState, aborted: true });
 
+  if (!gwsClient?.isConnected) {
+    return { success: false, error: 'Gateway WebSocket not connected' };
+  }
+
   try {
-    const runtime = await resolveOpenClawRuntime();
     const abortParams: Record<string, any> = { sessionKey: chatState.sessionKey };
     if (chatState.runId) abortParams.runId = chatState.runId;
     if (chatState.agentId) abortParams.agentId = chatState.agentId;
 
-    const abortCommand = `${runtime.openclawPrefix} gateway call chat.abort --params ${shellQuote(JSON.stringify(abortParams))}`;
-    const abortRes = await runShellCommand(abortCommand);
-    if (abortRes.code !== 0) {
-      return { success: false, error: abortRes.stderr || 'Failed to abort chat run' };
-    }
-
+    await gwsClient.request('chat.abort', abortParams);
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
+});
+
+// ── openclaw:gateway.ws-ensure ────────────────────────────────────────────────
+// Called by renderer when Core starts, to proactively establish WebSocket.
+ipcMain.handle('openclaw:gateway.ws-ensure', async () => {
+  const result = await ensureGatewayWsConnected();
+  return { connected: result.ok, error: result.error };
+});
+
+// ── openclaw:gateway.ws-status ────────────────────────────────────────────────
+// Returns current WebSocket connection status without attempting to connect.
+ipcMain.handle('openclaw:gateway.ws-status', () => {
+  return { connected: gwsClient?.isConnected ?? false };
 });
 
 // ── openclaw:sessions.list ────────────────────────────────────────────────────
@@ -5437,6 +5509,8 @@ ipcMain.handle('activity:watch:restart', async (_event, payload?: string) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.on('before-quit', () => {
+  gwsClient?.disconnect();
+  gwsClient = null;
   killAllSubprocesses();
   if (activeLockFilePath) {
     try { unlinkSync(activeLockFilePath); } catch {}

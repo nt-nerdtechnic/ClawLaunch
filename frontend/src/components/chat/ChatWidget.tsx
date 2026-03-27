@@ -64,6 +64,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     setActiveChatSession,
     setActiveChatAgent,
     resetChatMessages,
+    setGatewayWsConnected,
   } = useStore();
 
   const [inputValue, setInputValue] = useState('');
@@ -103,13 +104,40 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
         appendChatChunk(messageId, chunk.delta, chat.activeSessionKey, chat.activeAgentId);
       }
 
-      if (chunk.done) {
+      const isDone = chunk.done || (chunk.state && chunk.state !== 'delta');
+      if (isDone) {
         completeChatMessage(messageId);
       }
     });
 
     return () => off();
   }, [appendChatChunk, chat.activeAgentId, chat.activeSessionKey, completeChatMessage, markChatMessageError, requestMap, setChatRuntimeMode]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onGatewayStatus) return;
+    const off = window.electronAPI.onGatewayStatus((status) => {
+      setGatewayWsConnected(status.connected);
+    });
+    return () => off();
+  }, [setGatewayWsConnected]);
+
+  // Proactively connect WebSocket when Core starts; retry every 5s until connected
+  useEffect(() => {
+    if (!running || !window.electronAPI?.ensureGatewayWs) return;
+
+    let cancelled = false;
+    const tryConnect = async () => {
+      if (cancelled || chat.gatewayWsConnected) return;
+      const result = await window.electronAPI.ensureGatewayWs();
+      if (!result.connected && !cancelled) {
+        // Retry after 5 seconds
+        setTimeout(() => { void tryConnect(); }, 5000);
+      }
+    };
+
+    void tryConnect();
+    return () => { cancelled = true; };
+  }, [running, chat.gatewayWsConnected]);
 
   useEffect(() => {
     if (!chat.isOpen) return;
@@ -534,6 +562,12 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 <WifiOff size={12} />
                 {t('chat.fallbackLocal')}
+              </div>
+            )}
+            {running && !chat.gatewayWsConnected && (
+              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+                <WifiOff size={12} />
+                {t('chat.wsDisconnected', 'WebSocket 未連線')}
               </div>
             )}
             {!running && (

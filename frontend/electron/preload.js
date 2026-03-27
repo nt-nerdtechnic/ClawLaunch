@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanSessions: (payload) => ipcRenderer.invoke('usage:scan-sessions', payload),
   invokeChat: (request) => ipcRenderer.invoke('openclaw:chat.invoke', request),
   abortChat: (requestId) => ipcRenderer.invoke('openclaw:chat.abort', requestId),
+  ensureGatewayWs: () => ipcRenderer.invoke('openclaw:gateway.ws-ensure'),
   listChatSessions: () => ipcRenderer.invoke('openclaw:sessions.list'),
   loadChatSession: (payload) => ipcRenderer.invoke('openclaw:session.load', payload),
   listActivityEvents: (payload) => ipcRenderer.invoke('activity:events:list', payload ? JSON.stringify(payload) : undefined),
@@ -32,6 +33,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('openclaw:chat.chunk', listener);
     return () => {
       ipcRenderer.removeListener('openclaw:chat.chunk', listener);
+    };
+  },
+  onGatewayStatus: (callback) => {
+    const listener = (_event, value) => callback(value);
+    ipcRenderer.on('openclaw:gateway.status', listener);
+    return () => {
+      ipcRenderer.removeListener('openclaw:gateway.status', listener);
     };
   },
 });

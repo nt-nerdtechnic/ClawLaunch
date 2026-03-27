@@ -26,6 +26,7 @@ interface ChatState {
   activeSessionKey: string;
   activeAgentId: string;
   messages: ChatMessage[];
+  gatewayWsConnected: boolean;
 }
 
 // Skill definitions (shared between core or workspace layer)
@@ -235,6 +236,7 @@ interface AppState {
   setChatRuntimeMode: (mode: 'gateway' | 'local', reason?: string) => void;
   setActiveChatSession: (sessionKey: string) => void;
   setActiveChatAgent: (agentId: string) => void;
+  setGatewayWsConnected: (connected: boolean) => void;
   addChatMessage: (message: ChatMessage) => void;
   appendChatChunk: (id: string, chunk: string, sessionKey: string, agentId: string) => void;
   completeChatMessage: (id: string, patch?: Partial<ChatMessage>) => void;
@@ -363,7 +365,8 @@ export const useStore = create<AppState>((set) => ({
     modeReason: '',
     activeSessionKey: 'agent:main:local:default',
     activeAgentId: 'main',
-    messages: []
+    messages: [],
+    gatewayWsConnected: false,
   },
   setChatOpen: (open) => set((state) => ({
     chat: {
@@ -391,6 +394,9 @@ export const useStore = create<AppState>((set) => ({
       ...state.chat,
       activeAgentId: agentId || state.chat.activeAgentId,
     }
+  })),
+  setGatewayWsConnected: (connected) => set((state) => ({
+    chat: { ...state.chat, gatewayWsConnected: connected },
   })),
   addChatMessage: (message) => set((state) => {
     const shouldIncreaseUnread = !state.chat.isOpen && message.role === 'assistant';

@@ -36,6 +36,7 @@ declare global {
     messageId: string;
     delta: string;
     done?: boolean;
+    state?: 'delta' | 'final' | 'aborted' | 'error';
     error?: string;
     mode?: 'gateway' | 'local';
     reason?: string;
@@ -77,9 +78,11 @@ declare global {
       }) => Promise<{ success: boolean; runtimeDir?: string; acks?: Record<string, { ackedAt: string; expiresAt: string }>; error?: string }>;
       invokeChat: (request: OpenClawChatRequest) => Promise<OpenClawChatResult>;
       abortChat: (requestId: string) => Promise<{ success: boolean; error?: string }>;
+      ensureGatewayWs: () => Promise<{ connected: boolean; error?: string }>;
       listChatSessions: () => Promise<{ code: number; stdout: string; stderr: string }>;
       loadChatSession: (payload: { sessionKey: string; agentId: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
       onChatChunk: (callback: (chunk: OpenClawChatChunk) => void) => () => void;
+      onGatewayStatus: (callback: (status: { connected: boolean }) => void) => () => void;
     };
   }
 }
