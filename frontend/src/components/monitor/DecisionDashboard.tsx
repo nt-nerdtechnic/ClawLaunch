@@ -311,10 +311,13 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
 
   const healthSummary = useMemo(() => {
     const configReadyCount = [config.corePath, config.configPath, config.workspacePath].filter((item) => String(item || '').trim() !== '').length;
+    const allPathsEmpty = configReadyCount === 0;
 
-    const gatewayState = running ? 'healthy' : 'degraded';
-    const configState = configReadyCount >= 3 ? 'healthy' : configReadyCount > 0 ? 'degraded' : 'down';
-    const runtimeState = Number.isFinite(snapshotAgeMs) ? (snapshotAgeMs <= 90_000 ? 'healthy' : 'degraded') : 'down';
+    const gatewayState = !config.corePath?.trim() ? 'not_configured' : running ? 'healthy' : 'degraded';
+    const configState = configReadyCount >= 3 ? 'healthy' : configReadyCount > 0 ? 'degraded' : 'not_configured';
+    const runtimeState = Number.isFinite(snapshotAgeMs)
+      ? (snapshotAgeMs <= 90_000 ? 'healthy' : 'degraded')
+      : allPathsEmpty ? 'not_configured' : 'down';
 
     return {
       gateway: {
@@ -345,59 +348,70 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     return [
       {
         key: 'node',
+        group: 'env',
         name: t('monitor.decision.connection.node', 'Node.js Runtime'),
         status: envStatus.node === 'ok' ? 'connected' : 'degraded',
       },
       {
         key: 'pnpm',
+        group: 'env',
         name: t('monitor.decision.connection.pnpm', 'pnpm Toolchain'),
         status: envStatus.pnpm === 'ok' ? 'connected' : 'degraded',
       },
       {
         key: 'core-path',
+        group: 'paths',
         name: t('monitor.decision.connection.corePath', 'Core Path'),
-        status: String(config.corePath || '').trim() ? 'connected' : 'degraded',
+        status: String(config.corePath || '').trim() ? 'connected' : 'not_configured',
       },
       {
         key: 'config-path',
+        group: 'paths',
         name: t('monitor.decision.connection.configPath', 'Config Path'),
-        status: String(config.configPath || '').trim() ? 'connected' : 'degraded',
+        status: String(config.configPath || '').trim() ? 'connected' : 'not_configured',
       },
       {
         key: 'workspace-path',
+        group: 'paths',
         name: t('monitor.decision.connection.workspacePath', 'Workspace Path'),
-        status: String(config.workspacePath || '').trim() ? 'connected' : 'degraded',
+        status: String(config.workspacePath || '').trim() ? 'connected' : 'not_configured',
       },
       {
         key: 'sessions',
+        group: 'services',
         name: t('monitor.decision.connection.sessions', 'Session Feed'),
-        status: sessions.length > 0 ? 'connected' : 'degraded',
+        status: !running ? 'not_configured' : sessions.length > 0 ? 'connected' : 'degraded',
       },
       {
         key: 'approvals',
+        group: 'services',
         name: t('monitor.decision.connection.approvals', 'Approvals Feed'),
-        status: snapshot ? 'connected' : 'degraded',
+        status: !running ? 'not_configured' : snapshot ? 'connected' : 'degraded',
         meta: snapshot ? t('monitor.decision.connection.approvalsCount', { count: approvals.length }) : undefined,
       },
       {
         key: 'task-store',
+        group: 'services',
         name: t('monitor.decision.connection.taskStore', 'Task Store'),
-        status: hasTaskStore ? 'connected' : 'degraded',
+        status: !running ? 'not_configured' : hasTaskStore ? 'connected' : 'degraded',
       },
       {
         key: 'budget',
+        group: 'services',
         name: t('monitor.decision.connection.budget', 'Budget Summary'),
-        status: hasBudget ? 'connected' : 'degraded',
+        status: !running ? 'not_configured' : hasBudget ? 'connected' : 'degraded',
       },
       {
         key: 'heartbeat',
+        group: 'services',
         name: t('monitor.decision.connection.heartbeat', 'Config Audit Log'),
-        status: auditLog.state === 'connected' ? 'connected' : auditLog.state === 'loading' ? 'degraded' : 'degraded',
+        status: !running ? 'not_configured' : auditLog.state === 'connected' ? 'connected' : 'degraded',
       },
     ];
   }, [auditLog.state, config.configPath, config.corePath, config.workspacePath, envStatus.node, envStatus.pnpm, snapshot, t]);
 
   const connectedCount = connectionRows.filter((row) => row.status === 'connected').length;
+  const configuredRowsCount = connectionRows.filter((row) => row.status !== 'not_configured').length;
 
   return (
     <div className="space-y-6">
@@ -424,10 +438,18 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                         ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
                         : item.state === 'degraded'
                           ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-                          : 'bg-red-500/10 text-red-600 border-red-500/30'
+                          : item.state === 'not_configured'
+                            ? 'bg-slate-100 text-slate-400 border-slate-300 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-600'
+                            : 'bg-red-500/10 text-red-600 border-red-500/30'
                     }`}
                   >
-                    {item.state}
+                    {item.state === 'not_configured'
+                      ? t('monitor.decision.status.notConfigured')
+                      : item.state === 'healthy'
+                        ? t('monitor.decision.status.connected')
+                        : item.state === 'degraded'
+                          ? t('monitor.decision.status.degraded')
+                          : item.state}
                   </span>
                 </div>
                 <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{item.detail}</p>
@@ -540,27 +562,46 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
               {t('monitor.decision.connectionHealth')}
             </h3>
             <div className="inline-flex items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-sky-500">
-              {t('monitor.decision.connectedRatio', { connected: connectedCount, total: connectionRows.length })}
+            {t('monitor.decision.connectedRatio', { connected: connectedCount, total: configuredRowsCount })}
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {connectionRows.map((row) => (
-              <div key={row.key} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 px-3 py-2.5 flex items-center justify-between">
-                <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  {row.name}
-                  {row.meta ? <span className="ml-1 text-[11px] text-slate-400">({row.meta})</span> : null}
+          <div className="space-y-4">
+            {(['env', 'paths', 'services'] as const).map((group) => {
+              const rows = connectionRows.filter((r) => r.group === group);
+              const groupKey = `monitor.decision.connection.group${group.charAt(0).toUpperCase()}${group.slice(1)}`;
+              return (
+                <div key={group}>
+                  <div className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    {t(groupKey)}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {rows.map((row) => (
+                      <div key={row.key} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 px-3 py-2.5 flex items-center justify-between">
+                        <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                          {row.name}
+                          {row.meta ? <span className="ml-1 text-[11px] text-slate-400">({row.meta})</span> : null}
+                        </div>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
+                            row.status === 'connected'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                              : row.status === 'not_configured'
+                                ? 'bg-slate-100 text-slate-400 border-slate-300 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-600'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                          }`}
+                        >
+                          {row.status === 'connected'
+                            ? t('monitor.decision.status.connected')
+                            : row.status === 'not_configured'
+                              ? t('monitor.decision.status.notConfigured')
+                              : t('monitor.decision.status.degraded')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
-                    row.status === 'connected'
-                      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                      : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-                  }`}
-                >
-                  {row.status === 'connected' ? t('monitor.decision.status.connected') : t('monitor.decision.status.degraded')}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>

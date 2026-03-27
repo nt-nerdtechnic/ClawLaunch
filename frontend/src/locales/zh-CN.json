@@ -25,7 +25,7 @@
       "skills": "技能管理",
       "settings": "配置编辑",
       "launcherSettings": "启动器配置",
-      "runtimeSettings": "Runtime 配置",
+      "runtimeSettings": "龙虾配置",
       "memory": "记忆与数据"
     },
     "headers": {
@@ -58,7 +58,8 @@
       "missingPaths": "以下路径尚未设置：{{paths}}。",
       "reRunWizard": "若路径已填入仍出现此提示，请重新执行设置或返回引导流程。",
       "fixInSettings": "进行设置",
-      "reLogout": "重新登出"
+      "reLogout": "重新登出",
+      "dismiss": "关闭"
     }
   },
   "controlCenter": {
@@ -328,7 +329,8 @@
       "jumpTo": "跳转至 {{target}}",
       "status": {
         "connected": "已连接",
-        "degraded": "降级"
+        "degraded": "降级",
+        "notConfigured": "未设置"
       },
       "health": {
         "gatewayRunning": "Gateway 已连接且运行中。",
@@ -362,7 +364,10 @@
         "approvalsCount": "{{count}} 笔",
         "taskStore": "Task Store",
         "budget": "Budget Summary",
-        "heartbeat": "配置审计日志"
+        "heartbeat": "配置审计日志",
+        "groupEnv": "基础环境",
+        "groupPaths": "路径设置",
+        "groupServices": "服务连接"
       },
       "alerts": {
         "snapshotWaiting": "等待快照数据",

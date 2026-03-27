@@ -94,6 +94,9 @@ function App() {
     }
   );
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [workspaceBannerDismissed, setWorkspaceBannerDismissed] = useState(
+    () => sessionStorage.getItem('workspace_banner_dismissed') === '1'
+  );
   const { t } = useTranslation();
   const shellQuote = ConfigService.shellQuote;
   const {
@@ -759,7 +762,7 @@ function App() {
 
         <div className="flex-1 p-10 overflow-y-auto relative">
           {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
-          {activeTab !== 'onboarding' && onboardingFinished && activeTab !== 'monitor' && (() => {
+          {(activeTab === 'launcherSettings' || activeTab === 'runtimeSettings') && onboardingFinished && !workspaceBannerDismissed && (() => {
             const missing: string[] = [];
             if (!config.corePath?.trim()) missing.push('Core Path');
             if (!config.configPath?.trim()) missing.push('Config Path');
@@ -797,6 +800,16 @@ function App() {
                     className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-700 hover:bg-rose-100 transition-colors dark:border-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
                   >
                     {t('app.workspace.reLogout')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sessionStorage.setItem('workspace_banner_dismissed', '1');
+                      setWorkspaceBannerDismissed(true);
+                    }}
+                    className="rounded-xl border border-amber-300 bg-transparent px-3 py-1.5 text-[11px] font-medium text-amber-600 hover:bg-amber-100 transition-colors dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                  >
+                    {t('app.workspace.dismiss')}
                   </button>
                 </div>
               </div>

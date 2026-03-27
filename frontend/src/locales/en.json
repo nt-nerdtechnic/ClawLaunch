@@ -25,7 +25,7 @@
       "skills": "Skill Manager",
       "settings": "Configuration",
       "launcherSettings": "Launcher Config",
-      "runtimeSettings": "Runtime Config",
+      "runtimeSettings": "OpenClaw Settings",
       "memory": "Memory & Data"
     },
     "webPreview": {
@@ -62,7 +62,8 @@
       "missingPaths": "Paths not set: {{paths}}.",
       "reRunWizard": "If paths are set but this persists, please re-run setup or onboarding.",
       "fixInSettings": "Fix in Settings",
-      "reLogout": "Logout"
+      "reLogout": "Logout",
+      "dismiss": "Dismiss"
     }
   },
   "controlCenter": {
@@ -336,7 +337,8 @@
       "jumpTo": "Jump to {{target}}",
       "status": {
         "connected": "connected",
-        "degraded": "degraded"
+        "degraded": "degraded",
+        "notConfigured": "Not Configured"
       },
       "health": {
         "gatewayRunning": "Gateway connected and running.",
@@ -370,7 +372,10 @@
         "approvalsCount": "{{count}} items",
         "taskStore": "Task Store",
         "budget": "Budget Summary",
-        "heartbeat": "Config Audit Log"
+        "heartbeat": "Config Audit Log",
+        "groupEnv": "Environment",
+        "groupPaths": "Paths",
+        "groupServices": "Services"
       },
       "alerts": {
         "snapshotWaiting": "Waiting for snapshot",

@@ -62,7 +62,8 @@
       "missingPaths": "以下路徑尚未設定：{{paths}}。",
       "reRunWizard": "若路徑已填入仍出現此提示，請重新執行設定或返回引導流程。",
       "fixInSettings": "進行設定",
-      "reLogout": "重新登出"
+      "reLogout": "重新登出",
+      "dismiss": "關閉"
     }
   },
   "controlCenter": {
@@ -336,7 +337,8 @@
       "jumpTo": "跳轉至 {{target}}",
       "status": {
         "connected": "已連線",
-        "degraded": "降級"
+        "degraded": "降級",
+        "notConfigured": "未設定"
       },
       "health": {
         "gatewayRunning": "Gateway 已連線且運行中。",
@@ -370,7 +372,10 @@
         "approvalsCount": "{{count}} 筆",
         "taskStore": "Task Store",
         "budget": "Budget Summary",
-        "heartbeat": "設定稽核日誌"
+        "heartbeat": "設定稽核日誌",
+        "groupEnv": "基礎環境",
+        "groupPaths": "路徑設定",
+        "groupServices": "服務連線"
       },
       "alerts": {
         "snapshotWaiting": "等待快照資料",
