@@ -240,7 +240,7 @@ const SetupStepModel = ({ onNext }) => {
         };
 
         loadAuthHealth();
-    }, [config.configPath, config.authChoice, selectedChoiceId]);
+    }, [config.configPath, config.authChoice, selectedChoiceId, t]);
 
 
 

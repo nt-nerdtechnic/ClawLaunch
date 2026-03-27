@@ -226,6 +226,7 @@ function App() {
     ModelService.providerMatchesFilters(provider, effectiveAuthorizedProviders, PROVIDER_ALIAS_MAP)
   );
   const modelOptionGroups = visibleModelOptions.length > 0 ? visibleModelOptions : availableModelOptions;
+  const authorizedProvidersKey = effectiveAuthorizedProviders.join('|');
   const selectedModelProvider = ModelService.inferProviderFromModel(runtimeDraftModel);
   const selectedModelAuthorized = !runtimeDraftModel.trim() || isModelAuthorizedByProvider(runtimeDraftModel);
   const authorizedProviderBadges = Array.from(new Set(
@@ -289,7 +290,7 @@ function App() {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, []); // Run ONLY once on mount
+  }, [addLog]);
 
   const { syncSnapshot } = useSnapshotSync({
     running,
@@ -323,7 +324,7 @@ function App() {
       const updated = { ...launcherPayload, theme, language };
       window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
     }
-  }, [theme, language]);
+  }, [theme, language, config]);
 
   const { i18n } = useTranslation();
   useEffect(() => {
@@ -344,8 +345,9 @@ function App() {
 
   useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;
-    void loadDynamicModelOptions(config.corePath, effectiveAuthorizedProviders);
-  }, [activeTab, resolvedConfigDir, config.corePath, effectiveAuthorizedProviders.join('|')]);
+    const providers = authorizedProvidersKey ? authorizedProvidersKey.split('|').filter(Boolean) : [];
+    void loadDynamicModelOptions(config.corePath, providers);
+  }, [activeTab, config.corePath, authorizedProvidersKey, loadDynamicModelOptions]);
 
   function isModelAuthorizedByProvider(modelRef: string) {
     return ModelService.isModelAuthorizedByProvider(modelRef, effectiveAuthorizedProviders, PROVIDER_ALIAS_MAP);

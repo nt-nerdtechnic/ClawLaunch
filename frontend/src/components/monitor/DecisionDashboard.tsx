@@ -163,7 +163,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [running, config.corePath, config.workspacePath, resolvedConfigDir]);
+  }, [running, config.configPath, config.corePath, config.workspacePath, resolvedConfigDir]);
 
   const alerts = useMemo<DashboardAlertItem[]>(() => {
     const out: DashboardAlertItem[] = [];
@@ -415,7 +415,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         status: !running ? 'not_configured' : auditLog.state === 'connected' ? 'connected' : 'degraded',
       },
     ];
-  }, [auditLog.state, config.configPath, config.corePath, config.workspacePath, envStatus.node, envStatus.pnpm, snapshot, t]);
+  }, [auditLog.state, config.configPath, config.corePath, config.workspacePath, envStatus.node, envStatus.pnpm, running, snapshot, t]);
 
   const connectedCount = connectionRows.filter((row) => row.status === 'connected').length;
   const configuredRowsCount = connectionRows.filter((row) => row.status !== 'not_configured' && row.status !== 'loading').length;

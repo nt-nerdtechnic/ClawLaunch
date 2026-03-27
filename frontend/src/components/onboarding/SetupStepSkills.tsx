@@ -1,23 +1,33 @@
-// @ts-nocheck - setup step has incomplete types, resolvable with skill config typings
 import React from 'react';
-import { Package, ArrowRight, Zap, ShieldCheck, RefreshCw, PackagePlus, Trash2, AlertCircle, Lock } from 'lucide-react';
-import { useStore } from '../../store';
+import { Package, ArrowRight, ShieldCheck, RefreshCw, PackagePlus, Trash2, AlertCircle, Lock } from 'lucide-react';
+import { useStore, type SkillItem } from '../../store';
 import { useTranslation } from 'react-i18next';
+
+interface SetupStepSkillsProps {
+  onNext: () => void;
+}
+
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message;
+  }
+  return fallback;
+};
 
 /**
  * NT-ClawLaunch Onboarding: Skill Selection Step
  * Ref: Neil's Strategy - "Granting Superpowers" Alignment (2026-03-14)
  */
-const SetupStepSkills = ({ onNext }) => {
+const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
   const { t } = useTranslation();
   const { config, coreSkills, workspaceSkills, setCoreSkills, setWorkspaceSkills, userType } = useStore();
   const [scanning, setScanning] = React.useState(false);
   const [acting, setActing] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
 
-  const detectedSkills = workspaceSkills || [];
+  const detectedSkills: SkillItem[] = workspaceSkills || [];
 
-  const rescan = async () => {
+  const rescan = React.useCallback(async () => {
     if (!window.electronAPI || scanning || acting) return;
     setErrorMsg('');
     setScanning(true);
@@ -32,17 +42,17 @@ const SetupStepSkills = ({ onNext }) => {
           } else {
             setWorkspaceSkills([]);
           }
-        } catch (_e) {
+        } catch {
           setErrorMsg(t('setupSkills.manager.errorParse'));
         }
       } else {
         setErrorMsg(result?.stderr || t('setupSkills.manager.errorScan'));
       }
-    } catch (e) {
-      setErrorMsg(e?.message || t('setupSkills.manager.errorScan'));
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e, t('setupSkills.manager.errorScan')));
     }
     setScanning(false);
-  };
+  }, [acting, scanning, setCoreSkills, setWorkspaceSkills, t]);
 
   // Auto-skip: Existing user with skill settings don't need to stay on this step
   const autoAdvancedRef = React.useRef(false);
@@ -55,11 +65,11 @@ const SetupStepSkills = ({ onNext }) => {
     }
     // Scan only for new users
     if (detectedSkills.length === 0 || coreSkills.length === 0) {
-      rescan();
+      void rescan();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [coreSkills.length, detectedSkills.length, onNext, rescan, userType]);
 
-  const handleImport = async () => {
+  const handleImport = React.useCallback(async () => {
     if (!window.electronAPI || acting || scanning) return;
     setErrorMsg('');
     setActing(true);
@@ -72,13 +82,13 @@ const SetupStepSkills = ({ onNext }) => {
       } else {
         setErrorMsg(result?.stderr || t('setupSkills.manager.errorImport'));
       }
-    } catch (e) {
-      setErrorMsg(e?.message || t('setupSkills.manager.errorImport'));
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e, t('setupSkills.manager.errorImport')));
     }
     setActing(false);
-  };
+  }, [acting, rescan, scanning, t]);
 
-  const handleRemove = async (skillId, skillName) => {
+  const handleRemove = React.useCallback(async (skillId: string, skillName: string) => {
     if (!window.electronAPI || acting || scanning) return;
     const confirmed = confirm(t('setupSkills.manager.removeConfirm', { name: skillName }));
     if (!confirmed) return;
@@ -97,11 +107,11 @@ const SetupStepSkills = ({ onNext }) => {
         setErrorMsg(result?.stderr || t('setupSkills.manager.errorRemove'));
       }
       await rescan();
-    } catch (e) {
-      setErrorMsg(e?.message || t('setupSkills.manager.errorRemove'));
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e, t('setupSkills.manager.errorRemove')));
     }
     setActing(false);
-  };
+  }, [acting, config.configPath, config.workspacePath, rescan, scanning, t]);
 
 
 
@@ -159,7 +169,7 @@ const SetupStepSkills = ({ onNext }) => {
         </div>
         {coreSkills.length > 0 ? (
           <div className="grid grid-cols-2 gap-2">
-            {coreSkills.map(skill => (
+            {coreSkills.map((skill: SkillItem) => (
               <div
                 key={skill.id}
                 className="flex items-center gap-2.5 px-3 py-2.5 bg-violet-50 border border-violet-100 rounded-2xl group"
@@ -195,7 +205,7 @@ const SetupStepSkills = ({ onNext }) => {
         </div>
         {detectedSkills.length > 0 ? (
           <div className="grid grid-cols-2 gap-4">
-            {detectedSkills.map((skill) => (
+            {detectedSkills.map((skill: SkillItem) => (
               <div
                 key={skill.id}
                 className="p-5 rounded-[2rem] border-2 border-gray-100 hover:border-blue-200 bg-white transition-all relative group h-full flex flex-col"

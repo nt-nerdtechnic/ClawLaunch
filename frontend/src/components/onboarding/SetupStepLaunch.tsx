@@ -1,4 +1,3 @@
-// @ts-nocheck - setup step has incomplete types, resolvable with proper runtime typings
 import React, { useState } from 'react';
 import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';
@@ -6,15 +5,26 @@ import { Trans, useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 
+interface SetupStepLaunchProps {
+  onComplete: () => void;
+}
+
+type LaunchStatus = 'preparing' | 'success' | 'partial_failure';
+
+interface SummaryItemProps {
+  label: string;
+  value: string;
+}
+
 /**
  * NT-ClawLaunch Onboarding: Final Launch Step
  * Optimized with Action Strategy Pattern (2026-03-15)
  */
-const SetupStepLaunch = ({ onComplete }) => {
+const SetupStepLaunch: React.FC<SetupStepLaunchProps> = ({ onComplete }) => {
   const { config, setConfig, userType, workspaceSkills } = useStore();
   const { t } = useTranslation();
   const onboardingAction = useOnboardingAction();
-  const [status, setStatus] = useState('preparing'); // preparing, success, partial_failure
+  const [status, setStatus] = useState<LaunchStatus>('preparing'); // preparing, success, partial_failure
   const [progress, setProgress] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
   const autoStartedRef = React.useRef(false);
@@ -24,12 +34,12 @@ const SetupStepLaunch = ({ onComplete }) => {
     setConfig({ installDaemon: false });
   }, [setConfig]);
 
-  const steps = {
+  const steps: Record<'preparing' | 'success', string> = {
     preparing: t('launch.steps.preparing'),
     success: t('launch.steps.success')
   };
 
-  const runSetup = async () => {
+  const runSetup = React.useCallback(async () => {
     try {
       setHasStarted(true);
       setStatus('preparing');
@@ -47,23 +57,23 @@ const SetupStepLaunch = ({ onComplete }) => {
       console.error(err);
       setStatus('partial_failure');
     }
-  };
+  }, [onboardingAction]);
 
   // Existing user: Auto-check startup on mount; skip setup screens
   React.useEffect(() => {
     if (autoStartedRef.current) return;
     if (userType !== 'new') {
       autoStartedRef.current = true;
-      runSetup();
+      void runSetup();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runSetup, userType]);
 
   // Auto-complete upon success; no user interaction required
   React.useEffect(() => {
     if (status === 'success') {
       onComplete();
     }
-  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onComplete, status]);
 
   if (!hasStarted) {
     return (
@@ -158,7 +168,7 @@ const SetupStepLaunch = ({ onComplete }) => {
             </div>
 
             <div className="space-y-2">
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">{steps[status]}</h2>
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight">{steps.preparing}</h2>
                 <p className="text-gray-500 font-medium">{t('launch.wip.desc')}</p>
             </div>
           </div>
@@ -208,7 +218,7 @@ const SetupStepLaunch = ({ onComplete }) => {
               <SummaryItem 
                 label={t('launch.ui.soulCore')} 
                 value={(() => {
-                    const mapping = {
+                    const mapping: Record<string, string> = {
                         'apiKey': 'Anthropic API Key',
                         'openai-api-key': 'OpenAI API Key',
                         'gemini-api-key': 'Gemini API Key',
@@ -219,7 +229,8 @@ const SetupStepLaunch = ({ onComplete }) => {
                         'openrouter-api-key': 'OpenRouter',
                         'xai-api-key': 'xAI (Grok)'
                     };
-                    return mapping[config.authChoice] || config.authChoice || 'Unknown';
+                      const authChoiceKey = String(config.authChoice || '');
+                      return mapping[authChoiceKey] || authChoiceKey || 'Unknown';
                 })()} 
               />
               <SummaryItem label={t('launch.ui.communicationTerminal')} value={config.platform || t('launch.ui.unknown')} />
@@ -240,7 +251,7 @@ const SetupStepLaunch = ({ onComplete }) => {
   );
 };
 
-const SummaryItem = ({ label, value }) => (
+const SummaryItem: React.FC<SummaryItemProps> = ({ label, value }) => (
     <li className="flex items-start gap-3 group">
         <div className="mt-0.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-500/20 group-hover:scale-110 transition-transform">
             <CheckCircle2 size={12} strokeWidth={4} />
