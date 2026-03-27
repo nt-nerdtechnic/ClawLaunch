@@ -1,12 +1,12 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, type RefObject, type MutableRefObject } from 'react';
 import type { PixelAgent, RoomConfig } from '../engine/types';
 import type { SpriteCache } from '../engine/spriteCache';
 import { updateAgent } from '../engine/agent';
 import { renderFrame } from '../engine/renderer';
 
 interface UsePixelOfficeLoopParams {
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  agentsRef: React.MutableRefObject<PixelAgent[]>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  agentsRef: MutableRefObject<PixelAgent[]>;
   room: RoomConfig;
   cache: SpriteCache | null;
   hoveredAgentId: string | null;

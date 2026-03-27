@@ -511,6 +511,23 @@ function App() {
     );
   }
 
+  if (!window.electronAPI) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+        <div className="flex flex-col items-center gap-4 max-w-sm text-center px-6">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-500/20">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </div>
+          <div className="text-lg font-bold">NT-ClawLaunch</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            此應用程式僅支援 Mac 桌面版本。<br />
+            請執行 <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-xs">npm run dev</code> 啟動完整應用。
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // If not finished onboarding, show the wizard
   if (bootstrapping) {
     return (
@@ -741,23 +758,6 @@ function App() {
         )}
 
         <div className="flex-1 p-10 overflow-y-auto relative">
-          {/* Web Preview Mode Warning */}
-          {!window.electronAPI && (
-            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-800/60 dark:bg-blue-950/20">
-              <div className="mt-0.5 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
-                <AlertCircle size={14} className="text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-black text-blue-800 dark:text-blue-300 uppercase tracking-widest">
-                  {t('app.webPreview.title')}
-                </div>
-                <div className="mt-1 text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed font-medium">
-                  {t('app.webPreview.desc')}
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
           {activeTab !== 'onboarding' && onboardingFinished && activeTab !== 'monitor' && (() => {
             const missing: string[] = [];

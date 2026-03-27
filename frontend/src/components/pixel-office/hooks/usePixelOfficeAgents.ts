@@ -1,6 +1,5 @@
 import { useMemo, useRef } from 'react';
 import { useStore } from '../../../store';
-import type { PixelAgent } from '../engine/types';
 import { AGENT_COLORS } from '../engine/constants';
 
 export interface PixelAgentSummary {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Building2, X, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import PixelOfficeCanvas from './PixelOfficeCanvas';

@@ -1,4 +1,5 @@
-import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { PixelAgent, RoomConfig } from './engine/types';
 import { CANVAS_W, CANVAS_H, AGENT_COLORS, SPRITE_DRAW_W, SPRITE_DRAW_H } from './engine/constants';
 import { buildSpriteCache, type SpriteCache } from './engine/spriteCache';
@@ -96,7 +97,7 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
   });
 
   // Mouse hover handler
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = useCallback((e: ReactMouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 

@@ -1177,11 +1177,21 @@ const parseGatewayCallStdoutJson = (rawStdout: string) => {
   }
 
   // 4. Fragment/Brace slicing (handling mid-stream JSON with surrounding text)
-  // We search for the first '{' and corresponding '}' from the end.
-  const firstBrace = stdout.indexOf('{');
-  const lastBrace = stdout.lastIndexOf('}');
+  // Strip pnpm/npm script header lines (e.g. "> packagename@version ...") before slicing,
+  // because the command echo in the header may contain '{' that confuses firstBrace detection.
+  const stripped = lines.filter((line) => !line.startsWith('>')).join('\n');
+  const firstBrace = stripped.indexOf('{');
+  const lastBrace = stripped.lastIndexOf('}');
   if (firstBrace >= 0 && lastBrace > firstBrace) {
-    const sliceParsed = tryParseJsonObject(stdout.slice(firstBrace, lastBrace + 1));
+    const sliceParsed = tryParseJsonObject(stripped.slice(firstBrace, lastBrace + 1));
+    if (sliceParsed) return sliceParsed;
+  }
+
+  // 5. Fallback: try brace slicing on original stdout (without stripping)
+  const firstBraceOrig = stdout.indexOf('{');
+  const lastBraceOrig = stdout.lastIndexOf('}');
+  if (firstBraceOrig >= 0 && lastBraceOrig > firstBraceOrig) {
+    const sliceParsed = tryParseJsonObject(stdout.slice(firstBraceOrig, lastBraceOrig + 1));
     if (sliceParsed) return sliceParsed;
   }
 
