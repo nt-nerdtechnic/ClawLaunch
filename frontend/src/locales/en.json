@@ -338,6 +338,7 @@
       "status": {
         "connected": "connected",
         "degraded": "degraded",
+        "loading": "Checking",
         "notConfigured": "Not Configured"
       },
       "health": {

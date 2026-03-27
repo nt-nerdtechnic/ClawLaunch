@@ -6,6 +6,7 @@ import type { ReadModelSnapshot } from '../../store';
 type EnvStatus = { node: string; git: string; pnpm: string };
 type AppConfig = { corePath: string; configPath: string; workspacePath: string };
 type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
+type ConnectionStatus = 'connected' | 'degraded' | 'not_configured' | 'loading';
 
 type AuditLogSummary = {
   writes: number;
@@ -345,18 +346,24 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     const hasTaskStore = (snapshot?.tasks?.length || 0) > 0;
     const hasBudget = Boolean(snapshot?.budgetSummary);
 
+    const mapEnvConnectionStatus = (status: string): ConnectionStatus => {
+      if (status === 'ok') return 'connected';
+      if (status === 'loading') return 'loading';
+      return 'degraded';
+    };
+
     return [
       {
         key: 'node',
         group: 'env',
         name: t('monitor.decision.connection.node', 'Node.js Runtime'),
-        status: envStatus.node === 'ok' ? 'connected' : 'degraded',
+        status: mapEnvConnectionStatus(envStatus.node),
       },
       {
         key: 'pnpm',
         group: 'env',
         name: t('monitor.decision.connection.pnpm', 'pnpm Toolchain'),
-        status: envStatus.pnpm === 'ok' ? 'connected' : 'degraded',
+        status: mapEnvConnectionStatus(envStatus.pnpm),
       },
       {
         key: 'core-path',
@@ -411,7 +418,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
   }, [auditLog.state, config.configPath, config.corePath, config.workspacePath, envStatus.node, envStatus.pnpm, snapshot, t]);
 
   const connectedCount = connectionRows.filter((row) => row.status === 'connected').length;
-  const configuredRowsCount = connectionRows.filter((row) => row.status !== 'not_configured').length;
+  const configuredRowsCount = connectionRows.filter((row) => row.status !== 'not_configured' && row.status !== 'loading').length;
 
   return (
     <div className="space-y-6">
@@ -585,6 +592,8 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                           className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
                             row.status === 'connected'
                               ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                              : row.status === 'loading'
+                                ? 'bg-sky-500/10 text-sky-600 border-sky-500/30 dark:text-sky-400 dark:border-sky-400/40'
                               : row.status === 'not_configured'
                                 ? 'bg-slate-100 text-slate-400 border-slate-300 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-600'
                                 : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
@@ -592,6 +601,8 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                         >
                           {row.status === 'connected'
                             ? t('monitor.decision.status.connected')
+                            : row.status === 'loading'
+                              ? t('monitor.decision.status.loading')
                             : row.status === 'not_configured'
                               ? t('monitor.decision.status.notConfigured')
                               : t('monitor.decision.status.degraded')}

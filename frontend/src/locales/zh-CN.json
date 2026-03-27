@@ -330,6 +330,7 @@
       "status": {
         "connected": "已连接",
         "degraded": "降级",
+        "loading": "检测中",
         "notConfigured": "未设置"
       },
       "health": {

@@ -338,6 +338,7 @@
       "status": {
         "connected": "已連線",
         "degraded": "降級",
+        "loading": "檢測中",
         "notConfigured": "未設定"
       },
       "health": {
