@@ -334,8 +334,12 @@ function App() {
   useEffect(() => {
     if (!window.electronAPI?.setTitle) return;
     const cp = String(config.configPath || '').trim();
-    void window.electronAPI.setTitle(cp ? `OpenClaw — ${cp}` : 'OpenClaw');
-  }, [config.configPath]);
+    const versionStr = config.appVersion ? `v${config.appVersion}` : '';
+    const title = cp 
+      ? `OpenClaw ${versionStr} — ${cp}` 
+      : `OpenClaw ${versionStr}`;
+    void window.electronAPI.setTitle(title.trim());
+  }, [config.configPath, config.appVersion]);
 
   useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;

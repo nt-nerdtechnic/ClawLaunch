@@ -33,7 +33,17 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(() => {
+    if (config.appVersion) {
+      return {
+        current: config.appVersion,
+        latest: '',
+        htmlUrl: '',
+        upToDate: true,
+      };
+    }
+    return null;
+  });
   const [updateError, setUpdateError] = useState<string>('');
 
   const saveButtonLabel =
