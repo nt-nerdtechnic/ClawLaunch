@@ -1205,17 +1205,27 @@ const pickTextFromUnknownContent = (content: any): string => {
       .map((item) => {
         if (typeof item === 'string') return item;
         if (!item || typeof item !== 'object') return '';
+        // OpenClaw format: { type: 'text', text: '...' }
+        if (item.type === 'text' && typeof item.text === 'string') return item.text;
+        // Some SDKs use output_text/input_text tokens.
+        if ((item.type === 'output_text' || item.type === 'input_text') && typeof item.text === 'string') return item.text;
+        // Some responses nest text fragments in parts arrays.
+        if (Array.isArray(item.parts)) return pickTextFromUnknownContent(item.parts);
+        // Fallbacks
         if (typeof item.text === 'string') return item.text;
         if (typeof item.value === 'string') return item.value;
         if (typeof item.content === 'string') return item.content;
+        if (item.content && typeof item.content === 'object') return pickTextFromUnknownContent(item.content);
         return '';
       })
       .join('');
   }
   if (content && typeof content === 'object') {
+    if (Array.isArray(content.parts)) return pickTextFromUnknownContent(content.parts);
     if (typeof content.text === 'string') return content.text;
     if (typeof content.value === 'string') return content.value;
     if (typeof content.content === 'string') return content.content;
+    if (content.content && typeof content.content === 'object') return pickTextFromUnknownContent(content.content);
   }
   return '';
 };
@@ -1331,10 +1341,12 @@ const waitForAssistantFinalByHistory = async ({
 }) => {
   const pollIntervalMs = 550;
   const stableWindowMs = 1500;
+  const firstTokenTimeoutMs = 12000;
   const timeoutMs = 65000;
   const startAt = Date.now();
   let lastObserved = baseline;
   let lastChangeAt = Date.now();
+  let hasResponseDelta = false;
 
   while (Date.now() - startAt < timeoutMs) {
     const chatState = activeChatRequests.get(request.requestId);
@@ -1363,12 +1375,34 @@ const waitForAssistantFinalByHistory = async ({
       const delta = computeDeltaText(lastObserved, historyRes.text);
       lastObserved = historyRes.text;
       lastChangeAt = Date.now();
+      hasResponseDelta = true;
       if (delta) {
         emitChunk({ delta, mode: 'gateway', reason: '' });
       }
     }
 
-    if (Date.now() - lastChangeAt >= stableWindowMs) {
+    if (!hasResponseDelta && Date.now() - startAt >= firstTokenTimeoutMs) {
+      const finalHistory = await fetchLatestAssistantText(runtimePrefix, request.sessionKey, request.agentId);
+      if (finalHistory.ok && finalHistory.text !== lastObserved) {
+        const finalDelta = computeDeltaText(lastObserved, finalHistory.text);
+        lastObserved = finalHistory.text;
+        if (finalDelta) {
+          emitChunk({ delta: finalDelta, mode: 'gateway', reason: '' });
+        }
+      }
+      emitChunk({ done: true, mode: 'gateway', reason: '' });
+      return;
+    }
+
+    if (hasResponseDelta && Date.now() - lastChangeAt >= stableWindowMs) {
+      const finalHistory = await fetchLatestAssistantText(runtimePrefix, request.sessionKey, request.agentId);
+      if (finalHistory.ok && finalHistory.text !== lastObserved) {
+        const finalDelta = computeDeltaText(lastObserved, finalHistory.text);
+        lastObserved = finalHistory.text;
+        if (finalDelta) {
+          emitChunk({ delta: finalDelta, mode: 'gateway', reason: '' });
+        }
+      }
       emitChunk({ done: true, mode: 'gateway', reason: '' });
       return;
     }
@@ -4965,9 +4999,12 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     }
 
     const timeoutMs = 65000;
+    const firstTokenTimeoutMs = 12000;
+    const stableWindowMs = 1500;
     const startAt = Date.now();
     let finalText = baselineRes.text;
     let lastChangeAt = Date.now();
+    let hasResponseDelta = false;
     while (Date.now() - startAt < timeoutMs) {
       const state = activeChatRequests.get(request.requestId);
       if (!state || state.aborted) break;
@@ -4989,14 +5026,24 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
       if (historyRes.text !== finalText) {
         finalText = historyRes.text;
         lastChangeAt = Date.now();
+        hasResponseDelta = true;
       }
 
-      if (Date.now() - lastChangeAt >= 1500) {
+      if (!hasResponseDelta && Date.now() - startAt >= firstTokenTimeoutMs) {
+        break;
+      }
+
+      if (hasResponseDelta && Date.now() - lastChangeAt >= stableWindowMs) {
         break;
       }
 
       // eslint-disable-next-line no-await-in-loop
       await sleep(550);
+    }
+
+    const finalHistoryRes = await fetchLatestAssistantText(runtime.openclawPrefix, request.sessionKey, request.agentId);
+    if (finalHistoryRes.ok && finalHistoryRes.text !== finalText) {
+      finalText = finalHistoryRes.text;
     }
 
     activeChatRequests.delete(request.requestId);
