@@ -5,12 +5,12 @@
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev": "concurrently -k \"pnpm dev:vite\" \"pnpm dev:electron\"",
     "dev:vite": "vite",
-    "dev:electron": "npm run build:electron && cross-env NODE_ENV=development electron .",
+    "dev:electron": "pnpm build:electron && cross-env NODE_ENV=development electron .",
     "build:electron": "tsc electron/main.ts --outDir dist-electron --module esnext --target esnext --moduleResolution node --allowSyntheticDefaultImports true --skipLibCheck true && node -e \"require('fs').copyFileSync('electron/preload.js', 'dist-electron/preload.js')\"",
-    "build": "tsc -b && vite build && npm run build:electron",
-    "dist": "npm run build && electron-builder",
+    "build": "tsc -b && vite build && pnpm build:electron",
+    "dist": "pnpm build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview"
   },

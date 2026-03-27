@@ -8,6 +8,7 @@ type RoleDef = {
   icon: ReactNode;
   title: string;
   color: string;
+  shadowColor: string;
   desc: string;
 };
 
@@ -23,36 +24,42 @@ const ANIMAL_ROLES: Record<string, RoleDef> = {
     icon: <Shield size={24} />,
     title: 'Lion Captain',
     color: 'from-orange-500 to-red-600',
+    shadowColor: 'shadow-orange-500/20',
     desc: 'monitor.staff.roles.main'
   },
   panda: {
     icon: <Target size={24} />,
     title: 'Panda Strategist',
     color: 'from-blue-400 to-indigo-600',
+    shadowColor: 'shadow-blue-500/20',
     desc: 'monitor.staff.roles.panda'
   },
   monkey: {
     icon: <Code size={24} />,
     title: 'Monkey Builder',
     color: 'from-amber-400 to-orange-500',
+    shadowColor: 'shadow-amber-500/20',
     desc: 'monitor.staff.roles.monkey'
   },
   owl: {
     icon: <Eye size={24} />,
     title: 'Owl Analyst',
     color: 'from-purple-500 to-indigo-700',
+    shadowColor: 'shadow-purple-500/20',
     desc: 'monitor.staff.roles.owl'
   },
   fox: {
     icon: <Zap size={24} />,
     title: 'Fox Courier',
     color: 'from-orange-400 to-yellow-500',
+    shadowColor: 'shadow-orange-500/20',
     desc: 'monitor.staff.roles.fox'
   },
   fallback: {
     icon: <Bot size={24} />,
     title: 'Agent Operator',
     color: 'from-slate-400 to-slate-600',
+    shadowColor: 'shadow-slate-500/20',
     desc: 'monitor.staff.roles.fallback'
   }
 };
@@ -129,11 +136,16 @@ export function StaffGrid() {
     const running = sessionStates.some((state) => state.includes('running') || state.includes('active') || state.includes('working'));
     const blocked = Boolean(data.blocked);
     const tier: 'busy' | 'standby' | 'blocked' = blocked ? 'blocked' : running ? 'busy' : 'standby';
+    
+    // Normalize ID for role mapping
+    const roleId = id.toLowerCase();
+    const role = ANIMAL_ROLES[roleId] || ANIMAL_ROLES.fallback;
+
     return {
       id,
       state: tier,
       queue: data.queue,
-      ...(ANIMAL_ROLES[id] || ANIMAL_ROLES.fallback),
+      ...role,
     };
   });
 
@@ -156,7 +168,7 @@ export function StaffGrid() {
             )}
             
             <div className="flex items-start justify-between mb-6">
-              <div className={`w-14 h-14 bg-gradient-to-br ${agent.color} rounded-[20px] flex items-center justify-center text-white shadow-lg shadow-current/20 group-hover:scale-110 transition-transform duration-500`}>
+              <div className={`w-14 h-14 bg-gradient-to-br ${agent.color} rounded-[20px] flex items-center justify-center text-white shadow-lg ${agent.shadowColor} group-hover:scale-110 transition-transform duration-500`}>
                 {agent.icon}
               </div>
               
@@ -200,11 +212,14 @@ export function StaffGrid() {
                       key={i}
                       className={`h-1 flex-1 rounded-full ${
                         agent.state === 'blocked'
-                          ? `bg-red-500/${i * 20} animate-pulse`
+                          ? 'bg-red-500 animate-pulse'
                           : agent.state === 'busy'
-                            ? `bg-blue-500/${i * 20} animate-pulse`
+                            ? 'bg-blue-500 animate-pulse'
                             : 'bg-slate-200 dark:bg-slate-800'
                       }`}
+                      style={{ 
+                        opacity: (agent.state === 'blocked' || agent.state === 'busy') ? i * 0.2 : 1 
+                      }}
                     ></div>
                 ))}
             </div>

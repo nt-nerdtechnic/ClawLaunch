@@ -1160,6 +1160,12 @@ const tryParseJsonObject = (value: string) => {
 };
 
 const parseGatewayCallStdoutJson = (rawStdout: string) => {
+  // Temporary DEBUG to investigate "non-JSON output" issue
+  try {
+    const fs = require('node:fs');
+    fs.appendFileSync('/tmp/openclaw_stdout_debug.log', `--- STDOUT START ---\n${rawStdout}\n--- STDOUT END ---\n\n`);
+  } catch (e) { /* ignore debug error */ }
+
   // 1. Basic cleaning and ANSI stripping (handling colors/formatting from CLI)
   const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
   let stdout = String(rawStdout || '').replace(ansiRegex, '').trim();
@@ -1301,7 +1307,8 @@ const fetchLatestAssistantText = async (runtimePrefix: string, sessionKey: strin
 
   const parsed = parseGatewayCallStdoutJson(historyRes.stdout);
   if (!parsed) {
-    return { ok: false as const, text: '', error: 'chat.history returned non-JSON output' };
+    const debugSnippet = String(historyRes.stdout || '').slice(0, 500);
+    return { ok: false as const, text: '', error: `chat.history returned non-JSON output. Raw: ${debugSnippet}` };
   }
 
   return { ok: true as const, text: extractLatestAssistantTextFromHistoryPayload(parsed), error: '' };
