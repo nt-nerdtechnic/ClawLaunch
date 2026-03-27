@@ -762,7 +762,7 @@ function App() {
 
         <div className="flex-1 p-10 overflow-y-auto relative">
           {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
-          {(activeTab === 'launcherSettings' || activeTab === 'runtimeSettings') && onboardingFinished && !workspaceBannerDismissed && (() => {
+          {(activeTab === 'monitor' || activeTab === 'launcherSettings') && onboardingFinished && !workspaceBannerDismissed && (() => {
             const missing: string[] = [];
             if (!config.corePath?.trim()) missing.push('Core Path');
             if (!config.configPath?.trim()) missing.push('Config Path');
