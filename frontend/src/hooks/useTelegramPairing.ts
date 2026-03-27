@@ -98,7 +98,7 @@ export function useTelegramPairing(
       loadTelegramPairingRequests();
     }, 15000);
     return () => window.clearInterval(interval);
-  }, [activeTab, resolvedConfigDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, resolvedConfigDir, loadTelegramPairingRequests]);
 
   return {
     telegramPairingRequests,

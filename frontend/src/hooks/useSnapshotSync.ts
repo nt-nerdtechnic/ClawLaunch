@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 
 interface UseSnapshotSyncParams {
   running: boolean;
@@ -30,7 +30,7 @@ export function useSnapshotSync({
   setRawSnapshot,
   setSnapshotSourcePath,
 }: UseSnapshotSyncParams) {
-  const syncSnapshot = async () => {
+  const syncSnapshot = useCallback(async () => {
     if (!window.electronAPI) return;
 
     try {
@@ -66,7 +66,19 @@ export function useSnapshotSync({
     } catch {
       // silent fail if files do not exist yet
     }
-  };
+  }, [
+    config.corePath,
+    config.workspacePath,
+    resolvedConfigDir,
+    setAckedEvents,
+    setAuditTimeline,
+    setDailyDigest,
+    setEventQueue,
+    setRawSnapshot,
+    setSnapshot,
+    setSnapshotHistory,
+    setSnapshotSourcePath,
+  ]);
 
   useEffect(() => {
     if (!running) return;

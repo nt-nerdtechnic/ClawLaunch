@@ -75,12 +75,10 @@ export function useAuthProfiles(
   }, [resolvedConfigDir, t]);
 
   // Initially load authorization list when activeTab changes
-  // 注意：loadAuthProfiles 已被 useCallback memoize，不需要放入 dependency，
-  // 避免非穩定函數引用觸發無限循環。
   useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;
     loadAuthProfiles();
-  }, [activeTab, resolvedConfigDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, resolvedConfigDir, loadAuthProfiles]);
 
   return {
     authProfiles,

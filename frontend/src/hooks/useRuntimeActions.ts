@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { execInTerminal } from '../utils/terminal';
 import type { TelegramPairingRequest } from './useTelegramPairing';
 
@@ -96,7 +96,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     };
   }, []);
 
-  const scheduleSaveStateReset = (
+  const scheduleSaveStateReset = useCallback((
     timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
     setter: (value: 'idle' | 'saving' | 'saved' | 'error') => void,
   ) => {
@@ -107,7 +107,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       setter('idle');
       timerRef.current = null;
     }, 2200);
-  };
+  }, []);
 
   const persistLauncherConfig = async () => {
     const {

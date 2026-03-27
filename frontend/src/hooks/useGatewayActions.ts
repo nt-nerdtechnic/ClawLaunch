@@ -94,7 +94,8 @@ export function useGatewayActions({
       if (listening !== null) {
         setRunning(listening);
       }
-    } catch (_) {
+    } catch (_e) {
+      void _e;
       // Gateway status check failed silently
     }
   };
