@@ -1160,18 +1160,23 @@ const tryParseJsonObject = (value: string) => {
 };
 
 const parseGatewayCallStdoutJson = (rawStdout: string) => {
-  const stdout = String(rawStdout || '').trim();
+  // 1. Basic cleaning and ANSI stripping (handling colors/formatting from CLI)
+  const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+  let stdout = String(rawStdout || '').replace(ansiRegex, '').trim();
   if (!stdout) return null;
 
+  // 2. Try direct full parse
   const fullParsed = tryParseJsonObject(stdout);
   if (fullParsed) return fullParsed;
 
+  // 3. Try line-by-line from reverse (handling cases where JSON is at the end)
   const lines = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   for (let i = lines.length - 1; i >= 0; i--) {
     const parsedLine = tryParseJsonObject(lines[i]);
     if (parsedLine) return parsedLine;
   }
 
+  // 4. Fragment/Brace slicing (handling mid-stream JSON with surrounding text)
   const firstBrace = stdout.indexOf('{');
   const lastBrace = stdout.lastIndexOf('}');
   if (firstBrace >= 0 && lastBrace > firstBrace) {
@@ -1281,11 +1286,14 @@ const computeDeltaText = (previous: string, current: string): string => {
   return current.slice(sameCount);
 };
 
-const fetchLatestAssistantText = async (runtimePrefix: string, gatewayUrlArg: string, gatewayAuthArg: string, sessionKey: string, agentId?: string) => {
+const fetchLatestAssistantText = async (runtimePrefix: string, sessionKey: string, agentId?: string) => {
+  // OpenClaw chat.history API typically expects only 'sessionKey' at root.
+  // If agentId is provided, we should ensure the sessionKey reflects the agent context 
+  // if it's not already part of the key. However, for the purpose of fixing the 
+  // 'unexpected property' error, we simply provide the sessionKey.
   const historyParams: Record<string, any> = { sessionKey };
-  if (agentId) historyParams.agentId = agentId;
 
-  const historyCommand = `${runtimePrefix} gateway call${gatewayUrlArg}${gatewayAuthArg} chat.history --params ${shellQuote(JSON.stringify(historyParams))}`;
+  const historyCommand = `${runtimePrefix} gateway call chat.history --params ${shellQuote(JSON.stringify(historyParams))}`;
   const historyRes = await runShellCommand(historyCommand);
   if (historyRes.code !== 0) {
     return { ok: false as const, text: '', error: historyRes.stderr || 'chat.history failed' };
@@ -1302,15 +1310,11 @@ const fetchLatestAssistantText = async (runtimePrefix: string, gatewayUrlArg: st
 const waitForAssistantFinalByHistory = async ({
   request,
   runtimePrefix,
-  gatewayUrlArg,
-  gatewayAuthArg,
   baseline,
   emitChunk,
 }: {
   request: OpenClawChatInvokeRequest;
   runtimePrefix: string;
-  gatewayUrlArg: string;
-  gatewayAuthArg: string;
   baseline: string;
   emitChunk: (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => void;
 }) => {
@@ -1333,7 +1337,7 @@ const waitForAssistantFinalByHistory = async ({
       return;
     }
 
-    const historyRes = await fetchLatestAssistantText(runtimePrefix, gatewayUrlArg, gatewayAuthArg, request.sessionKey, request.agentId);
+    const historyRes = await fetchLatestAssistantText(runtimePrefix, request.sessionKey, request.agentId);
     if (!historyRes.ok) {
       emitChunk({
         error: historyRes.error,
@@ -4894,7 +4898,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
   const mode: 'gateway' = 'gateway';
   const reason = '';
 
-  const gatewayCommand = `${runtime.openclawPrefix} gateway call${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} chat.send --params ${shellQuote(JSON.stringify(params))}`;
+  const gatewayCommand = `${runtime.openclawPrefix} gateway call chat.send --params ${shellQuote(JSON.stringify(params))}`;
   const selectedCommand = gatewayCommand;
 
   const emitChunk = (payload: { delta?: string; done?: boolean; error?: string; mode: 'gateway' | 'local'; reason: string }) => {
@@ -4909,7 +4913,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     });
   };
 
-  const baselineRes = await fetchLatestAssistantText(runtime.openclawPrefix, runtime.gatewayUrlArg, runtime.gatewayAuthArg, request.sessionKey, request.agentId);
+  const baselineRes = await fetchLatestAssistantText(runtime.openclawPrefix, request.sessionKey, request.agentId);
   if (!baselineRes.ok) {
     return {
       success: false,
@@ -4957,7 +4961,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
       if (!state || state.aborted) break;
 
       // eslint-disable-next-line no-await-in-loop
-      const historyRes = await fetchLatestAssistantText(runtime.openclawPrefix, runtime.gatewayUrlArg, runtime.gatewayAuthArg, request.sessionKey, request.agentId);
+      const historyRes = await fetchLatestAssistantText(runtime.openclawPrefix, request.sessionKey, request.agentId);
       if (!historyRes.ok) {
         activeChatRequests.delete(request.requestId);
         return {
@@ -5024,8 +5028,6 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
   waitForAssistantFinalByHistory({
     request,
     runtimePrefix: runtime.openclawPrefix,
-    gatewayUrlArg: runtime.gatewayUrlArg,
-    gatewayAuthArg: runtime.gatewayAuthArg,
     baseline: baselineRes.text,
     emitChunk,
   }).finally(() => {
@@ -5055,7 +5057,7 @@ ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
     if (chatState.runId) abortParams.runId = chatState.runId;
     if (chatState.agentId) abortParams.agentId = chatState.agentId;
 
-    const abortCommand = `${runtime.openclawPrefix} gateway call${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} chat.abort --params ${shellQuote(JSON.stringify(abortParams))}`;
+    const abortCommand = `${runtime.openclawPrefix} gateway call chat.abort --params ${shellQuote(JSON.stringify(abortParams))}`;
     const abortRes = await runShellCommand(abortCommand);
     if (abortRes.code !== 0) {
       return { success: false, error: abortRes.stderr || 'Failed to abort chat run' };
