@@ -1,16 +1,17 @@
-// @ts-nocheck
 // TODO: Refactor onboarding steps with complete type definitions
-// setup step has incomplete types, resolvable with proper config/runtime profile typings
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { Package, Settings, Database, ArrowRight, Loader2, CheckCircle2, AlertCircle, Monitor, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
 
+const getErrorMessage = (err: unknown, fallback: string = 'Unknown error') =>
+    err instanceof Error ? err.message : fallback;
+
 interface PathItemProps {
   label: string;
   path: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   description: string;
   onBrowse: () => void;
   onChange: (value: string) => void;
@@ -73,7 +74,7 @@ const PathItem = ({
 const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
     const { config, setConfig, addLog, logs } = useStore();
     const { t } = useTranslation();
-    const logEndRef = React.useRef(null);
+    const logEndRef = useRef<HTMLDivElement | null>(null);
     const [initializing, setInitializing] = useState(false);
     const [initialized, setInitialized] = useState(false);
     const [progress, setProgress] = useState('');
@@ -87,7 +88,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
     const [createdItems, setCreatedItems] = useState<string[]>([]);
     const [existingItems, setExistingItems] = useState<string[]>([]);
     const [hasInitializeAttempt, setHasInitializeAttempt] = useState(false);
-    const validateDebounceRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    const validateDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
     const pushProgress = (message: string) => {
         setProgress(message);
@@ -112,7 +113,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
                     if (Array.isArray(tagList) && tagList.every((item) => typeof item === 'string')) {
                         setVersions(tagList);
                     }
-                } catch(_e) {}
+                } catch { }
             }
         };
         fetchVersions();
@@ -155,7 +156,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
         }
     };
 
-    const validatePath = async (key, path) => {
+    const validatePath = async (key: 'corePath' | 'configPath' | 'workspacePath', path: string) => {
         setChecking(true);
         try {
             const resolvedPath = resolveInitializedPath(key, path);
@@ -196,7 +197,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
             setInitializing(false);
             setProgress('');
         } catch (e) {
-            addLog(`Cancel failed: ${e.message}`, 'stderr');
+            addLog(`Cancel failed: ${getErrorMessage(e, 'unknown')}`, 'stderr');
         }
     };
 
@@ -223,8 +224,14 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
             if (res.code === 0) {
                 // If the backend returns an actual path (e.g., subdirectory created), sync it to the store
                 try {
-                   const result = JSON.parse(res.stdout);
-                   const updates = {};
+                   const result = JSON.parse(res.stdout) as {
+                       corePath?: string;
+                       configPath?: string;
+                       workspacePath?: string;
+                       createdItems?: string[];
+                       existingItems?: string[];
+                   };
+                   const updates: { corePath?: string; configPath?: string; workspacePath?: string } = {};
                    if (result.corePath) updates.corePath = result.corePath;
                    if (result.configPath) updates.configPath = result.configPath;
                    if (result.workspacePath) updates.workspacePath = result.workspacePath;
@@ -245,7 +252,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
                    if (Array.isArray(result.existingItems)) {
                        setExistingItems(result.existingItems);
                    }
-                } catch(_e) {}
+                } catch { }
                 
                 pushProgress('🎉 ' + t('setupInitialize.success'));
                 setInitializing(false); 
@@ -256,8 +263,8 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
                 setInitializing(false);
             }
         } catch (e) {
-            addLog(e.message, 'stderr');
-            pushProgress(t('setupInitialize.error', { msg: e.message }));
+            addLog(getErrorMessage(e, 'unknown'), 'stderr');
+            pushProgress(t('setupInitialize.error', { msg: getErrorMessage(e, 'unknown') }));
             setInitializing(false);
         }
     };
