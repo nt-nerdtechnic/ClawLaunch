@@ -32,7 +32,11 @@ Have a great idea? Please initiate a discussion in an Issue first, allowing main
 
 ## 🛠 Environment Setup
 
-Please refer to the Quick Start section in `README.en.md`. If you need to modify back-end logic, ensure that the Rust toolchain is installed on your system.
+Please refer to the Quick Start section in `README.en.md`. No Rust toolchain is required — the project is pure TypeScript/JavaScript (Electron + React).
+
+> **Platform:** NT-ClawLaunch currently supports **macOS only**. Contributions targeting Linux or Windows will not be merged at this stage; cross-platform support may be considered in future releases.
+>
+> **Web UI:** The management interface is Electron-only. Browser-based access is intentionally blocked for system-level security reasons.
 
 ---
 

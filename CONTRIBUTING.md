@@ -34,6 +34,10 @@ Open an Issue first so maintainers and the community can evaluate feasibility an
 
 See the [Quick Start section in README.md](README.md#quick-start). No Rust toolchain is required — the project is pure TypeScript/JavaScript (Electron + React).
 
+> **Platform:** NT-ClawLaunch currently supports **macOS only**. Contributions targeting Linux or Windows will not be merged at this stage; cross-platform support may be considered in future releases.
+>
+> **Web UI:** The management interface is Electron-only. Browser-based access is intentionally blocked for system-level security reasons.
+
 ---
 
 ---
@@ -73,6 +77,10 @@ See the [Quick Start section in README.md](README.md#quick-start). No Rust toolc
 ## 開發環境設置
 
 請參考 [README.md 的快速開始章節](README.md#快速開始)。本專案為純 TypeScript/JavaScript（Electron + React），**不需要** Rust 工具鏈。
+
+> **平台限制：** NT-ClawLaunch 目前**僅支援 macOS**。針對 Linux 或 Windows 的貢獻現階段不會被合併；跨平台支援將於未來版本中評估。
+>
+> **Web 管理介面：** 管理介面僅支援 Electron 桌面應用程式。基於系統層面的安全考量，瀏覽器存取已被明確封鎖。
 
 ---
 

@@ -5,7 +5,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](CONTRIBUTING.md)
 
-> **Platform:** macOS (primary) · **Stack:** Electron 41 + React 19 + Vite 7 + TypeScript + Tailwind CSS 4 + Zustand
+> **Platform:** macOS · **Stack:** Electron 41 + React 19 + Vite 7 + TypeScript + Tailwind CSS 4 + Zustand
+
+> **Platform Support:** Currently macOS only. Support for Linux and Windows may be considered in future releases.
+>
+> **Web UI:** The management interface is only available via the Electron desktop app. Direct browser access (e.g. `http://localhost:5173`) is not supported due to system-level security considerations.
 
 ---
 
@@ -170,7 +174,11 @@ Pull requests are welcome. Please open an issue first for significant changes. S
 
 **NT-ClawLaunch** 是管理 [OpenClaw](https://openclaw.ai) AI Gateway 實例的桌面控制平台。它將 OpenClaw CLI 包裝在 Electron 外殼中，提供完整的 UI 介面，涵蓋安裝導引、監控、Agent 可觀測性與執行期設定——且無需修改任何 Agent 本身的程式碼。
 
-> **平台：** macOS（主要）· **技術棧：** Electron 41 + React 19 + Vite 7 + TypeScript + Tailwind CSS 4 + Zustand
+> **平台：** macOS · **技術棧：** Electron 41 + React 19 + Vite 7 + TypeScript + Tailwind CSS 4 + Zustand
+
+> **平台支援：** 目前僅支援 macOS。Linux 與 Windows 等其他平台的支援將於未來版本中評估。
+>
+> **Web 管理介面：** 基於系統層面的安全考量，管理介面目前不開放透過瀏覽器存取（例如 `http://localhost:5173`），僅支援 Electron 桌面應用程式。
 
 ---
 

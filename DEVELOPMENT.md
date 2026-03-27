@@ -12,6 +12,8 @@ npm run dev
 
 Starts Vite (port 5173) and Electron in parallel. Code changes in `src/` hot-reload in the renderer; changes to `electron/main.ts` trigger an Electron restart.
 
+> **Note:** Vite port 5173 is for the Electron renderer process only. Opening it directly in a browser is not supported — the app requires the Electron runtime and will show a "Mac App only" block screen in a browser context.
+
 ### Production build
 
 ```bash
@@ -94,6 +96,8 @@ npm run dev
 ```
 
 同時啟動 Vite（port 5173）與 Electron。`src/` 的程式碼更改會即時熱重載；`electron/main.ts` 的更改會觸發 Electron 重啟。
+
+> **注意：** Vite port 5173 僅供 Electron renderer process 使用。直接在瀏覽器中開啟不受支援——應用程式需要 Electron 執行環境，在瀏覽器中會顯示「請使用 Mac 桌面版」封鎖頁面。
 
 ### 生產環境打包
 

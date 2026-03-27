@@ -2,6 +2,10 @@
 
 The frontend package is an Electron 41 + React 19 desktop application that serves as the management interface for the OpenClaw AI gateway.
 
+> **Platform:** macOS only. Support for other platforms may be considered in future releases.
+>
+> **Web UI:** Browser access to the Vite dev server (`http://localhost:5173`) is not supported. The app requires the Electron runtime; opening it in a browser will show a block screen.
+
 ## Requirements
 
 - Node.js 18+
@@ -59,6 +63,10 @@ The project uses Tailwind CSS v4 syntax. The entry point is `src/index.css` with
 # NT-ClawLaunch Frontend（繁體中文）
 
 本 frontend 套件是基於 Electron 41 + React 19 的桌面應用程式，作為 OpenClaw AI Gateway 的管理介面。
+
+> **平台：** 僅支援 macOS。其他平台的支援將於未來版本中評估。
+>
+> **Web 管理介面：** 不支援透過瀏覽器存取 Vite dev server（`http://localhost:5173`）。應用程式需要 Electron 執行環境，在瀏覽器中開啟會顯示封鎖頁面。
 
 ## 系統需求
 

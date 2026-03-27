@@ -5,6 +5,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](CONTRIBUTING.en.md)
 
+> **Platform:** macOS only. Support for Linux and Windows may be considered in future releases.
+>
+> **Web UI:** The management interface is only available via the Electron desktop app. Direct browser access is not supported due to system-level security considerations.
+
 ## 🚀 Core Features
 
 *   **Setup Wizard:** An intuitive guided process to help developers quickly configure models, messaging pairings, and skill matrices.
@@ -37,7 +41,7 @@ Current IPC capability (concept):
 ### Prerequisites
 *   Node.js (v18+)
 *   pnpm
-*   Rust (if compiling the back-end)
+*   [OpenClaw CLI](https://openclaw.ai) installed and on `$PATH`
 
 ### Installation Steps
 1.  **Clone the Repository**
