@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck - setup step has incomplete types, resolvable with skill config typings
 import React from 'react';
 import { Package, ArrowRight, Zap, ShieldCheck, RefreshCw, PackagePlus, Trash2, AlertCircle, Lock } from 'lucide-react';
 import { useStore } from '../../store';
@@ -32,7 +32,7 @@ const SetupStepSkills = ({ onNext }) => {
           } else {
             setWorkspaceSkills([]);
           }
-        } catch (e) {
+        } catch (_e) {
           setErrorMsg(t('setupSkills.manager.errorParse'));
         }
       } else {

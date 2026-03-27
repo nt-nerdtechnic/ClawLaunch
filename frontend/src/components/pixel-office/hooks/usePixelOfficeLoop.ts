@@ -27,6 +27,7 @@ export function usePixelOfficeLoop({
 }: UsePixelOfficeLoopParams): void {
   const rafRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const loopRef = useRef<((time: number) => void) | null>(null);
 
   const loop = useCallback((time: number) => {
     if (!canvasRef.current || !cache) return;
@@ -47,8 +48,15 @@ export function usePixelOfficeLoop({
     // Render
     renderFrame(ctx, room, agentsRef.current, cache, hoveredAgentId, dark, bgImage);
 
-    rafRef.current = requestAnimationFrame(loop);
-  }, [canvasRef, agentsRef, room, cache, hoveredAgentId, dark, bgImage]);
+    if (loopRef.current) {
+      rafRef.current = requestAnimationFrame(loopRef.current);
+    }
+  }, [canvasRef, agentsRef, room, cache, hoveredAgentId, dark, bgImage, loopRef]);
+
+  // Store latest loop in ref to avoid circular dependency (in effect to prevent render-phase update)
+  useEffect(() => {
+    loopRef.current = loop;
+  }, [loop]);
 
   useEffect(() => {
     if (paused || !cache) {
@@ -56,7 +64,9 @@ export function usePixelOfficeLoop({
       return;
     }
 
-    rafRef.current = requestAnimationFrame(loop);
+    if (loopRef.current) {
+      rafRef.current = requestAnimationFrame(loopRef.current);
+    }
 
     return () => {
       if (rafRef.current) {
@@ -65,5 +75,5 @@ export function usePixelOfficeLoop({
       }
       lastTimeRef.current = 0;
     };
-  }, [paused, loop, cache]);
+  }, [paused, cache]);
 }

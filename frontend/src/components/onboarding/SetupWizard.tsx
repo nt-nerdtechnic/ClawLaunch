@@ -1,4 +1,6 @@
 // @ts-nocheck
+// TODO: Refactor setup wizard with complete type definitions
+// onboarding component has incomplete types, resolvable with proper auth/config typings
 import React, { useEffect, useRef, useState } from 'react';
 import SetupStepWelcome from './SetupStepWelcome';
 import SetupStepModel from './SetupStepModel';
@@ -75,7 +77,9 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   ];
 
   const totalSteps = steps.length;
-  const setupStepIds = steps.map((step) => step.id).filter((id) => id !== 'welcome' && id !== 'launch');
+  const setupStepIds: ('initialize' | 'model' | 'messaging' | 'skills')[] = steps
+    .map((step) => step.id)
+    .filter((id): id is 'initialize' | 'model' | 'messaging' | 'skills' => id !== 'welcome' && id !== 'launch');
   const currentStepId = steps[currentStep]?.id;
   const setupStageTotal = Math.max(setupStepIds.length, 1);
   const setupStageCurrent = Math.max(setupStepIds.indexOf(currentStepId), 0);

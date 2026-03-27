@@ -78,7 +78,7 @@ export function useSnapshotSync({
     }, 15000);
 
     return () => window.clearInterval(interval);
-  }, [running, resolvedConfigDir, config.workspacePath, config.corePath]);
+  }, [syncSnapshot, running, resolvedConfigDir, config.workspacePath, config.corePath]);
 
   return { syncSnapshot };
 }

@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck - setup step has incomplete types, resolvable with proper runtime typings
 import React, { useState } from 'react';
 import { Rocket, CheckCircle2, Loader2, PartyPopper, Terminal, AlertCircle, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';

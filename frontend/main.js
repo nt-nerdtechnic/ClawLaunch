@@ -1084,7 +1084,7 @@ const waitForAssistantFinalByHistory = async ({ request, runtimePrefix, gatewayU
             emitChunk({ done: true, mode: 'gateway', reason: '' });
             return;
         }
-        // eslint-disable-next-line no-await-in-loop
+         
         await sleep(pollIntervalMs);
     }
     emitChunk({ done: true, mode: 'gateway', reason: '' });
@@ -1175,12 +1175,12 @@ async function resolveDevServerUrl() {
     while (Date.now() < deadline) {
         for (let port = DEV_PORT_RANGE_START; port <= DEV_PORT_RANGE_END; port++) {
             const url = `http://localhost:${port}`;
-            // eslint-disable-next-line no-await-in-loop
+             
             if (await isDevServerReachable(url)) {
                 return url;
             }
         }
-        // eslint-disable-next-line no-await-in-loop
+         
         await sleep(250);
     }
     return `http://localhost:${DEV_PORT_RANGE_START}`;
@@ -4460,7 +4460,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request) => {
             const state = activeChatRequests.get(request.requestId);
             if (!state || state.aborted)
                 break;
-            // eslint-disable-next-line no-await-in-loop
+             
             const historyRes = await fetchLatestAssistantText(runtime.openclawPrefix, runtime.gatewayUrlArg, runtime.gatewayAuthArg, request.sessionKey, request.agentId);
             if (!historyRes.ok) {
                 activeChatRequests.delete(request.requestId);
@@ -4480,7 +4480,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request) => {
             if (Date.now() - lastChangeAt >= 1500) {
                 break;
             }
-            // eslint-disable-next-line no-await-in-loop
+             
             await sleep(550);
         }
         activeChatRequests.delete(request.requestId);

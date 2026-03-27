@@ -278,8 +278,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
   useEffect(() => {
     const id = setInterval(() => void Promise.all([loadCron(), loadTasks(), loadSystem(), loadObservedEvents()]), 30000);
     return () => clearInterval(id);

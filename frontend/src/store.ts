@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-interface LogEntry {
+export interface LogEntry {
   text: string;
   time: string;
   source: 'stdout' | 'stderr' | 'system';
@@ -37,7 +37,7 @@ export interface SkillItem {
   details: string;
 }
 
-interface Config {
+export interface Config {
   model: string;
   authChoice: string; // Align with CLI AuthChoice
   apiKey: string;
@@ -162,6 +162,23 @@ export interface AuditTimelineItem {
   timestamp: string;
 }
 
+export interface RuntimeUsageUpdate {
+  input: number;
+  output: number;
+  history: { name: string; tokens: number }[];
+}
+
+export interface DetectedConfig {
+  apiKey?: string; 
+  model?: string;
+  authChoice?: string;
+  botToken?: string;
+  corePath?: string;
+  configPath?: string;
+  workspacePath?: string;
+  workspaceSkills?: SkillItem[];
+}
+
 interface AppState {
   userType: 'new' | 'existing' | null;
   setUserType: (type: 'new' | 'existing' | null) => void;
@@ -172,33 +189,20 @@ interface AppState {
   envStatus: { node: 'loading' | 'ok' | 'error'; git: 'loading' | 'ok' | 'error'; pnpm: 'loading' | 'ok' | 'error' };
   setEnvStatus: (status: { node: 'loading' | 'ok' | 'error'; git: 'loading' | 'ok' | 'error'; pnpm: 'loading' | 'ok' | 'error' }) => void;
   config: Config;
-  detectedConfig: { 
-    apiKey?: string; 
-    model?: string;
-    authChoice?: string;
-    botToken?: string;
-    corePath?: string;
-    configPath?: string;
-    workspacePath?: string;
-    workspaceSkills?: SkillItem[];
-  } | null;
+  detectedConfig: DetectedConfig | null;
   coreSkills: SkillItem[];
   workspaceSkills: SkillItem[];
-  setCoreSkills: (skills: SkillItem[]) => void;
-  setWorkspaceSkills: (skills: SkillItem[]) => void;
   detectingPaths: boolean;
   pathsConfirmed: boolean;
   setConfig: (patch: Partial<Config>) => void;
-  setDetectedConfig: (config: AppState['detectedConfig']) => void;
+  setDetectedConfig: (config: DetectedConfig | null) => void;
+  setCoreSkills: (skills: SkillItem[]) => void;
+  setWorkspaceSkills: (skills: SkillItem[]) => void;
   setDetectingPaths: (status: boolean) => void;
   setPathsConfirmed: (status: boolean) => void;
   toggleSkill: (skillId: string) => void;
-  usage: {
-    input: number;
-    output: number;
-    history: { name: string; tokens: number }[];
-  };
-  setUsage: (data: any) => void;
+  usage: RuntimeUsageUpdate;
+  setUsage: (data: RuntimeUsageUpdate) => void;
   // Snapshot Data
   snapshot: ReadModelSnapshot | null;
   snapshotHistory: ReadModelHistoryPoint[];
@@ -206,7 +210,7 @@ interface AppState {
   ackedEvents: EventQueueItem[];
   auditTimeline: AuditTimelineItem[];
   dailyDigest: string;
-  rawSnapshot: any | null;
+  rawSnapshot: ReadModelSnapshot | null;
   snapshotSourcePath: string;
   setSnapshot: (snapshot: ReadModelSnapshot | null) => void;
   setSnapshotHistory: (history: ReadModelHistoryPoint[]) => void;
@@ -274,8 +278,8 @@ export const useStore = create<AppState>((set) => ({
   userType: null,
   coreSkills: [],
   workspaceSkills: [],
-  setCoreSkills: (skills) => set({ coreSkills: skills }),
-  setWorkspaceSkills: (skills) => set({ workspaceSkills: skills }),
+  setCoreSkills: (skills: SkillItem[]) => set({ coreSkills: skills }),
+  setWorkspaceSkills: (skills: SkillItem[]) => set({ workspaceSkills: skills }),
   setUserType: (type) => set({ userType: type }),
   setConfig: (patch) => set((state) => ({ config: { ...state.config, ...patch } })),
   setDetectedConfig: (config) => set({ detectedConfig: config }),
@@ -331,13 +335,13 @@ export const useStore = create<AppState>((set) => ({
     try {
       const stored = localStorage.getItem('openclaw_model_prices');
       if (stored) return JSON.parse(stored);
-    } catch (e) { /* ignore */ }
+    } catch (_e) { /* ignore */ }
     return {};
   })(),
   setModelPrices: (modelPrices) => set((state) => {
     try {
       localStorage.setItem('openclaw_model_prices', JSON.stringify({ ...state.modelPrices, ...modelPrices }));
-    } catch(e) { /* ignore */ }
+    } catch(_e) { /* ignore */ }
     return { modelPrices: { ...state.modelPrices, ...modelPrices } };
   }),
   theme: (localStorage.getItem('theme') as 'light' | 'dark') ||

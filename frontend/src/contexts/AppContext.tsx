@@ -1,10 +1,13 @@
 import React, { createContext, useContext, type ReactNode } from 'react';
+import type { Config, DetectedConfig, LogEntry, ReadModelSnapshot, AuditTimelineItem } from '../store';
 
 /**
  * Global application context
  * Manages all App.tsx states and handlers centrally
  * Facilitates gradual migration to individual page components
  */
+
+type EnvStatus = { node: 'loading' | 'ok' | 'error'; git: 'loading' | 'ok' | 'error'; pnpm: 'loading' | 'ok' | 'error' };
 
 type AppContextType = {
   // Routing
@@ -14,24 +17,24 @@ type AppContextType = {
   setOnboardingFinished: (finished: boolean) => void;
 
   // Config
-  config: any;
-  setConfig: (config: any) => void;
-  detectedConfig: any;
-  setDetectedConfig: (config: any) => void;
+  config: Config;
+  setConfig: (config: Partial<Config>) => void;
+  detectedConfig: DetectedConfig | null;
+  setDetectedConfig: (config: DetectedConfig | null) => void;
 
   // Gateway
   running: boolean;
   setRunning: (running: boolean) => void;
-  envStatus: any;
-  setEnvStatus: (status: any) => void;
+  envStatus: EnvStatus;
+  setEnvStatus: (status: EnvStatus) => void;
 
   // Logs
-  logs: any[];
+  logs: LogEntry[];
   addLog: (msg: string, source: 'system' | 'stderr' | 'stdout') => void;
 
   // Snapshot
-  snapshot: any;
-  auditTimeline: any[];
+  snapshot: ReadModelSnapshot | null;
+  auditTimeline: AuditTimelineItem[];
   dailyDigest: string;
 
   // Handlers

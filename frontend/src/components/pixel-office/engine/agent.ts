@@ -178,7 +178,7 @@ function updateWalking(agent: PixelAgent, dtMs: number, room: RoomConfig): void 
   }
 }
 
-function updateWorking(agent: PixelAgent, dtMs: number): void {
+function updateWorking(agent: PixelAgent, _dtMs: number): void {
   // Advance typing animation
   if (agent.animTimer >= ANIM_FRAME_MS_TYPE) {
     agent.animFrame = (agent.animFrame + 1) % 2;

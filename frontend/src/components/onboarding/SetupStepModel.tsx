@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck - setup step has incomplete types, resolvable with provider config typings
 import React, { useState, useEffect } from 'react';
 import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, AlertCircle, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
@@ -177,7 +177,7 @@ const SetupStepModel = ({ onNext }) => {
           try {
               const res = await window.electronAPI.exec(cmd);
               return res.exitCode === 0 || res.code === 0 ? 'ok' : 'error';
-          } catch (e) {
+          } catch (_e) {
               return 'error';
           }
       };

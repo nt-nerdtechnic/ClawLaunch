@@ -20,12 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      '@typescript-eslint/ban-ts-comment': 'off',
+      '@typescript-eslint/no-explicit-any': 'off', // TODO: Phase 2 - turn to 'warn' after runtime types are established
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/ban-ts-comment': 'warn', // TODO: Remove @ts-nocheck in onboarding first
       '@typescript-eslint/prefer-as-const': 'warn',
-      '@typescript-eslint/no-empty-object-type': 'off',
-      'no-empty': 'off',
+      '@typescript-eslint/no-empty-object-type': 'warn', // TODO: Phase 2 - add proper empty props interfaces
+      'no-empty': 'warn', // TODO: Phase 2 - properly handle empty catch blocks
+      'no-control-regex': 'warn', // ANSI escape sequences in gateway output parsing
       'prefer-const': 'warn',
       'react-hooks/exhaustive-deps': 'warn',
       'react-hooks/set-state-in-effect': 'off',

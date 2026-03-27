@@ -370,7 +370,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     if (workspacePath || configPath) {
       runScan();
     }
-  }, [workspacePath, configPath]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspacePath, configPath, runScan]);
 
   // ── Save file content ─────────────────────────────────────────────────────
 

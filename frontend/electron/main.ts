@@ -122,7 +122,7 @@ const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
 };
 
 // ── i18n support for main process ──────────────────────────────────────────
-let currentLocale = 'zh-TW';
+const currentLocale = 'zh-TW';
 const localeCache: Record<string, any> = {};
 
 async function loadLocales() {
@@ -1161,8 +1161,8 @@ const tryParseJsonObject = (value: string) => {
 
 const parseGatewayCallStdoutJson = (rawStdout: string) => {
   // 1. Basic cleaning and ANSI stripping (extensive regex for TrueColor and all ANSI escapes)
-  const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
-  let stdout = String(rawStdout || '').replace(ansiRegex, '').trim();
+  const ansiRegex = /[\x1b\x9b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+  const stdout = String(rawStdout || '').replace(ansiRegex, '').trim();
   if (!stdout) return null;
 
   // 2. Try direct full parse
@@ -1407,12 +1407,11 @@ const waitForAssistantFinalByHistory = async ({
       return;
     }
 
-    // eslint-disable-next-line no-await-in-loop
     await sleep(pollIntervalMs);
   }
 
   emitChunk({ done: true, mode: 'gateway', reason: '' });
-};
+}
 
 async function resolveOpenClawRuntime() {
   const launcherConfigPath = getClawlaunchFile();
@@ -1506,12 +1505,11 @@ async function resolveDevServerUrl(): Promise<string> {
   while (Date.now() < deadline) {
     for (let port = DEV_PORT_RANGE_START; port <= DEV_PORT_RANGE_END; port++) {
       const url = `http://localhost:${port}`;
-      // eslint-disable-next-line no-await-in-loop
       if (await isDevServerReachable(url)) {
         return url;
       }
     }
-    // eslint-disable-next-line no-await-in-loop
+     
     await sleep(250);
   }
 
@@ -1738,7 +1736,7 @@ function parseOpenClawConfig(content: string) {
         let botToken = '';
         let corePath = '';
         let authChoice = parsed.authChoice || '';
-        let gateway = parsed.gateway || null;
+        const gateway = parsed.gateway || null;
 
         // 0. Extract Core Path (if any)
         if (parsed.corePath) corePath = parsed.corePath;
@@ -1822,7 +1820,7 @@ function parseOpenClawConfig(content: string) {
         }
 
         return { apiKey, model, workspace, botToken, corePath, authChoice, providers, gateway };
-    } catch (e) {
+    } catch (_e) {
         return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '', providers: [] as string[], gateway: null };
     }
 }
@@ -2166,7 +2164,7 @@ async function parseSkillMetadata(skillDir: string, fallbackId: string) {
             if (nameMatch) defaultMeta.name = nameMatch[1].replace(/['"]/g, '').trim();
             if (descMatch) defaultMeta.desc = descMatch[1].replace(/['"]/g, '').trim();
         }
-    } catch (e) {
+    } catch (_e) {
         // If SKILL.md doesn't exist or reading fails, return default values
     }
     return defaultMeta;
@@ -2190,9 +2188,9 @@ async function scanSkillsInDir(dir: string): Promise<any[]> {
                     const meta = await parseSkillMetadata(fullPath, item);
                     results.push(meta);
                 }
-            } catch (e) {}
+            } catch (_e) {}
         }
-    } catch (e) {}
+    } catch (_e) {}
     return results;
 }
 
@@ -2225,7 +2223,7 @@ async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
                     fromExtensions.push(meta);
                 }
             }
-        } catch (e) {}
+        } catch (_e) {}
 
         for (const skill of [...fromSkills, ...fromExtensions]) {
             if (!allIds.has(skill.id)) {
@@ -3288,7 +3286,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         return { schedule, command, name, raw: line.trim(), enabled: !isPaused };
       });
       return { code: 0, stdout: JSON.stringify({ entries }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (_e: any) {
       return { code: 0, stdout: JSON.stringify({ entries: [] }), stderr: '', exitCode: 0 };
     }
   }
@@ -3807,7 +3805,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       } catch {
         return { code: 0, stdout: content, stderr: '', exitCode: 0 };
       }
-    } catch (e: any) {
+    } catch (_e: any) {
       return { code: 1, stdout: '{}', stderr: 'No config file found', exitCode: 1 };
     }
   }
@@ -3922,7 +3920,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       // Verify if it is a valid skill
       try {
         await fs.access(path.join(sourcePath, 'SKILL.md'));
-      } catch (e) {
+      } catch (_e) {
         return { code: 1, stderr: t('main.ipc.errors.skillMissingMd'), exitCode: 1 };
       }
 
@@ -3933,7 +3931,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         const content = await fs.readFile(configPath, 'utf-8');
         const config = JSON.parse(content);
         targetBaseDir = config.workspacePath || config.configPath;
-      } catch (e) {}
+      } catch (_e) {}
       
       if (!targetBaseDir) {
         return { code: 1, stderr: t('main.ipc.errors.missingPath'), exitCode: 1 };
@@ -3999,13 +3997,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 await fs.access(possible);
                 finalConfigFilePath = possible;
                 finalConfigDirPath = probePath;
-            } catch(e) {
+            } catch(_e) {
                 const possibleClaw = path.join(probePath, 'clawdbot.json');
                 try {
                     await fs.access(possibleClaw);
                     finalConfigFilePath = possibleClaw;
                     finalConfigDirPath = probePath;
-                } catch(e2) {}
+                } catch(_e2) {}
             }
         } else if (probePath.endsWith('.json')) {
             finalConfigFilePath = probePath;
@@ -4424,7 +4422,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   if (fullCommand.startsWith('project:initialize')) {
     try {
         const payloadStr = fullCommand.replace('project:initialize ', '').trim();
-        let { corePath, configPath, workspacePath, version, method } = JSON.parse(payloadStr);
+        const { corePath, configPath, workspacePath, version, method } = JSON.parse(payloadStr);
 
         const targetVersion = validateVersionRef(version || 'main');
         const downloadMethod = method || 'git'; // 'git' or 'zip'
@@ -4435,7 +4433,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 const files = await fs.readdir(dirPath);
                 const isEmpty = files.filter(f => !f.startsWith('.')).length === 0;
                 return isEmpty ? dirPath : path.join(dirPath, subName);
-            } catch (e) {
+            } catch (_e) {
                 return path.join(dirPath, subName);
             }
         };
@@ -4534,7 +4532,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                     try {
                         emitShellStdout('>>> Detaching from Git (Cleaning up .git directory)...\n', 'stdout');
                         await fs.rm(gitDirPath, { recursive: true, force: true });
-                    } catch (e) {
+                    } catch (_e) {
                         emitShellStdout('>>> Note: Could not remove .git folder, skipping...\n', 'stdout');
                     }
                 }
@@ -5009,7 +5007,6 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
       const state = activeChatRequests.get(request.requestId);
       if (!state || state.aborted) break;
 
-      // eslint-disable-next-line no-await-in-loop
       const historyRes = await fetchLatestAssistantText(runtime.openclawPrefix, request.sessionKey, request.agentId);
       if (!historyRes.ok) {
         activeChatRequests.delete(request.requestId);
@@ -5037,7 +5034,6 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
         break;
       }
 
-      // eslint-disable-next-line no-await-in-loop
       await sleep(550);
     }
 

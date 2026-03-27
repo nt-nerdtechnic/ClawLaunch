@@ -84,12 +84,14 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
   const runtimeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    const launcherTimer = launcherResetTimerRef.current;
+    const runtimeTimer = runtimeResetTimerRef.current;
     return () => {
-      if (launcherResetTimerRef.current) {
-        clearTimeout(launcherResetTimerRef.current);
+      if (launcherTimer) {
+        clearTimeout(launcherTimer);
       }
-      if (runtimeResetTimerRef.current) {
-        clearTimeout(runtimeResetTimerRef.current);
+      if (runtimeTimer) {
+        clearTimeout(runtimeTimer);
       }
     };
   }, []);

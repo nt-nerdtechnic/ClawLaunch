@@ -63,7 +63,7 @@ export function useRuntimeConfig(
     // 每 30 秒自動探測一次設定檔變動 (如手動修改 Port)
     const interval = setInterval(probeRuntimeConfig, 30000);
     return () => clearInterval(interval);
-  }, [resolvedConfigDir, fallbackCorePath, fallbackWorkspacePath, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [resolvedConfigDir, fallbackCorePath, fallbackWorkspacePath, t]);  
 
   // Sync valid runtime models and tokens
   useEffect(() => {

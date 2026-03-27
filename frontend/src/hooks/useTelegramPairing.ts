@@ -98,7 +98,7 @@ export function useTelegramPairing(
       loadTelegramPairingRequests();
     }, 15000);
     return () => window.clearInterval(interval);
-  }, [activeTab, resolvedConfigDir]);
+  }, [activeTab, resolvedConfigDir, loadTelegramPairingRequests]);
 
   return {
     telegramPairingRequests,

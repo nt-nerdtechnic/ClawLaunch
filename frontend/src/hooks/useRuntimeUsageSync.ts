@@ -53,7 +53,7 @@ export function useRuntimeUsageSync() {
     } catch (e) {
       console.warn('[RTUsage] scan failed:', e);
     }
-  }, [config.configPath, setRuntimeUsageEvents]);
+  }, [config.configPath, config.corePath, setRuntimeUsageEvents]);
 
   useEffect(() => {
     // Historical data doesn't require gateway to be online; scan initiated on mount

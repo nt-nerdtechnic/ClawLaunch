@@ -23,10 +23,14 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
   const snapshot = useStore(s => s.snapshot);
 
   // Stable desk assignment by agentId
-  const deskAssignment = useRef<Map<string, number>>(new Map());
+  const assignmentRef = useRef<Map<string, number>>(new Map());
 
-  return useMemo(() => {
-    if (!snapshot?.sessions?.length) return [];
+  const summaries = useMemo(() => {
+    const results: PixelAgentSummary[] = [];
+    
+    if (!snapshot?.sessions?.length) return results;
+
+    const assignment = assignmentRef.current;
 
     // Aggregate sessions by agentId
     const byAgent = new Map<string, {
@@ -45,8 +49,7 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
     // Match statuses to agents
     if (snapshot.statuses) {
       for (const status of snapshot.statuses) {
-        // Find agent by sessionKey
-        for (const [agentId, data] of byAgent) {
+        for (const [_agentId, data] of byAgent) {
           if (data.sessions.some(s => s.sessionKey === status.sessionKey)) {
             data.statuses.push(status);
           }
@@ -54,10 +57,7 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
       }
     }
 
-    // Build agent summaries
-    const summaries: PixelAgentSummary[] = [];
     const sortedAgentIds = [...byAgent.keys()].sort();
-    const assignment = deskAssignment.current;
 
     // Clean up removed agents
     for (const existingId of assignment.keys()) {
@@ -67,7 +67,6 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
     }
 
     let nextDesk = 0;
-    // Find highest assigned desk
     for (const d of assignment.values()) {
       if (d >= nextDesk) nextDesk = d + 1;
     }
@@ -75,7 +74,6 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
     for (const agentId of sortedAgentIds) {
       const data = byAgent.get(agentId)!;
 
-      // Determine if any session is active
       const isActive = data.sessions.some(s => {
         const status = s.status?.toLowerCase() || '';
         return status.includes('running') || status.includes('active') || status.includes('working');
@@ -84,7 +82,6 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
         return state.includes('running') || state.includes('active') || state.includes('working');
       });
 
-      // Aggregate tokens/cost
       let tokensIn = 0, tokensOut = 0, cost = 0;
       for (const s of data.sessions) {
         tokensIn += s.tokensIn || 0;
@@ -92,10 +89,8 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
         cost += s.cost || 0;
       }
 
-      // Get model from first active session
       const model = data.sessions[0]?.model;
 
-      // Desk assignment (stable)
       if (!assignment.has(agentId)) {
         assignment.set(agentId, nextDesk);
         nextDesk++;
@@ -103,7 +98,7 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
 
       const colorIdx = assignment.get(agentId)! % AGENT_COLORS.length;
 
-      summaries.push({
+      results.push({
         id: agentId,
         displayName: agentId,
         color: AGENT_COLORS[colorIdx],
@@ -116,6 +111,9 @@ export function usePixelOfficeAgents(): PixelAgentSummary[] {
       });
     }
 
-    return summaries;
+    return results;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot?.sessions, snapshot?.statuses]);
+
+  return summaries;
 }

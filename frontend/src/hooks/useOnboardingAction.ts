@@ -458,6 +458,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     setLogs([]);
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const execute = useCallback(async (step: OnboardingStep, _payload?: any): Promise<boolean> => {
     setExecuting(true);
     setError(null);

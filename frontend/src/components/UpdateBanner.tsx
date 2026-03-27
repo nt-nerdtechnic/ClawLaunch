@@ -57,7 +57,7 @@ const UpdateBanner = () => {
       } else {
           alert(t('updateBanner.alerts.updateFailed'));
       }
-    } catch (e) {
+    } catch (_e) {
       alert(t('updateBanner.alerts.systemError'));
     } finally {
       setUpdating(false);

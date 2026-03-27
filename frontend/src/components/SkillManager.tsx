@@ -127,7 +127,7 @@ export function SkillManager() {
           if (data.existingConfig?.workspaceSkills !== undefined) {
             setWorkspaceSkills(data.existingConfig.workspaceSkills);
           }
-        } catch (e) {
+        } catch (_e) {
           setScanError(t('skillManager.status.parseError'));
         }
       } else {
@@ -159,7 +159,7 @@ export function SkillManager() {
       } else {
         alert(result?.stderr || t('skillManager.status.importError', { msg: 'Unknown' }));
       }
-    } catch (e) {}
+    } catch (_e) {}
     setActing(false);
   };
 
@@ -179,7 +179,7 @@ export function SkillManager() {
       }
       await window.electronAPI.exec(`skill:delete ${baseDir}/skills/${skill.id}`);
       await rescan();
-    } catch (e) {}
+    } catch (_e) {}
     setActing(false);
   };
 
@@ -270,7 +270,7 @@ export function SkillManager() {
       <div className="animate-in fade-in duration-500 slide-in-from-bottom-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {activeTab === 'core' ? (
-            coreSkills.map(skill => (
+            coreSkills.map((skill: SkillItem) => (
               <SkillCard key={skill.id} skill={skill} isCore={true} />
             ))
           ) : (
@@ -291,7 +291,7 @@ export function SkillManager() {
                 </button>
               </div>
             ) : (
-              workspaceSkills.map(skill => (
+              workspaceSkills.map((skill: SkillItem) => (
                 <SkillCard
                   key={skill.id}
                   skill={skill}

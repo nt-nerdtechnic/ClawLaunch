@@ -142,7 +142,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     if (sessionPanelOpen) {
       void fetchSessions();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [sessionPanelOpen]);
 
   // 串流結束後，若面板開著則自動刷新 session 列表（讓新建的 session 能即時出現）

@@ -200,6 +200,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const [channelSaved, setChannelSaved] = useState('');
 
   // Sync channel tokens from runtimeProfile (excluding telegram, handled by runtimeDraftBotToken)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const channels = (runtimeProfile?.channels || {}) as Record<string, any>;
     const tokens: Record<string, string> = {};

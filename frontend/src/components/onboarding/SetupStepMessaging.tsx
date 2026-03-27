@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck - setup step has incomplete types, resolvable with config channel typings
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, AlertCircle, Loader2, HelpCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';

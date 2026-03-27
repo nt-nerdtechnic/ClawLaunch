@@ -78,7 +78,7 @@ export function useAuthProfiles(
   useEffect(() => {
     if (activeTab !== 'runtimeSettings') return;
     loadAuthProfiles();
-  }, [activeTab, resolvedConfigDir]);
+  }, [activeTab, resolvedConfigDir, loadAuthProfiles]);
 
   return {
     authProfiles,

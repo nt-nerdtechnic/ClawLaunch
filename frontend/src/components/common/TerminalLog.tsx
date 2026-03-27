@@ -50,7 +50,7 @@ const TerminalLog: React.FC<TerminalLogProps> = ({ logs, height = 'h-40', title 
         if (typeof text !== 'string') {
             try {
                 normalizedText = JSON.stringify(text);
-            } catch (e) {
+            } catch (_e) {
                 normalizedText = String(text || '');
             }
         } else {

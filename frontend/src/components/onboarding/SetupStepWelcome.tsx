@@ -1,4 +1,6 @@
 // @ts-nocheck
+// TODO: Refactor setup steps with complete type definitions
+// setup step has incomplete types, resolvable with config typings
 import React from 'react';
 import { Package, Sparkles, ArrowRight, Layers, Settings, Database, Globe } from 'lucide-react';
 import { useStore } from '../../store';

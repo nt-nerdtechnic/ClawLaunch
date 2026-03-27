@@ -1,11 +1,35 @@
 // @ts-nocheck
+// TODO: Refactor onboarding steps with complete type definitions
+// setup step has incomplete types, resolvable with proper config/runtime profile typings
 import React, { useState, useEffect } from 'react';
 import { Package, Settings, Database, ArrowRight, Loader2, CheckCircle2, AlertCircle, Monitor, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
 import TerminalLog from '../common/TerminalLog';
 
-const PathItem = ({ label, path, icon, description, onBrowse, onChange, error, warning, info }) => {
+interface PathItemProps {
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+  description: string;
+  onBrowse: () => void;
+  onChange: (value: string) => void;
+  error?: string;
+  warning?: string;
+  info?: string;
+}
+
+const PathItem = ({
+  label,
+  path,
+  icon,
+  description,
+  onBrowse,
+  onChange,
+  error,
+  warning,
+  info,
+}: PathItemProps) => {
     const { t } = useTranslation();
     const isError = !!error;
     const isWarning = !!warning && !isError;
@@ -46,7 +70,7 @@ const PathItem = ({ label, path, icon, description, onBrowse, onChange, error, w
     );
 };
 
-const SetupStepInitialize = ({ onNext }) => {
+const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
     const { config, setConfig, addLog, logs } = useStore();
     const { t } = useTranslation();
     const logEndRef = React.useRef(null);
@@ -70,7 +94,7 @@ const SetupStepInitialize = ({ onNext }) => {
         addLog(message, 'system');
     };
 
-    const resolveInitializedPath = (key, rawPath) => {
+    const resolveInitializedPath = (key: 'corePath' | 'configPath' | 'workspacePath', rawPath: string): string => {
         const normalized = String(rawPath || '').trim().replace(/[\\/]+$/, '');
         if (!normalized) return '';
         if (key === 'corePath') return `${normalized}/openclaw`;
@@ -88,7 +112,7 @@ const SetupStepInitialize = ({ onNext }) => {
                     if (Array.isArray(tagList) && tagList.every((item) => typeof item === 'string')) {
                         setVersions(tagList);
                     }
-                } catch(e) {}
+                } catch(_e) {}
             }
         };
         fetchVersions();
@@ -109,7 +133,7 @@ const SetupStepInitialize = ({ onNext }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handlePathChange = (key: string, val: string) => {
+    const handlePathChange = (key: 'corePath' | 'configPath' | 'workspacePath', val: string) => {
         setConfig({ [key]: val });
         clearTimeout(validateDebounceRef.current[key]);
         validateDebounceRef.current[key] = setTimeout(() => {
@@ -121,7 +145,7 @@ const SetupStepInitialize = ({ onNext }) => {
         }, 500);
     };
 
-    const handleBrowse = async (key) => {
+    const handleBrowse = async (key: 'corePath' | 'configPath' | 'workspacePath') => {
         if (window.electronAPI && window.electronAPI.selectDirectory) {
             const selectedPath = await window.electronAPI.selectDirectory();
             if (selectedPath) {
@@ -221,7 +245,7 @@ const SetupStepInitialize = ({ onNext }) => {
                    if (Array.isArray(result.existingItems)) {
                        setExistingItems(result.existingItems);
                    }
-                } catch(e) {}
+                } catch(_e) {}
                 
                 pushProgress('🎉 ' + t('setupInitialize.success'));
                 setInitializing(false); 
