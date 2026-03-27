@@ -28,6 +28,10 @@
       "runtimeSettings": "龍蝦配置",
       "memory": "記憶資料"
     },
+    "webPreview": {
+      "title": "Web Preview 模式",
+      "desc": "偵測到您正在瀏覽器中執行。部分原生功能（如開啟資料夾、外部終端機、自動更新）將無法使用。建議使用桌面版以獲得完整體驗。"
+    },
     "headers": {
       "monitor": "核心進程哨兵",
       "controlCenter": "營運控制中心",
@@ -321,7 +325,7 @@
       "healthSummary": "健康總覽",
       "alertsQueue": "告警佇列",
       "taskHeartbeat": "設定稽核日誌",
-      "connectionHealth": "連線健康度",
+      "connectionHealth": "連線狀態",
       "checkedToday": "今日寫入數",
       "eligibleToday": "今日異動路徑",
       "startedToday": "今日可疑變更",
@@ -349,7 +353,7 @@
         "empty": "目前此級別沒有告警。"
       },
       "targets": {
-        "healthSummary": "健康總覽",
+        "healthSummary": "健康狀態",
         "actionCenter": "待審批中心",
         "staffGrid": "活躍團隊",
         "liveStream": "即時日誌",

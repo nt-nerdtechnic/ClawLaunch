@@ -28,6 +28,10 @@
       "runtimeSettings": "Runtime Config",
       "memory": "Memory & Data"
     },
+    "webPreview": {
+      "title": "Web Preview Mode",
+      "desc": "Detected you are running in a browser. Some native features (e.g., opening folders, external terminal, auto-updates) are unavailable. Use the desktop app for the full experience."
+    },
     "headers": {
       "monitor": "Core Process Sentinel",
       "controlCenter": "Operations Control Center",

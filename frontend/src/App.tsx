@@ -741,8 +741,25 @@ function App() {
         )}
 
         <div className="flex-1 p-10 overflow-y-auto relative">
+          {/* Web Preview Mode Warning */}
+          {!window.electronAPI && (
+            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-800/60 dark:bg-blue-950/20">
+              <div className="mt-0.5 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
+                <AlertCircle size={14} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-black text-blue-800 dark:text-blue-300 uppercase tracking-widest">
+                  {t('app.webPreview.title')}
+                </div>
+                <div className="mt-1 text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed font-medium">
+                  {t('app.webPreview.desc')}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
-          {activeTab !== 'onboarding' && onboardingFinished && (() => {
+          {activeTab !== 'onboarding' && onboardingFinished && activeTab !== 'monitor' && (() => {
             const missing: string[] = [];
             if (!config.corePath?.trim()) missing.push('Core Path');
             if (!config.configPath?.trim()) missing.push('Config Path');
