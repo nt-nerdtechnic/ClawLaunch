@@ -20,9 +20,13 @@ const pids = run(`lsof -tiTCP:${DEV_PORT} -sTCP:LISTEN`)
 
 for (const pid of pids) {
   const command = run(`ps -ww -p ${pid} -o command=`);
-  const isProjectVite = command.includes(`${PROJECT_ROOT}/node_modules`) && command.includes('/vite/bin/vite.js');
+  
+  // 檢查命令是否包含專案路徑內的 vite 二進位檔
+  // 使用相對路徑檢查或特徵檢查，以提高跨機器兼容性
+  const isVite = command.includes('vite') && command.includes('node_modules');
+  const isCorrectProject = command.includes(PROJECT_ROOT) || command.includes('NT-ClawLaunch');
 
-  if (!isProjectVite) {
+  if (!(isVite && isCorrectProject)) {
     continue;
   }
 
