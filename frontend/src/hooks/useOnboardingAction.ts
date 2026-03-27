@@ -2,9 +2,10 @@ import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { execInTerminal } from '../utils/terminal';
+import { AUTH_CHOICE_PROVIDER_ALIASES } from '../constants/providers';
+import { shellQuote } from '../utils/shell';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
 const DEFAULT_AGENT_ID = 'main';
 
@@ -22,43 +23,7 @@ const shortenText = (value: string, maxLen: number = 1200) => {
   return `${text.slice(0, maxLen)} ...(truncated)`;
 };
 
-const SUPPORTED_AUTH_CHOICES = new Set([
-  'apiKey',
-  'token',
-  'openai-api-key',
-  'openai-codex',
-  'gemini-api-key',
-  'google-gemini-cli',
-  'minimax-api',
-  'minimax-coding-plan-global-token',
-  'minimax-coding-plan-cn-token',
-  'moonshot-api-key',
-  'openrouter-api-key',
-  'xai-api-key',
-  'ollama',
-  'vllm',
-  'chutes',
-  'qwen-portal'
-]);
-
-const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
-  apiKey: ['anthropic'],
-  token: ['anthropic'],
-  'openai-api-key': ['openai'],
-  'openai-codex': ['openai-codex', 'openai'],
-  'gemini-api-key': ['gemini', 'google'],
-  'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
-  'minimax-api': ['minimax'],
-  'minimax-coding-plan-global-token': ['minimax-portal', 'minimax'],
-  'minimax-coding-plan-cn-token': ['minimax-portal', 'minimax'],
-  'moonshot-api-key': ['moonshot'],
-  'openrouter-api-key': ['openrouter'],
-  'xai-api-key': ['xai'],
-  'ollama': ['ollama'],
-  'vllm': ['vllm'],
-  'chutes': ['chutes'],
-  'qwen-portal': ['qwen-portal', 'qwen']
-};
+const SUPPORTED_AUTH_CHOICES = new Set(Object.keys(AUTH_CHOICE_PROVIDER_ALIASES));
 
 const CREDENTIALLESS_AUTH_CHOICES = new Set(['ollama', 'vllm']);
 const DIRECT_MINIMAX_TOKEN_CHOICES = new Set([
@@ -88,14 +53,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const profiles = parsed?.auth?.profiles || {};
     const entries = Object.entries(profiles) as Array<[string, any]>;
 
-    const providerAliases: Record<string, string[]> = {
-      'openai-codex': ['openai-codex'],
-      'google-gemini-cli': ['google-gemini-cli', 'google-gemini'],
-      'chutes': ['chutes'],
-      'qwen-portal': ['qwen-portal', 'qwen']
-    };
-
-    const aliases = providerAliases[authChoice] || [authChoice];
+    const aliases = AUTH_CHOICE_PROVIDER_ALIASES[authChoice] || [authChoice];
     return entries.some(([profileId, profile]) => {
       const provider = String(profile?.provider || '').toLowerCase();
       const mode = String(profile?.mode || '').toLowerCase();

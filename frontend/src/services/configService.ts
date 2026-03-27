@@ -1,14 +1,11 @@
-/**
- * Config and utility service
- * Includes all utility methods related to configuration and formatting
- */
+import { shellQuote } from '../utils/shell';
 
 export const ConfigService = {
   /**
    * Escape string for shell commands
    */
   shellQuote: (value: string): string => {
-    return `'${String(value).replace(/'/g, `'\\''`)}'`;
+    return shellQuote(value);
   },
 
   /**

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Key, Loader2, ShieldCheck, AlertCircle, Plus, Trash2, Brain, Cpu, Globe, Zap, Network, Database, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
+import { Key, Loader2, ShieldCheck, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getProviderGroups } from '../constants/providers';
 
 interface AuthProfileRow {
   profileId: string;
@@ -28,8 +29,8 @@ interface TelegramPairingRequest {
   };
 }
 
-interface AuthChoiceDef { id: string; name: string; desc: string; reqKey: boolean; oauthFlow?: boolean; isTokenFlow?: boolean; placeholder?: string; link?: string | null; helpText?: string; }
-interface ProviderGroupDef { id: string; label: string; desc: string; icon: React.ReactNode; choices: AuthChoiceDef[]; }
+
+// Local defs removed and replaced by central ones
 
 interface ChannelOption {
   id: string;
@@ -179,74 +180,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     { id: 'line',       name: 'LINE',        icon: <Waves size={14} />,         desc: t('runtime.providers.line.desc'),        placeholder: t('runtime.providers.line.placeholder'),       keyLabel: 'Channel Access Token' },
   ], [t]);
 
-  const AUTH_PROVIDER_GROUPS = useMemo<ProviderGroupDef[]>(() => [
-    {
-      id: 'anthropic', label: 'Anthropic', desc: 'Claude 3.7 / 3.5 Sonnet', icon: <Brain size={14} />,
-      choices: [
-        { id: 'apiKey', name: 'API Key', desc: t('runtime.providers.anthropic.desc'), reqKey: true, placeholder: 'sk-ant-...', link: 'https://console.anthropic.com/' },
-        { id: 'token', name: 'Setup Token (CLI)', desc: t('runtime.providers.anthropicCli.desc'), reqKey: true, isTokenFlow: true, placeholder: t('runtime.providers.anthropicCli.placeholder'), link: null, helpText: t('runtime.providers.anthropicCli.help') },
-      ],
-    },
-    {
-      id: 'openai', label: 'OpenAI', desc: 'GPT-4o / Codex', icon: <Cpu size={14} />,
-      choices: [
-        { id: 'openai-api-key', name: 'API Key', desc: t('runtime.providers.openai.desc'), reqKey: true, placeholder: 'sk-...', link: 'https://platform.openai.com/' },
-        { id: 'openai-codex', name: 'Codex OAuth', desc: t('runtime.providers.openaiCodex.desc'), reqKey: false, oauthFlow: true, link: null },
-      ],
-    },
-    {
-      id: 'google', label: 'Google', desc: 'Gemini 2.0 Flash / Pro', icon: <Globe size={14} />,
-      choices: [
-        { id: 'gemini-api-key', name: 'API Key', desc: t('runtime.providers.gemini.desc'), reqKey: true, placeholder: 'AIzaSy...', link: 'https://aistudio.google.com/app/apikey' },
-        { id: 'google-gemini-cli', name: 'Gemini OAuth', desc: t('runtime.providers.geminiCli.desc'), reqKey: false, oauthFlow: true, link: null },
-      ],
-    },
-    {
-      id: 'openrouter', label: 'OpenRouter', desc: t('runtime.providers.openrouter.desc'), icon: <Globe size={14} />,
-      choices: [
-        { id: 'openrouter-api-key', name: 'API Key', desc: t('runtime.providers.openrouter.desc'), reqKey: true, placeholder: 'sk-or-...', link: 'https://openrouter.ai/keys' },
-      ],
-    },
-    {
-      id: 'minimax', label: 'MiniMax', desc: 'MiniMax M2.5', icon: <Zap size={14} />,
-      choices: [
-        { id: 'minimax-api', name: 'API Key', desc: t('runtime.providers.minimax.desc'), reqKey: true, placeholder: '...', link: 'https://platform.minimaxi.com/' },
-        { id: 'minimax-coding-plan-global-token', name: 'Coding Plan Token (Global)', desc: t('runtime.providers.minimaxOauthGlobal.desc'), reqKey: true, placeholder: 'MINIMAX_OAUTH_TOKEN', link: 'https://platform.minimax.io/' },
-        { id: 'minimax-coding-plan-cn-token', name: 'Coding Plan Token (CN)', desc: t('runtime.providers.minimaxOauthCn.desc'), reqKey: true, placeholder: 'MINIMAX_OAUTH_TOKEN', link: 'https://platform.minimaxi.com/' },
-      ],
-    },
-    {
-      id: 'moonshot', label: 'Moonshot', desc: 'Kimi K2.5', icon: <Zap size={14} />,
-      choices: [
-        { id: 'moonshot-api-key', name: 'Kimi API Key', desc: t('runtime.providers.moonshot.desc'), reqKey: true, placeholder: 'sk-...', link: 'https://platform.moonshot.cn/console/api-keys' },
-      ],
-    },
-    {
-      id: 'xai', label: 'xAI', desc: 'Grok-4 / Grok-2', icon: <Cpu size={14} />,
-      choices: [
-        { id: 'xai-api-key', name: 'Grok API Key', desc: t('runtime.providers.xai.desc'), reqKey: true, placeholder: 'xai-...', link: 'https://console.x.ai/' },
-      ],
-    },
-    {
-      id: 'chutes', label: 'Chutes', desc: 'Decentralized AI', icon: <Network size={14} />,
-      choices: [
-        { id: 'chutes', name: 'OAuth', desc: t('runtime.providers.chutes.desc'), reqKey: false, oauthFlow: true, link: null },
-      ],
-    },
-    {
-      id: 'local', label: 'Local', desc: 'Ollama / vLLM', icon: <Database size={14} />,
-      choices: [
-        { id: 'ollama', name: 'Ollama', desc: t('runtime.providers.ollama.desc'), reqKey: false, link: null },
-        { id: 'vllm', name: 'vLLM', desc: t('runtime.providers.vllm.desc'), reqKey: false, link: null },
-      ],
-    },
-    {
-      id: 'qwen', label: 'Qwen', desc: t('runtime.providers.qwen.desc'), icon: <Cpu size={14} />,
-      choices: [
-        { id: 'qwen-portal', name: 'Qwen Portal', desc: t('runtime.providers.qwen.desc'), reqKey: true, placeholder: '...', link: null },
-      ],
-    },
-  ], [t]);
+  const AUTH_PROVIDER_GROUPS = getProviderGroups(t);
   const dynamicModelSource = dynamicModelOptions.length > 0 ? t('common.labels.dynamic') : t('common.labels.static');
 
   // Model list expanded/collapsed state

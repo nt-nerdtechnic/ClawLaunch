@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
-import { Layout, Settings, Activity, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, Brain, Cpu, Globe, Zap, Network, Database, Radar } from 'lucide-react';
+import { Layout, Settings, Activity, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, Brain, Database, Radar } from 'lucide-react';
 import { MiniView } from './components/MiniView';
 import { ThemeToggle } from './components/ThemeToggle';
 import { LanguageToggle } from './components/LanguageToggle';
@@ -11,6 +11,7 @@ import SetupWizard from './components/onboarding/SetupWizard';
 import UpdateBanner from './components/UpdateBanner';
 import { useStore } from './store';
 import { ConfigService, ModelService } from './services/configService';
+import { PROVIDER_ALIAS_MAP as PROVIDER_ALIAS_MAP_CENTRAL, getProviderGroups } from './constants/providers';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
 import { useAuthProfiles } from './hooks/useAuthProfiles';
 import { useTelegramPairing } from './hooks/useTelegramPairing';
@@ -182,22 +183,8 @@ function App() {
     xai:       { label: 'xAI (Grok)',          models: ['xai/grok-3', 'xai/grok-2-vision'] },
   };
 
-  const PROVIDER_ALIAS_MAP: Record<string, string[]> = {
-    anthropic: ['anthropic'],
-    openai: ['openai', 'openai-codex'],
-    'openai-codex': ['openai-codex', 'openai'],
-    google: ['google', 'gemini'],
-    gemini: ['gemini', 'google'],
-    minimax: ['minimax'],
-    moonshot: ['moonshot'],
-    openrouter: ['openrouter'],
-    xai: ['xai'],
-    ollama: ['ollama'],
-    vllm: ['vllm'],
-    chutes: ['chutes'],
-    qwen: ['qwen', 'qwen-portal'],
-    'qwen-portal': ['qwen-portal', 'qwen'],
-  };
+  const PROVIDER_ALIAS_MAP = PROVIDER_ALIAS_MAP_CENTRAL;
+  const SETTINGS_PROVIDER_GROUPS = getProviderGroups(t);
 
   const getProviderDisplayLabel = (providerRef: string, fallbackLabel?: string) => {
     const normalized = String(providerRef || '').trim().toLowerCase();
@@ -206,70 +193,7 @@ function App() {
 
   const runtimeProviders: string[] = (runtimeProfile as any)?.providers ?? [];
 
-  type AuthChoiceItem = { id: string; name: string; desc: string; reqKey: boolean; oauthFlow?: boolean };
-  type ProviderGroupItem = { id: string; label: string; icon: React.ReactNode; choices: AuthChoiceItem[] };
-  const SETTINGS_PROVIDER_GROUPS: ProviderGroupItem[] = [
-    {
-      id: 'anthropic', label: 'Anthropic', icon: <Brain size={13} />,
-      choices: [
-        { id: 'apiKey', name: 'API Key', desc: t('runtime.providers.anthropic.desc'), reqKey: true },
-        { id: 'token', name: 'Setup Token', desc: t('runtime.providers.anthropicCli.desc'), reqKey: true },
-      ],
-    },
-    {
-      id: 'openai', label: 'OpenAI', icon: <Cpu size={13} />,
-      choices: [
-        { id: 'openai-api-key', name: 'API Key', desc: t('runtime.providers.openai.desc'), reqKey: true },
-        { id: 'openai-codex', name: 'Codex OAuth', desc: t('runtime.providers.openaiCodex.desc'), reqKey: false, oauthFlow: true },
-      ],
-    },
-    {
-      id: 'google', label: 'Google', icon: <Globe size={13} />,
-      choices: [
-        { id: 'gemini-api-key', name: 'API Key', desc: t('runtime.providers.gemini.desc'), reqKey: true },
-        { id: 'google-gemini-cli', name: 'Gemini OAuth', desc: t('runtime.providers.geminiCli.desc'), reqKey: false, oauthFlow: true },
-      ],
-    },
-    {
-      id: 'openrouter', label: 'OpenRouter', icon: <Globe size={13} />,
-      choices: [
-        { id: 'openrouter-api-key', name: 'API Key', desc: t('runtime.providers.openrouter.desc'), reqKey: true },
-      ],
-    },
-    {
-      id: 'minimax', label: 'MiniMax', icon: <Zap size={13} />,
-      choices: [
-        { id: 'minimax-api', name: 'API Key', desc: t('runtime.providers.minimax.desc'), reqKey: true },
-        { id: 'minimax-coding-plan-global-token', name: 'Coding Plan Token (Global)', desc: t('runtime.providers.minimaxOauthGlobal.desc'), reqKey: true },
-        { id: 'minimax-coding-plan-cn-token', name: 'Coding Plan Token (CN)', desc: t('runtime.providers.minimaxOauthCn.desc'), reqKey: true },
-      ],
-    },
-    {
-      id: 'moonshot', label: 'Moonshot', icon: <Zap size={13} />,
-      choices: [
-        { id: 'moonshot-api-key', name: 'Kimi API Key', desc: t('runtime.providers.moonshot.desc'), reqKey: true },
-      ],
-    },
-    {
-      id: 'xai', label: 'xAI', icon: <Cpu size={13} />,
-      choices: [
-        { id: 'xai-api-key', name: 'Grok API Key', desc: t('runtime.providers.xai.desc'), reqKey: true },
-      ],
-    },
-    {
-      id: 'chutes', label: 'Chutes', icon: <Network size={13} />,
-      choices: [
-        { id: 'chutes', name: 'OAuth', desc: t('runtime.providers.chutes.desc'), reqKey: false, oauthFlow: true },
-      ],
-    },
-    {
-      id: 'local', label: 'Local', icon: <Database size={13} />,
-      choices: [
-        { id: 'ollama', name: 'Ollama', desc: t('runtime.providers.ollama.desc'), reqKey: false },
-        { id: 'vllm', name: 'vLLM', desc: t('runtime.providers.vllm.desc'), reqKey: false },
-      ],
-    },
-  ];
+
   const healthyAuthProviders = Array.from(new Set(
     authProfiles
       .filter((profile) => profile.agentPresent && profile.credentialHealthy)

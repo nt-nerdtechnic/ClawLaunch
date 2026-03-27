@@ -1,8 +1,9 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, Cpu, Brain, Globe, Zap, Network, AlertCircle, FolderOpen } from 'lucide-react';
+import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, AlertCircle, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
+import { AUTH_CHOICE_PROVIDER_ALIASES, getProviderGroups, OAUTH_AUTH_CHOICES } from '../../constants/providers';
 import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 import { execInTerminal } from '../../utils/terminal';
@@ -47,27 +48,9 @@ const SetupStepModel = ({ onNext }) => {
   } = useStore();
   const { t } = useTranslation();
   const onboardingAction = useOnboardingAction();
-    const authChoiceProviderAliases = {
-        apiKey: ['anthropic'],
-        token: ['anthropic'],
-        'openai-api-key': ['openai'],
-        'openai-codex': ['openai-codex', 'openai'],
-        'gemini-api-key': ['gemini', 'google'],
-        'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
-        'minimax-api': ['minimax'],
-        'minimax-coding-plan-global-token': ['minimax-portal', 'minimax'],
-        'minimax-coding-plan-cn-token': ['minimax-portal', 'minimax'],
-        'moonshot-api-key': ['moonshot'],
-        'openrouter-api-key': ['openrouter'],
-        'xai-api-key': ['xai'],
-        ollama: ['ollama'],
-        vllm: ['vllm'],
-        chutes: ['chutes'],
-        'qwen-portal': ['qwen-portal', 'qwen']
-    };
 
     const profileMatchesSelectedChoice = (profile, authChoice) => {
-        const aliases = authChoiceProviderAliases[String(authChoice || '').trim()] || [];
+        const aliases = AUTH_CHOICE_PROVIDER_ALIASES[String(authChoice || '').trim()] || [];
         // Hide warnings if authChoice is unknown/empty to avoid misrepresenting legacy profiles during initial render
         if (!aliases.length) return false;
         const provider = String(profile?.provider || '').toLowerCase();
@@ -77,12 +60,7 @@ const SetupStepModel = ({ onNext }) => {
             return normalizedAlias && (provider === normalizedAlias || profileId.includes(normalizedAlias));
         });
     };
-    const oauthAuthChoices = new Set([
-        'openai-codex',
-        'google-gemini-cli',
-        'chutes',
-                'qwen-portal'
-    ]);
+    const oauthAuthChoices = OAUTH_AUTH_CHOICES;
 
   const [probingKey, setProbingKey] = useState(null);
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
@@ -93,84 +71,7 @@ const SetupStepModel = ({ onNext }) => {
         const [authHealthWarning, setAuthHealthWarning] = useState('');
   
   // CLI AuthChoices Alignment
-  const providerGroups = [
-    {
-      id: 'anthropic', label: 'Anthropic', icon: <Brain size={16} />,
-      desc: 'Claude 3.7 / 3.5 Sonnet',
-      choices: [
-        { id: 'apiKey', name: 'Anthropic API Key', desc: t('modelSetup.modelSelect.choiceDesc.anthropicApiKey'), reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: 'https://console.anthropic.com/' },
-            { id: 'token', name: 'Setup Token (CLI)', desc: t('modelSetup.modelSelect.choiceDesc.setupTokenCli'), reqKey: true, defaultModel: 'claude-3-7-sonnet-latest', link: null, helpText: t('modelSetup.modelSelect.choiceHelp.setupTokenCli') }
-      ]
-    },
-    {
-      id: 'openai', label: 'OpenAI', icon: <Cpu size={16} />,
-      desc: 'GPT-4o / Codex',
-      choices: [
-                { id: 'openai-api-key', name: 'OpenAI API Key', desc: t('modelSetup.modelSelect.choiceDesc.openaiApiKey'), reqKey: true, defaultModel: 'gpt-4o', link: 'https://platform.openai.com/' },
-                { id: 'openai-codex', name: 'OpenAI Codex (OAuth)', desc: t('modelSetup.modelSelect.choiceDesc.openaiCodexOauth'), reqKey: false, defaultModel: 'gpt-4o', link: null }
-      ]
-    },
-    {
-      id: 'google', label: 'Google', icon: <Globe size={16} />,
-      desc: 'Gemini 2.0 Flash / Pro',
-      choices: [
-                { id: 'gemini-api-key', name: 'Gemini API Key', desc: t('modelSetup.modelSelect.choiceDesc.geminiApiKey'), reqKey: true, defaultModel: 'gemini-2.0-flash', link: 'https://aistudio.google.com/app/apikey' },
-                { id: 'google-gemini-cli', name: 'Gemini CLI (OAuth)', desc: t('modelSetup.modelSelect.choiceDesc.googleGeminiCliOauth'), reqKey: false, defaultModel: 'gemini-2.0-flash', link: null }
-      ]
-    },
-    {
-      id: 'minimax', label: 'MiniMax', icon: <Zap size={16} />,
-      desc: 'MiniMax M2.5',
-      choices: [
-                                { id: 'minimax-api', name: 'MiniMax M2.5 (API Key)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxApiKey'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' },
-                                { id: 'minimax-coding-plan-global-token', name: 'MiniMax Coding Plan Token (Global)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxCodingPlanTokenGlobal'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimax.io/' },
-                                { id: 'minimax-coding-plan-cn-token', name: 'MiniMax Coding Plan Token (CN)', desc: t('modelSetup.modelSelect.choiceDesc.minimaxCodingPlanTokenCn'), reqKey: true, defaultModel: 'MiniMax-M2.5', link: 'https://platform.minimaxi.com/' }
-      ]
-    },
-    {
-      id: 'local', label: 'Local / Custom', icon: <Database size={16} />,
-      desc: 'Ollama, vLLM, DeepSeek Local',
-      choices: [
-                { id: 'ollama', name: 'Ollama', desc: t('modelSetup.modelSelect.choiceDesc.ollamaLocal'), reqKey: false, defaultModel: 'ollama/llama3', link: null },
-                { id: 'vllm', name: 'vLLM', desc: t('modelSetup.modelSelect.choiceDesc.vllmLocal'), reqKey: false, defaultModel: 'vllm/mistral-7b', link: null }
-      ]
-    },
-    {
-      id: 'chutes', label: 'Chutes', icon: <Network size={16} />,
-      desc: 'Decentralized AI platform',
-      choices: [
-                { id: 'chutes', name: 'Chutes (OAuth)', desc: t('modelSetup.modelSelect.choiceDesc.chutesOauth'), reqKey: false, defaultModel: 'chutes', link: null }
-      ]
-    },
-    {
-      id: 'moonshot', label: 'Moonshot', icon: <Zap size={16} />,
-    desc: t('modelSetup.modelSelect.providerDesc.moonshot'),
-      choices: [
-                { id: 'moonshot-api-key', name: 'Moonshot (Kimi K2.5)', desc: t('modelSetup.modelSelect.choiceDesc.moonshotApiKey'), reqKey: true, defaultModel: 'kimi-k2.5', link: 'https://platform.moonshot.cn/console/api-keys' }
-      ]
-    },
-    {
-      id: 'openrouter', label: 'OpenRouter', icon: <Globe size={16} />,
-    desc: t('modelSetup.modelSelect.providerDesc.openrouter'),
-      choices: [
-                { id: 'openrouter-api-key', name: 'OpenRouter', desc: t('modelSetup.modelSelect.choiceDesc.openrouterApiKey'), reqKey: true, defaultModel: 'openrouter/auto', link: 'https://openrouter.ai/keys' }
-      ]
-    },
-    {
-      id: 'xai', label: 'xAI', icon: <Cpu size={16} />,
-      desc: 'Grok-1 / Grok-2',
-      choices: [
-                { id: 'xai-api-key', name: 'xAI (Grok)', desc: t('modelSetup.modelSelect.choiceDesc.xaiApiKey'), reqKey: true, defaultModel: 'grok-4', link: 'https://console.x.ai/' }
-      ]
-    },
-    {
-      id: 'qwen', label: 'Qwen', icon: <Globe size={16} />,
-      desc: t('modelSetup.modelSelect.providerDesc.qwen'),
-      choices: [
-        { id: 'qwen-portal', name: 'Qwen Portal (Device Code)', desc: t('modelSetup.modelSelect.choiceDesc.qwenPortalDevice'), reqKey: false, defaultModel: 'qwen-max', link: null }
-      ]
-    }
-  ];
+  const providerGroups = getProviderGroups(t);
 
   const determineInitialProvider = () => {
     if (config.authChoice) {
