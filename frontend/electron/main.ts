@@ -4880,7 +4880,8 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     deliver: Boolean(request.deliver),
     idempotencyKey: request.requestId,
   };
-  if (request.agentId) params.agentId = request.agentId;
+  // agentId should not be passed at the root of params for chat.send
+  // if (request.agentId) params.agentId = request.agentId;
 
   if (request.forceLocal) {
     return {
@@ -4893,7 +4894,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     };
   }
 
-  const statusRes = await runShellCommand(`${runtime.openclawPrefix} gateway status${runtime.gatewayUrlArg}${runtime.gatewayAuthArg} --json`);
+  const statusRes = await runShellCommand(`${runtime.openclawPrefix} gateway status --json`);
   const gatewayOnline = isGatewayOnlineFromStatus(statusRes);
   if (!gatewayOnline) {
     return {
