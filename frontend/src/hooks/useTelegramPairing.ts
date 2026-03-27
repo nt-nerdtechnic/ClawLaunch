@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export type TelegramPairingRequest = {
   id: string;
@@ -38,7 +38,7 @@ export function useTelegramPairing(
   const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
   // Load Telegram pairing requests
-  const loadTelegramPairingRequests = async () => {
+  const loadTelegramPairingRequests = useCallback(async () => {
     if (!window.electronAPI || !resolvedConfigDir) {
       setTelegramPairingRequests([]);
       setTelegramAuthorizedUsers([]);
@@ -88,7 +88,7 @@ export function useTelegramPairing(
     } finally {
       setTelegramPairingLoading(false);
     }
-  };
+  }, [resolvedConfigDir]);
 
   // Periodic reload
   useEffect(() => {
@@ -98,7 +98,7 @@ export function useTelegramPairing(
       loadTelegramPairingRequests();
     }, 15000);
     return () => window.clearInterval(interval);
-  }, [activeTab, resolvedConfigDir, loadTelegramPairingRequests]);
+  }, [activeTab, resolvedConfigDir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     telegramPairingRequests,
