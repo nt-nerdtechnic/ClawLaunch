@@ -57,7 +57,7 @@ const toDateKey = (isoTime: string) => {
 
 export function Analytics() {
   const { t } = useTranslation();
-  const { setUsage, snapshot, snapshotHistory, runtimeUsageEvents, modelPrices, setModelPrices, config } = useStore();
+  const { setUsage, snapshot, snapshotHistory, runtimeUsageEvents, modelPrices, setModelPrices } = useStore();
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const [usageWindow, setUsageWindow] = useState<'today' | '7d' | '30d'>('7d');
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
@@ -89,21 +89,6 @@ export function Analytics() {
   const getModelPrice = (modelName: string) => {
     const name = modelName.trim().toLowerCase();
     if (name === 'unknown' || !name) return null;
-
-    // Highest Priority: Custom configuration defined in clawlaunch.json
-    if ((config as any)?.customModelPrices) {
-      const customPrices = (config as any).customModelPrices;
-      if (customPrices && typeof customPrices === 'object') {
-        for (const [key, val] of Object.entries(customPrices)) {
-          if (key.toLowerCase() === name) {
-            const parsedVal = val as any;
-            if (parsedVal && typeof parsedVal.prompt === 'number' && typeof parsedVal.completion === 'number') {
-              return { prompt: parsedVal.prompt, completion: parsedVal.completion };
-            }
-          }
-        }
-      }
-    }
 
     if (!modelPrices || Object.keys(modelPrices).length === 0) return null;
     
