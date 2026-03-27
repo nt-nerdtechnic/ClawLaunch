@@ -1,5 +1,4 @@
-// @ts-nocheck - setup step has incomplete types, resolvable with provider config typings
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Key, ExternalLink, Bot, ArrowRight, Package, Settings, Database, Loader2, AlertCircle, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
@@ -8,7 +7,34 @@ import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 import { execInTerminal } from '../../utils/terminal';
 
-const PathItem = ({ label, path, icon, onBrowse, onChange }) => {
+type PathKey = 'corePath' | 'configPath' | 'workspacePath';
+
+type SetupStepModelProps = {
+    onNext: () => void;
+};
+
+type PathItemProps = {
+    label: string;
+    path?: string;
+    icon: ReactNode;
+    onBrowse: () => void;
+    onChange: (value: string) => void;
+};
+
+type ProfileRow = {
+    provider?: string;
+    profileId?: string;
+    severity?: string;
+};
+
+const getErrorMessage = (err: unknown, fallback: string) => {
+    if (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string') {
+        return (err as { message: string }).message;
+    }
+    return fallback;
+};
+
+const PathItem = ({ label, path, icon, onBrowse, onChange }: PathItemProps) => {
     const { t } = useTranslation();
     const hasPath = !!path;
     return (
@@ -40,7 +66,7 @@ const PathItem = ({ label, path, icon, onBrowse, onChange }) => {
     );
 };
 
-const SetupStepModel = ({ onNext }) => {
+const SetupStepModel = ({ onNext }: SetupStepModelProps) => {
   const { 
     config, setConfig, envStatus, setEnvStatus, 
     detectedConfig, userType, detectingPaths, 
@@ -49,7 +75,7 @@ const SetupStepModel = ({ onNext }) => {
   const { t } = useTranslation();
   const onboardingAction = useOnboardingAction();
 
-    const profileMatchesSelectedChoice = (profile, authChoice) => {
+    const profileMatchesSelectedChoice = (profile: ProfileRow, authChoice: string) => {
         const aliases = AUTH_CHOICE_PROVIDER_ALIASES[String(authChoice || '').trim()] || [];
         // Hide warnings if authChoice is unknown/empty to avoid misrepresenting legacy profiles during initial render
         if (!aliases.length) return false;
@@ -62,11 +88,11 @@ const SetupStepModel = ({ onNext }) => {
     };
     const oauthAuthChoices = OAUTH_AUTH_CHOICES;
 
-  const [probingKey, setProbingKey] = useState(null);
+    const [probingKey, setProbingKey] = useState<PathKey | null>(null);
   const [showFullSetup, setShowFullSetup] = useState(userType === 'new');
     const [tokenCommand, setTokenCommand] = useState('claude setup-token');
     const [tokenCommandRunning, setTokenCommandRunning] = useState(false);
-    const [tokenCommandError, setTokenCommandError] = useState(null);
+    const [tokenCommandError, setTokenCommandError] = useState<string | null>(null);
         const [localError, setLocalError] = useState('');
         const [authHealthWarning, setAuthHealthWarning] = useState('');
   
@@ -92,7 +118,7 @@ const SetupStepModel = ({ onNext }) => {
   const currentProviderGroup = providerGroups.find(g => g.id === selectedProviderId) || providerGroups[0];
   const currentChoice = currentProviderGroup.choices.find(c => c.id === selectedChoiceId) || currentProviderGroup.choices[0];
 
-  const handleProviderSelect = (pid) => {
+    const handleProviderSelect = (pid: string) => {
         setLocalError('');
     setSelectedProviderId(pid);
     const group = providerGroups.find(g => g.id === pid);
@@ -102,13 +128,13 @@ const SetupStepModel = ({ onNext }) => {
     }
   };
 
-  const handleChoiceSelect = (cid, cmodel) => {
+      const handleChoiceSelect = (cid: string, cmodel?: string) => {
       setLocalError('');
       setSelectedChoiceId(cid);
-      setConfig({ authChoice: cid, model: cmodel });
+          setConfig({ authChoice: cid, model: cmodel || config.model });
   };
 
-  const handleBrowse = async (key) => {
+    const handleBrowse = async (key: PathKey) => {
     if (window.electronAPI && window.electronAPI.selectDirectory) {
       const selectedPath = await window.electronAPI.selectDirectory();
       if (selectedPath) {
@@ -139,7 +165,7 @@ const SetupStepModel = ({ onNext }) => {
                     });
                 }
             }
-        } catch(e) {
+        } catch (e) {
             console.error("Probe failed", e);
         } finally {
             setTimeout(() => setProbingKey(null), 500); 
@@ -173,7 +199,7 @@ const SetupStepModel = ({ onNext }) => {
 
   useEffect(() => {
     const checkEnvironment = async () => {
-      const check = async (cmd) => {
+    const check = async (cmd: string) => {
           try {
               const res = await window.electronAPI.exec(cmd);
               return res.exitCode === 0 || res.code === 0 ? 'ok' : 'error';
@@ -226,9 +252,9 @@ const SetupStepModel = ({ onNext }) => {
                 const rows = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
                 // Prioritize component state (selectedChoiceId) over config.authChoice to avoid including all profiles when the initial value is empty
                 const effectiveAuthChoice = selectedChoiceId || config.authChoice || 'apiKey';
-                const relatedRows = rows.filter((profile) => profileMatchesSelectedChoice(profile, effectiveAuthChoice));
-                const relatedCritical = relatedRows.filter((profile) => String(profile?.severity || '').toLowerCase() === 'critical').length;
-                const relatedWarn = relatedRows.filter((profile) => String(profile?.severity || '').toLowerCase() === 'warn').length;
+                const relatedRows = rows.filter((profile: ProfileRow) => profileMatchesSelectedChoice(profile, effectiveAuthChoice));
+                const relatedCritical = relatedRows.filter((profile: ProfileRow) => String(profile?.severity || '').toLowerCase() === 'critical').length;
+                const relatedWarn = relatedRows.filter((profile: ProfileRow) => String(profile?.severity || '').toLowerCase() === 'warn').length;
                 if (relatedCritical > 0 || relatedWarn > 0) {
                     setAuthHealthWarning(t('modelSetup.modelSelect.authHealthWarning', { critical: relatedCritical, warn: relatedWarn }));
                 } else {
@@ -287,12 +313,13 @@ const SetupStepModel = ({ onNext }) => {
                 holdOpen: true,
                 cwd: config.corePath || undefined
             });
-            const code = res?.code ?? res?.exitCode;
+            const resAny = res as { code?: number; exitCode?: number; stderr?: string };
+            const code = resAny.code ?? resAny.exitCode;
             if (typeof code === 'number' && code !== 0) {
-                throw new Error(res?.stderr || t('modelSetup.modelSelect.commandRunFailed'));
+                throw new Error(resAny.stderr || t('modelSetup.modelSelect.commandRunFailed'));
             }
-        } catch (err) {
-            setTokenCommandError(err?.message || t('modelSetup.modelSelect.commandRunError'));
+        } catch (err: unknown) {
+            setTokenCommandError(getErrorMessage(err, t('modelSetup.modelSelect.commandRunError')));
         } finally {
             setTokenCommandRunning(false);
         }
@@ -375,7 +402,7 @@ const SetupStepModel = ({ onNext }) => {
                             path={config.corePath} 
                             icon={<Package size={14}/>} 
                             onBrowse={() => handleBrowse('corePath')}
-                            onChange={(val) => setConfig({ corePath: val })}
+                            onChange={(val: string) => setConfig({ corePath: val })}
                         />
                     </div>
                     <div className="relative group">
@@ -384,7 +411,7 @@ const SetupStepModel = ({ onNext }) => {
                             path={config.configPath} 
                             icon={<Settings size={14}/>} 
                             onBrowse={() => handleBrowse('configPath')}
-                            onChange={(val) => setConfig({ configPath: val })}
+                            onChange={(val: string) => setConfig({ configPath: val })}
                         />
                     </div>
                     <div className="relative group">
@@ -393,7 +420,7 @@ const SetupStepModel = ({ onNext }) => {
                             path={config.workspacePath} 
                             icon={<Database size={14}/>} 
                             onBrowse={() => handleBrowse('workspacePath')}
-                            onChange={(val) => setConfig({ workspacePath: val })}
+                            onChange={(val: string) => setConfig({ workspacePath: val })}
                         />
                     </div>
                 </div>

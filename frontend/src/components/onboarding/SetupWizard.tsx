@@ -1,4 +1,3 @@
-// @ts-nocheck
 // TODO: Refactor setup wizard with complete type definitions
 // onboarding component has incomplete types, resolvable with proper auth/config typings
 import React, { useEffect, useRef, useState } from 'react';
@@ -69,7 +68,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   // Define dynamic step paths
   const steps: StepDefinition[] = [
     { id: 'welcome', component: SetupStepWelcome },
-    ...(userType === 'new' ? [{ id: 'initialize', component: SetupStepInitialize }] : []),
+    ...(userType === 'new' ? ([{ id: 'initialize', component: SetupStepInitialize }] as StepDefinition[]) : []),
     { id: 'model', component: SetupStepModel },
     { id: 'messaging', component: SetupStepMessaging },
     { id: 'skills', component: SetupStepSkills },
@@ -80,9 +79,13 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   const setupStepIds: ('initialize' | 'model' | 'messaging' | 'skills')[] = steps
     .map((step) => step.id)
     .filter((id): id is 'initialize' | 'model' | 'messaging' | 'skills' => id !== 'welcome' && id !== 'launch');
-  const currentStepId = steps[currentStep]?.id;
+  const currentStepId: StepId | undefined = steps[currentStep]?.id;
+  const currentSetupStepId =
+    currentStepId === 'initialize' || currentStepId === 'model' || currentStepId === 'messaging' || currentStepId === 'skills'
+      ? currentStepId
+      : null;
   const setupStageTotal = Math.max(setupStepIds.length, 1);
-  const setupStageCurrent = Math.max(setupStepIds.indexOf(currentStepId), 0);
+  const setupStageCurrent = Math.max(currentSetupStepId ? setupStepIds.indexOf(currentSetupStepId) : 0, 0);
 
   const nextStep = () => {
     setCurrentStep((prev) => (prev < totalSteps - 1 ? prev + 1 : prev));

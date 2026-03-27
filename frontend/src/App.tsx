@@ -1,4 +1,3 @@
-// @ts-nocheck - App has context provider config complexity
 import { useState, useEffect, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
 import { Layout, Settings, Activity, Boxes, MonitorPlay, BarChart3, LogOut, AlertCircle, X, Brain, Database, Radar } from 'lucide-react';
 import { MiniView } from './components/MiniView';
@@ -7,7 +6,6 @@ import { LanguageToggle } from './components/LanguageToggle';
 import { ChatWidget } from './components/chat/ChatWidget';
 import PixelOfficeWidget from './components/pixel-office/PixelOfficeWidget';
 import { useTranslation } from 'react-i18next';
-// @ts-expect-error - SetupWizard has incomplete types, TODO: resolve in Phase 2
 import SetupWizard from './components/onboarding/SetupWizard';
 import UpdateBanner from './components/UpdateBanner';
 import { useStore } from './store';

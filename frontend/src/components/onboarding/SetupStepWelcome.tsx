@@ -1,10 +1,13 @@
-// @ts-nocheck
 // TODO: Refactor setup steps with complete type definitions
 // setup step has incomplete types, resolvable with config typings
 import React from 'react';
 import { Package, Sparkles, ArrowRight, Layers, Settings, Database, Globe } from 'lucide-react';
-import { useStore } from '../../store';
+import { useStore, type Config } from '../../store';
 import { useTranslation } from 'react-i18next';
+
+interface SetupStepWelcomeProps {
+  onNext: () => void;
+}
 
 /**
  * SetupStepWelcome: Step 0 - Environment Choice
@@ -16,7 +19,7 @@ const LANGUAGE_OPTIONS = [
   { code: 'en', label: 'English' },
 ];
 
-const SetupStepWelcome = ({ onNext }) => {
+const SetupStepWelcome: React.FC<SetupStepWelcomeProps> = ({ onNext }) => {
   const { setUserType, setConfig, setDetectedConfig, detectedConfig, language, setLanguage } = useStore();
   const { t, i18n } = useTranslation();
 
@@ -35,7 +38,7 @@ const SetupStepWelcome = ({ onNext }) => {
     }
   };
 
-  const persistConfig = async (patch) => {
+  const persistConfig = async (patch: Partial<Config>) => {
     if (!window.electronAPI) return;
     const current = useStore.getState().config;
     const next = { ...current, ...patch };
@@ -46,7 +49,7 @@ const SetupStepWelcome = ({ onNext }) => {
     }
   };
 
-  const handleChoice = (type) => {
+  const handleChoice = (type: 'new' | 'existing') => {
     setUserType(type);
     if (type === 'new') {
       const nextPatch = {

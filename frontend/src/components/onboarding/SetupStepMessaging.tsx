@@ -1,4 +1,3 @@
-// @ts-nocheck - setup step has incomplete types, resolvable with config channel typings
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, AlertCircle, Loader2, HelpCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store';
@@ -6,13 +5,28 @@ import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 import { useTranslation } from 'react-i18next';
 
+interface SetupStepMessagingProps {
+  onNext: () => void;
+}
+
+type ChannelOption = {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+  descKey: string;
+  placeholderKey: string;
+  keyLabelKey: string;
+  reqKey?: boolean;
+  needsAppToken?: boolean;
+};
+
 /**
  * NT-ClawLaunch Onboarding: Messaging Platform Setup Step
  * Ref: Neil's Strategy - "Frictionless Help & Jargon Translation" (2026-03-12)
  * Updated 2026-03-14: Aligned with CLI CHAT_CHANNEL_ORDER
  */
 
-const CHANNEL_OPTIONS = [
+const CHANNEL_OPTIONS: ChannelOption[] = [
   { id: 'telegram', name: 'Telegram', icon: <MessageSquare size={16} />, descKey: 'setupMessaging.channels.telegram.desc', placeholderKey: 'setupMessaging.channels.telegram.placeholder', keyLabelKey: 'setupMessaging.channels.telegram.keyLabel' },
   { id: 'whatsapp', name: 'WhatsApp', icon: <Phone size={16} />, descKey: 'setupMessaging.channels.whatsapp.desc', placeholderKey: 'setupMessaging.channels.whatsapp.placeholder', keyLabelKey: 'setupMessaging.channels.whatsapp.keyLabel', reqKey: false },
   { id: 'discord', name: 'Discord', icon: <Bot size={16} />, descKey: 'setupMessaging.channels.discord.desc', placeholderKey: 'setupMessaging.channels.discord.placeholder', keyLabelKey: 'setupMessaging.channels.discord.keyLabel' },
@@ -24,7 +38,7 @@ const CHANNEL_OPTIONS = [
   { id: 'line', name: 'LINE', icon: <Waves size={16} />, descKey: 'setupMessaging.channels.line.desc', placeholderKey: 'setupMessaging.channels.line.placeholder', keyLabelKey: 'setupMessaging.channels.line.keyLabel' }
 ];
 
-const SetupStepMessaging = ({ onNext }) => {
+const SetupStepMessaging: React.FC<SetupStepMessagingProps> = ({ onNext }) => {
   const { t } = useTranslation();
   const { config, setConfig, detectedConfig, userType } = useStore();
   const onboardingAction = useOnboardingAction();
@@ -54,7 +68,7 @@ const SetupStepMessaging = ({ onNext }) => {
     }
   }, [config.botToken, detectedConfig?.botToken, onNext, setConfig]);
 
-  const handleChannelSelect = (channelId) => {
+  const handleChannelSelect = (channelId: string) => {
     setLocalError('');
     setConfig({ platform: channelId, botToken: '', appToken: '' }); // Reset Token
   };
