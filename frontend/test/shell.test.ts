@@ -56,9 +56,7 @@ describe('shellQuote', () => {
   describe('Sad Path', () => {
     it('非字串型別直接傳回原值（非字串不應 crash）', () => {
       // shellQuote 的型別保護：typeof s !== 'string' → 直接回傳
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(shellQuote(null as any)).toBe(null);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(shellQuote(undefined as any)).toBe(undefined);
     });
   });

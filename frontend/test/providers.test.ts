@@ -80,7 +80,6 @@ describe('OAUTH_AUTH_CHOICES', () => {
 });
 
 describe('getProviderGroups', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const groups = getProviderGroups(t as any);
 
   it('至少包含 anthropic、openai、google 三個 Provider 群組', () => {
