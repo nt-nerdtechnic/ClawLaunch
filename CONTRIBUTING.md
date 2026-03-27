@@ -4,7 +4,7 @@ Thank you for your interest in NT-ClawLaunch! We welcome all forms of community 
 
 ## Reporting Bugs
 
-Search [GitHub Issues](https://github.com/your-org/NT-ClawLaunch/issues) for existing reports before opening a new one. A good bug report includes:
+Search [GitHub Issues](https://github.com/nt-nerdtechnic/NT-ClawLaunch/issues) for existing reports before opening a new one. A good bug report includes:
 
 - **Concise title** — describe the specific problem
 - **Steps to reproduce** — how to trigger the error again
@@ -44,7 +44,7 @@ See the [Quick Start section in README.md](README.md#quick-start). No Rust toolc
 
 ## 如何回報 Bug
 
-請先在 [GitHub Issues](https://github.com/your-org/NT-ClawLaunch/issues) 中搜尋是否已有相似的回報，再開啟新的 Issue。好的 Bug 回報包含：
+請先在 [GitHub Issues](https://github.com/nt-nerdtechnic/NT-ClawLaunch/issues) 中搜尋是否已有相似的回報，再開啟新的 Issue。好的 Bug 回報包含：
 
 - **簡潔的標題** — 描述具體問題
 - **重現步驟** — 如何讓這個錯誤再次發生

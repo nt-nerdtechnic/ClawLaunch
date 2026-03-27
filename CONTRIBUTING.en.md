@@ -4,7 +4,7 @@ Thank you for your interest in NT-ClawLaunch! We highly value community particip
 
 ## 🐞 How to Report a Bug?
 
-If you find a bug, please first search for existing reports in [GitHub Issues](https://github.com/your-org/NT-ClawLaunch/issues). If none exist, please open a new Issue and provide:
+If you find a bug, please first search for existing reports in [GitHub Issues](https://github.com/nt-nerdtechnic/NT-ClawLaunch/issues). If none exist, please open a new Issue and provide:
 *   **A concise title:** Describing the specific problem.
 *   **Steps to reproduce:** How can this error be triggered again?
 *   **Expected vs. Actual behavior:** What did you expect to happen, and what actually happened?

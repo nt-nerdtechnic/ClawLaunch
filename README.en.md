@@ -42,7 +42,7 @@ Current IPC capability (concept):
 ### Installation Steps
 1.  **Clone the Repository**
     ```bash
-    git clone https://github.com/your-org/NT-ClawLaunch.git
+    git clone https://github.com/nt-nerdtechnic/NT-ClawLaunch.git
     cd NT-ClawLaunch
     ```
 2.  **Install Dependencies**
