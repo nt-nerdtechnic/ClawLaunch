@@ -24,7 +24,7 @@ export type TelegramAuthorizedUser = {
 export function useTelegramPairing(
   resolvedConfigDir: string,
   activeTab: string,
-  _config: any,
+  _config?: unknown,
   _onLog?: (msg: string, source: 'system' | 'stderr' | 'stdout') => void
 ) {
   const [telegramPairingRequests, setTelegramPairingRequests] = useState<TelegramPairingRequest[]>([]);
@@ -61,12 +61,12 @@ export function useTelegramPairing(
       const parsedPairing = pairingCode === 0 && pairingStdout ? JSON.parse(pairingRes.stdout) : { requests: [] };
       const requests = Array.isArray(parsedPairing?.requests) ? parsedPairing.requests : [];
       setTelegramPairingRequests(
-        requests.map((request: any) => ({
+        requests.map((request: Record<string, unknown>) => ({
           id: String(request?.id || ''),
           code: String(request?.code || ''),
-          createdAt: request?.createdAt,
-          lastSeenAt: request?.lastSeenAt,
-          meta: request?.meta || {},
+          createdAt: request?.createdAt as string | undefined,
+          lastSeenAt: request?.lastSeenAt as string | undefined,
+          meta: (request?.meta || {}) as TelegramPairingRequest['meta'],
         }))
       );
 
@@ -76,15 +76,15 @@ export function useTelegramPairing(
       const allowFrom = Array.isArray(parsedAllowFrom?.allowFrom) ? parsedAllowFrom.allowFrom : [];
       setTelegramAuthorizedUsers(
         allowFrom
-          .map((entry: any) => ({
+          .map((entry: unknown) => ({
             id: String(entry || '').replace(/^(telegram:|tg:)/i, ''),
           }))
           .filter((entry: TelegramAuthorizedUser) => entry.id)
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       setTelegramPairingRequests([]);
       setTelegramAuthorizedUsers([]);
-      setTelegramPairingError(e?.message || 'Failed to load pairing requests');
+      setTelegramPairingError(e instanceof Error ? e.message : 'Failed to load pairing requests');
     } finally {
       setTelegramPairingLoading(false);
     }

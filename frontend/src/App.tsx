@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import SetupWizard from './components/onboarding/SetupWizard';
 import UpdateBanner from './components/UpdateBanner';
 import { useStore } from './store';
+import type { Config } from './store';
 import { ConfigService, ModelService } from './services/configService';
 import { PROVIDER_ALIAS_MAP as PROVIDER_ALIAS_MAP_CENTRAL, getProviderGroups } from './constants/providers';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
@@ -132,7 +133,7 @@ function App() {
   } = useRuntimeConfig(resolvedConfigDir, activeTab, detectedConfig, config.corePath, config.workspacePath);
   const effectiveRuntimeModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
   const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
-  const effectiveRuntimeGatewayPort = String(runtimeProfile?.gateway?.port ?? '').trim();
+  const effectiveRuntimeGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
   const {
     authProfiles,
     authProfileSummary,
@@ -193,7 +194,7 @@ function App() {
     return PROVIDER_MODEL_CATALOGUE[normalized]?.label || fallbackLabel || providerRef || 'Unknown';
   };
 
-  const runtimeProviders: string[] = (runtimeProfile as any)?.providers ?? [];
+  const runtimeProviders: string[] = (runtimeProfile?.providers as string[] | undefined) ?? [];
 
 
   const healthyAuthProviders = Array.from(new Set(
@@ -231,7 +232,7 @@ function App() {
     (healthyAuthProviders.length > 0 ? healthyAuthProviders : runtimeProviders.map((provider) => String(provider || '').toLowerCase()).filter(Boolean))
   ));
 
-  const buildOpenClawEnvPrefix = (cfg?: any) =>
+  const buildOpenClawEnvPrefix = (cfg?: Partial<Config>) =>
     ConfigService.buildOpenClawEnvPrefix(cfg?.configPath ?? config.configPath);
 
   const gatewayRuntimeZones = [
@@ -281,7 +282,7 @@ function App() {
     let unsubscribe: (() => void) | undefined;
     if (window.electronAPI) {
       unsubscribe = window.electronAPI.onLog((payload) => {
-        addLog(payload.data, payload.source as any);
+        addLog(payload.data, payload.source);
       });
     }
 
@@ -318,7 +319,7 @@ function App() {
     // before loadConfig() has completed its async IPC call on startup.
     const hasLoadedConfig = Boolean(config.corePath || config.configPath || config.workspacePath);
     if (window.electronAPI && hasLoadedConfig) {
-      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = config as any;
+      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = config;
       const updated = { ...launcherPayload, theme, language };
       window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
     }
@@ -422,7 +423,7 @@ function App() {
   // 當 runtimeProfile 首次成功載入後，立即觸發一次 Gateway 狀態偵測。
   // 修復啟動時序問題：App bootstrap 呼叫 syncGatewayStatus 時 runtimeProfile 尚為 null，
   // 導致 getGatewayPort() 無法取得 port 而跳過偵測，狀態永遠顯示 STANDBY。
-  const prevRuntimeProfileRef = useRef<any>(undefined);
+  const prevRuntimeProfileRef = useRef<Record<string, unknown> | null | undefined>(undefined);
   useEffect(() => {
     const wasNull = prevRuntimeProfileRef.current === undefined || prevRuntimeProfileRef.current === null;
     const isNowLoaded = runtimeProfile !== null && runtimeProfile !== undefined;
@@ -460,8 +461,8 @@ function App() {
       window.setTimeout(() => {
         closeStopServiceModal();
       }, 350);
-    } catch (e: any) {
-      setStopServiceActionMessage(t('app.stopService.failed', { msg: e?.message || e }));
+    } catch (e: unknown) {
+      setStopServiceActionMessage(t('app.stopService.failed', { msg: e instanceof Error ? e.message : String(e) }));
     } finally {
       setStoppingServiceWithCleanup(false);
     }
@@ -482,7 +483,7 @@ function App() {
     if (!window.electronAPI?.selectDirectory) return;
     const selectedPath = await window.electronAPI.selectDirectory();
     if (!selectedPath) return;
-    setConfig({ [key]: selectedPath } as any);
+    setConfig({ [key]: selectedPath } as Partial<Config>);
   };
 
   const handleResetOnboarding = async () => {
@@ -502,7 +503,7 @@ function App() {
     setShowLogoutConfirm(false);
     // Also clear the persisted flag in config.json so restart after logout shows onboarding
     if (window.electronAPI) {
-      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = config as any;
+      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = config;
       window.electronAPI.exec(
         `config:write ${JSON.stringify({ ...launcherPayload, onboardingFinished: false })}`
       ).catch(() => {});
@@ -837,7 +838,7 @@ function App() {
             <MonitorPage
               running={running}
               onToggleGateway={handleToggleGatewayWithStopModal}
-              onNavigate={(p: any) => setActiveTab(p)}
+              onNavigate={(p: string) => setActiveTab(p)}
               config={config}
               resolvedConfigDir={resolvedConfigDir}
               snapshot={snapshot}
@@ -927,7 +928,7 @@ function App() {
   );
 }
 
-function NavItem({ icon, label, active = false, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) {
+function NavItem({ icon, label, active = false, onClick }: { icon: ReactNode, label: string, active?: boolean, onClick: () => void }) {
   return (
     <div onClick={onClick} className={`flex items-center px-4 py-4 rounded-2xl cursor-pointer transition-all duration-300 ${active ? 'bg-blue-600/10 text-blue-400 shadow-inner' : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'}`}>
       <span className={`mr-4 ${active ? 'scale-110 opacity-100' : 'opacity-70'}`}>{icon}</span>

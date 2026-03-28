@@ -6,7 +6,7 @@ import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 import { useTranslation } from 'react-i18next';
 
 interface SetupStepMessagingProps {
-  onNext: () => void;
+  onNext?: () => void;
 }
 
 type ChannelOption = {
@@ -64,7 +64,7 @@ const SetupStepMessaging: React.FC<SetupStepMessagingProps> = ({ onNext }) => {
       if (!config.botToken) {
         setConfig({ botToken: detectedToken });
       }
-      onNext();
+      onNext?.();
     }
   }, [config.botToken, detectedConfig?.botToken, onNext, setConfig]);
 
@@ -91,7 +91,7 @@ const SetupStepMessaging: React.FC<SetupStepMessagingProps> = ({ onNext }) => {
     if (selectedChannel.reqKey !== false && !config.botToken) return;
     const success = await onboardingAction.execute('messaging');
     if (success) {
-      onNext();
+      onNext?.();
     }
   };
 

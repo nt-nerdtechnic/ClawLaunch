@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Check, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { marked } from 'marked';
 import { useStore } from '../../store';
 import type { ChatMessage } from '../../store';
@@ -111,7 +112,7 @@ const formatTime = (createdAt: number) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-const formatRelativeTime = (timestamp: string, t?: any): string => {
+const formatRelativeTime = (timestamp: string, t?: TFunction): string => {
   if (!timestamp) return '';
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return '';

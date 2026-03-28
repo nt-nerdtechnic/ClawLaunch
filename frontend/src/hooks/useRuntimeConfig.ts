@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { DetectedConfig } from '../store';
 
 /**
  * Runtime configuration hook
@@ -8,17 +9,17 @@ import { useTranslation } from 'react-i18next';
 export function useRuntimeConfig(
   resolvedConfigDir: string,
   activeTab: string,
-  detectedConfig: any,
+  detectedConfig: DetectedConfig | null,
   fallbackCorePath?: string,
   fallbackWorkspacePath?: string
 ) {
   const { t } = useTranslation();
-  const [runtimeProfile, setRuntimeProfile] = useState<any>(null);
+  const [runtimeProfile, setRuntimeProfile] = useState<Record<string, unknown> | null>(null);
   const [runtimeProfileError, setRuntimeProfileError] = useState('');
   const [runtimeDraftModel, setRuntimeDraftModel] = useState('');
   const [runtimeDraftBotToken, setRuntimeDraftBotToken] = useState('');
   const [runtimeDraftGatewayPort, setRuntimeDraftGatewayPort] = useState('');
-  const [dynamicModelOptions, setDynamicModelOptions] = useState<any[]>([]);
+  const [dynamicModelOptions, setDynamicModelOptions] = useState<Array<{ provider: string; group: string; models: string[] }>>([]);
   const [dynamicModelSource, setDynamicModelSource] = useState('');
   const [dynamicModelLoading, setDynamicModelLoading] = useState(false);
 
@@ -71,7 +72,7 @@ export function useRuntimeConfig(
     
     const nextModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
     const nextBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
-    const nextGatewayPort = String(runtimeProfile?.gateway?.port ?? '').trim();
+    const nextGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
     setRuntimeDraftModel(nextModel);
     setRuntimeDraftBotToken(nextBotToken);
     setRuntimeDraftGatewayPort(nextGatewayPort);
@@ -102,12 +103,12 @@ export function useRuntimeConfig(
       const parsed = JSON.parse(res.stdout || '{}');
       const groups = Array.isArray(parsed?.groups)
         ? parsed.groups
-            .map((group: any) => ({
+            .map((group: { provider?: unknown; group?: unknown; models?: unknown[] }) => ({
               provider: String(group?.provider || group?.group || '').trim().toLowerCase() || 'unknown',
               group: String(group?.group || group?.provider || '').trim() || 'unknown',
-              models: Array.isArray(group?.models) ? group.models.map((m: any) => String(m || '').trim()).filter(Boolean) : [],
+              models: Array.isArray(group?.models) ? group.models.map((m: unknown) => String(m || '').trim()).filter(Boolean) : [],
             }))
-            .filter((group: any) => group.models.length > 0)
+            .filter((group: { models: string[] }) => group.models.length > 0)
         : [];
       setDynamicModelOptions(groups);
       setDynamicModelSource(String(parsed?.source || ''));

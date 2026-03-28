@@ -1,11 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
+import type { Config, DetectedConfig, SkillItem } from '../store';
+
+interface DetectedPathsExistingConfig extends Partial<DetectedConfig> {
+  workspace?: string;
+  workspaceSkills?: SkillItem[];
+  providers?: string[];
+}
+
+interface DetectedPathsResult {
+  corePath?: string;
+  configPath?: string;
+  workspacePath?: string;
+  coreSkills?: SkillItem[];
+  existingConfig?: DetectedPathsExistingConfig | null;
+}
 
 interface UseAppBootstrapParams {
   setOnboardingFinished: (finished: boolean) => void;
   setActiveTab: (tab: string) => void;
-  syncGatewayStatus: (runtimeConfig?: any) => Promise<void>;
+  syncGatewayStatus: (runtimeConfig?: Record<string, unknown> | null) => Promise<void>;
 }
+
+type LoadedConfig = Partial<Config> & { onboardingFinished?: boolean };
 
 const ONBOARDING_FINISHED_KEY = 'onboarding_finished';
 const ONBOARDING_FORCE_RESET_KEY = 'onboarding_force_reset';
@@ -18,7 +35,7 @@ export function useAppBootstrap({
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
 
-  const checkOnboardingStatus = useCallback((loadedConfig?: any, _detected?: any) => {
+  const checkOnboardingStatus = useCallback((loadedConfig?: LoadedConfig, _detected?: DetectedConfig | null) => {
     const persisted = loadedConfig || {};
     // Determine onboarding completion based solely on saved config.
     // Detected paths are for wizard pre-filling only; they don't imply the instance is fully configured.
@@ -50,7 +67,7 @@ export function useAppBootstrap({
     try {
       const res = await window.electronAPI.exec('config:read');
       if (res.code === 0 && res.stdout) {
-        let savedConfig: any = {};
+        let savedConfig: LoadedConfig = {};
         try {
           savedConfig = JSON.parse(res.stdout);
         } catch {
@@ -76,13 +93,13 @@ export function useAppBootstrap({
   const detectPaths = useCallback(async () => {
     const { setDetectingPaths, setDetectedConfig, setCoreSkills, setWorkspaceSkills } = useStore.getState();
     setDetectingPaths(true);
-    let detectedResult: any = null;
+    let detectedResult: DetectedPathsResult | null = null;
 
     if (window.electronAPI) {
       try {
         const res = await window.electronAPI.exec('detect:paths');
         if (res.code === 0 && res.stdout) {
-          let detected: any = { coreSkills: [], existingConfig: null };
+          let detected: DetectedPathsResult = { coreSkills: [], existingConfig: null };
           try {
             detected = JSON.parse(res.stdout);
           } catch {
@@ -136,12 +153,12 @@ export function useAppBootstrap({
 
   const initializeApp = useCallback(async () => {
     const loadedConfig = await loadConfig();
-    checkOnboardingStatus(loadedConfig);
+    checkOnboardingStatus(loadedConfig ?? undefined);
 
     const [detected] = await Promise.all([
       detectPaths(),
       checkEnvironment(),
-      syncGatewayStatus(loadedConfig),
+      syncGatewayStatus(loadedConfig ?? undefined),
     ]);
 
     // If all three paths are detected, agent auth is healthy, and the instance has saved config, complete onboarding directly without showing the wizard
@@ -176,7 +193,7 @@ export function useAppBootstrap({
 
         if (window.electronAPI) {
           const currentConfig = useStore.getState().config;
-          const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = currentConfig as any;
+          const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = currentConfig;
           await window.electronAPI.exec(`config:write ${JSON.stringify(launcherPayload)}`).catch(() => {});
         }
 
@@ -189,7 +206,7 @@ export function useAppBootstrap({
       }
     }
 
-    checkOnboardingStatus(loadedConfig, detected);
+    checkOnboardingStatus(loadedConfig ?? undefined, detected);
   }, [checkEnvironment, checkOnboardingStatus, detectPaths, loadConfig, setOnboardingFinished, setActiveTab, syncGatewayStatus]);
 
   useEffect(() => {
@@ -214,7 +231,7 @@ export function useAppBootstrap({
         platform: _p, 
         appToken: _at, 
         ...launcherPayload 
-      } = currentConfig as any;
+      } = currentConfig;
       window.electronAPI.exec(
         `config:write ${JSON.stringify({ ...launcherPayload, onboardingFinished: true })}`
       ).catch(() => {});

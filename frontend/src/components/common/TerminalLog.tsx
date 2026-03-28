@@ -119,9 +119,9 @@ const TerminalLog: React.FC<TerminalLogProps> = ({ logs, height = 'h-40', title 
                         const entry = log && typeof log === 'object'
                             ? log
                             : ({ text: String(log ?? ''), source: 'stdout' } as LogEntry);
-                        const source = String((entry as any).source || 'stdout');
-                        const time = typeof (entry as any).time === 'string' && (entry as any).time
-                            ? (entry as any).time
+                        const source = String(entry.source || 'stdout');
+                        const time = typeof entry.time === 'string' && entry.time
+                            ? entry.time
                             : new Date().toLocaleTimeString();
 
                         return (
@@ -134,7 +134,7 @@ const TerminalLog: React.FC<TerminalLogProps> = ({ logs, height = 'h-40', title 
                                     source === 'system' ? 'text-blue-400' : 
                                     'text-slate-300'
                                 }`}>
-                                    {renderTextWithLinks((entry as any).text)}
+                                    {renderTextWithLinks(entry.text)}
                                 </span>
                             </div>
                         );

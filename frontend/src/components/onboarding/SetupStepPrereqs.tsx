@@ -135,7 +135,7 @@ const StatusIcon = ({ status }: { status: DepStatus }) => {
   }
 };
 
-const SetupStepPrereqs = ({ onNext }: { onNext: () => void }) => {
+const SetupStepPrereqs = ({ onNext }: { onNext?: () => void }) => {
   const [states, setStates] = useState<Record<string, DepState>>(() =>
     Object.fromEntries(DEPS.map((d) => [d.id, { status: 'checking' as DepStatus }])),
   );
@@ -396,7 +396,7 @@ const SetupStepPrereqs = ({ onNext }: { onNext: () => void }) => {
       <div className="space-y-3">
         {allRequiredOk ? (
           <button
-            onClick={onNext}
+            onClick={() => onNext?.()}
             className="w-full flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-emerald-200 uppercase tracking-widest text-xs"
           >
             環境已就緒，繼續設定 <ArrowRight size={18} />
@@ -409,7 +409,7 @@ const SetupStepPrereqs = ({ onNext }: { onNext: () => void }) => {
               </p>
             )}
             <button
-              onClick={onNext}
+              onClick={() => onNext?.()}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 text-xs font-black uppercase tracking-widest transition-all"
             >
               跳過，稍後再處理 <ArrowRight size={14} />

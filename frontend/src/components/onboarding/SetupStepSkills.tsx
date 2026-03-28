@@ -4,7 +4,7 @@ import { useStore, type SkillItem } from '../../store';
 import { useTranslation } from 'react-i18next';
 
 interface SetupStepSkillsProps {
-  onNext: () => void;
+  onNext?: () => void;
 }
 
 const getErrorMessage = (err: unknown, fallback: string) => {
@@ -60,7 +60,7 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
     if (autoAdvancedRef.current) return;
     if (userType !== 'new') {
       autoAdvancedRef.current = true;
-      onNext();
+      onNext?.();
       return;
     }
     // Scan only for new users
@@ -118,7 +118,7 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
 
 
   const handleNext = () => {
-    onNext();
+    onNext?.();
   };
 
   return (

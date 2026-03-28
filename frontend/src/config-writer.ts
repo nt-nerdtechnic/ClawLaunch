@@ -9,13 +9,13 @@ import { useStore } from './store';
 export const saveConfigToFile = async () => {
   const { config } = useStore.getState();
   
-  if (typeof window === 'undefined' || !(window as any).electronAPI) {
+  if (typeof window === 'undefined' || !window.electronAPI) {
     console.warn('[ConfigWriter] Electron API not found, skipping persistence.');
     return;
   }
 
   try {
-    const response = await (window as any).electronAPI.exec(`config:write ${JSON.stringify(config, null, 2)}`);
+    const response = await window.electronAPI.exec(`config:write ${JSON.stringify(config, null, 2)}`);
     if (response.exitCode !== 0) {
       throw new Error(response.stderr || 'Failed to save config');
     }

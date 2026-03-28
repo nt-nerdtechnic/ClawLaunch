@@ -18,7 +18,7 @@ export const CustomTooltip: React.FC<CustomTooltipProps> = ({
   position = 'left' 
 }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [timer, setTimer] = useState<any>(null);
+  const [timer, setTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
 

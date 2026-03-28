@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { Config } from '../store';
 
 interface LauncherSettingsPageProps {
-  config: any;
-  setConfig: (config: any) => void;
+  config: Config;
+  setConfig: (patch: Partial<Config>) => void;
   onSave: () => void;
   saveState?: 'idle' | 'saving' | 'saved' | 'error';
   onAddLog: (msg: string, source: 'system' | 'stderr' | 'stdout') => void;
@@ -55,7 +56,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
           ? t('settings.saveConfigFailedButton')
           : t('settings.saveConfig');
 
-  const shouldUseExternalTerminal = (cfg?: any) =>
+  const shouldUseExternalTerminal = (cfg?: Config) =>
     (cfg?.useExternalTerminal ?? config?.useExternalTerminal) !== false;
 
   const handleCheckUpdate = async () => {
@@ -68,8 +69,8 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
       const info: UpdateInfo = JSON.parse(res.stdout);
       setUpdateInfo(info);
       setUpdateState(info.upToDate ? 'up-to-date' : 'available');
-    } catch (e: any) {
-      setUpdateError(e?.message || 'unknown error');
+    } catch (e: unknown) {
+      setUpdateError(e instanceof Error ? e.message : 'unknown error');
       setUpdateState('error');
     }
   };

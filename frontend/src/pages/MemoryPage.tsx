@@ -7,6 +7,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { ConfigService } from '../services/configService';
 import { CustomTooltip } from '../components/common/CustomTooltip';
+import type { Config } from '../store';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ interface MemoryGroup {
 }
 
 interface MemoryPageProps {
-  config: any;
+  config: Config;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -286,8 +287,8 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
         // Directory exists but empty — still mark exists
         return { exists: true, files: [], error: '' };
       }
-    } catch (e: any) {
-      return { exists: false, files: [], error: (e as Error).message };
+    } catch (e: unknown) {
+      return { exists: false, files: [], error: e instanceof Error ? e.message : 'unknown error' };
     }
 
     // Directory not found — try singleFile as fallback
@@ -391,8 +392,8 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
       } else {
         setSaveError(res.error || t('memory.errors.saveFailed'));
       }
-    } catch (e: any) {
-      setSaveError(e.message);
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : t('memory.errors.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -426,8 +427,8 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
       } else {
         setFileError(res.stderr || t('memory.errors.readFailed'));
       }
-    } catch (e: any) {
-      setFileError(e.message);
+    } catch (e: unknown) {
+      setFileError(e instanceof Error ? e.message : t('memory.errors.readFailed'));
     } finally {
       setFileLoading(false);
     }

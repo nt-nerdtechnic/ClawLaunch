@@ -297,7 +297,7 @@ export const getProviderGroups = (t: TFunction): ProviderGroupItem[] => [
  * List of auth choices that use OAuth flow.
  */
 export const OAUTH_AUTH_CHOICES = new Set(
-  getProviderGroups(((key: string) => key) as any) // Workaround to get IDs without actual TFunction
+  getProviderGroups(((key: string) => key) as unknown as TFunction) // Workaround to get IDs without actual TFunction
     .flatMap(g => g.choices)
     .filter(c => c.oauthFlow)
     .map(c => c.id)

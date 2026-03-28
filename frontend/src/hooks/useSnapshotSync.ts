@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react';
+import type { ReadModelSnapshot, ReadModelHistoryPoint, EventQueueItem, AuditTimelineItem } from '../store';
 
 interface UseSnapshotSyncParams {
   running: boolean;
@@ -7,13 +8,13 @@ interface UseSnapshotSyncParams {
     workspacePath?: string;
     corePath?: string;
   };
-  setSnapshot: (snapshot: any | null) => void;
-  setSnapshotHistory: (history: any[]) => void;
-  setEventQueue: (items: any[]) => void;
-  setAckedEvents: (items: any[]) => void;
-  setAuditTimeline: (items: any[]) => void;
+  setSnapshot: (snapshot: ReadModelSnapshot | null) => void;
+  setSnapshotHistory: (history: ReadModelHistoryPoint[]) => void;
+  setEventQueue: (items: EventQueueItem[]) => void;
+  setAckedEvents: (items: EventQueueItem[]) => void;
+  setAuditTimeline: (items: AuditTimelineItem[]) => void;
   setDailyDigest: (digest: string) => void;
-  setRawSnapshot: (rawSnapshot: any | null) => void;
+  setRawSnapshot: (rawSnapshot: ReadModelSnapshot | null) => void;
   setSnapshotSourcePath: (path: string) => void;
 }
 
@@ -51,7 +52,7 @@ export function useSnapshotSync({
       const res = await window.electronAPI.exec(
         `snapshot:read-model ${JSON.stringify({ candidatePaths: snapshotCandidates, historyCandidatePaths: historyCandidates, historyDays: 30 })}`,
       );
-      const code = res.code ?? res.exitCode;
+      const code = res.code;
       if (code === 0 && res.stdout) {
         const parsed = JSON.parse(res.stdout || '{}');
         setRawSnapshot(parsed.snapshot || null);

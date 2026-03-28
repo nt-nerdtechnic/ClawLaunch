@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { execInTerminal } from '../utils/terminal';
 import type { TelegramPairingRequest } from './useTelegramPairing';
+import type { Config } from '../store';
 
 type LogSource = 'system' | 'stderr' | 'stdout';
 
-type TFn = (key: string, params?: Record<string, any>) => string;
+type TFn = (key: string, params?: Record<string, unknown>) => string;
 
 type ProviderChoice = { id: string; reqKey: boolean; oauthFlow?: boolean };
 type ProviderGroup = { id: string; choices: ProviderChoice[] };
 
 interface UseRuntimeActionsParams {
-  config: any;
+  config: Config;
   resolvedConfigDir: string;
   runtimeDraftModel: string;
   runtimeDraftBotToken: string;
@@ -24,11 +25,11 @@ interface UseRuntimeActionsParams {
   authAddTokenCommand: string;
   SETTINGS_PROVIDER_GROUPS: ProviderGroup[];
   shellQuote: (value: string) => string;
-  buildOpenClawEnvPrefix: (cfg?: any) => string;
+  buildOpenClawEnvPrefix: (cfg?: Partial<Config>) => string;
   isModelAuthorizedByProvider: (modelRef: string) => boolean;
   loadAuthProfiles: () => Promise<void>;
   loadTelegramPairingRequests: () => Promise<void>;
-  setRuntimeProfile: (profile: any) => void;
+  setRuntimeProfile: (profile: Record<string, unknown> | null) => void;
   setAuthRemovingId: (id: string) => void;
   setAuthAddError: (msg: string) => void;
   setAuthAdding: (v: boolean) => void;
@@ -116,7 +117,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       authChoice: _authChoice,
       apiKey: _apiKey,
       ...launcherConfig
-    } = config as any;
+    } = config;
 
     const res = await window.electronAPI.exec(`config:write ${JSON.stringify(launcherConfig)}`);
     if ((res.code ?? res.exitCode) !== 0) {
@@ -146,10 +147,10 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       setLauncherSaveState('saved');
       scheduleSaveStateReset(launcherResetTimerRef, setLauncherSaveState);
       addLog(t('logs.configSaved'), 'system');
-    } catch (e: any) {
+    } catch (e: unknown) {
       setLauncherSaveState('error');
       scheduleSaveStateReset(launcherResetTimerRef, setLauncherSaveState);
-      addLog(t('logs.commFailed', { msg: e.message }), 'stderr');
+      addLog(t('logs.commFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
     }
   };
 
@@ -235,10 +236,10 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       scheduleSaveStateReset(runtimeResetTimerRef, setRuntimeSaveState);
       addLog(t('logs.configSaved'), 'system');
       addLog(t('runtime.errors.configApplied'), 'system');
-    } catch (e: any) {
+    } catch (e: unknown) {
       setRuntimeSaveState('error');
       scheduleSaveStateReset(runtimeResetTimerRef, setRuntimeSaveState);
-      addLog(t('logs.commFailed', { msg: e.message }), 'stderr');
+      addLog(t('logs.commFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
     }
   };
 
@@ -262,8 +263,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       });
       addLog(t('auth.onboardLaunched'), 'system');
       await loadAuthProfiles();
-    } catch (e: any) {
-      const msg = e?.message || t('auth.errors.onboardFailed');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('auth.errors.onboardFailed');
       setAuthAddError(msg);
       addLog(msg, 'stderr');
     }
@@ -283,8 +284,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         cwd: config.corePath,
       });
       addLog(t('runtime.actions.doctorStarted'), 'system');
-    } catch (e: any) {
-      addLog(t('runtime.actions.doctorFailed', { msg: e?.message || e }), 'stderr');
+    } catch (e: unknown) {
+      addLog(t('runtime.actions.doctorFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
     }
   };
 
@@ -302,8 +303,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         cwd: config.corePath,
       });
       addLog(t('runtime.actions.auditStarted'), 'system');
-    } catch (e: any) {
-      addLog(t('runtime.actions.auditFailed', { msg: e?.message || e }), 'stderr');
+    } catch (e: unknown) {
+      addLog(t('runtime.actions.auditFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
     }
   };
 
@@ -322,8 +323,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       if (probeRes.code === 0 && probeRes.stdout) {
         setRuntimeProfile(JSON.parse(probeRes.stdout));
       }
-    } catch (e: any) {
-      const msg = e?.message || t('auth.errors.removeFailed');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('auth.errors.removeFailed');
       setAuthAddError(msg);
       addLog(msg, 'stderr');
     } finally {
@@ -377,8 +378,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       if (probeRes.code === 0 && probeRes.stdout) {
         setRuntimeProfile(JSON.parse(probeRes.stdout));
       }
-    } catch (e: any) {
-      const msg = e?.message || t('auth.errors.addFailed');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : t('auth.errors.addFailed');
       setAuthAddError(msg);
       addLog(msg, 'stderr');
     } finally {
@@ -400,12 +401,12 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         holdOpen: true,
         cwd: config.corePath || undefined,
       });
-      const code = (res as any)?.code ?? (res as any)?.exitCode;
+      const code = res.code;
       if (typeof code === 'number' && code !== 0) {
-        throw new Error((res as any)?.stderr || t('auth.errors.commandExecError'));
+        throw new Error(res.stderr || t('auth.errors.commandExecError'));
       }
-    } catch (err: any) {
-      setAuthAddTokenError(err?.message || t('auth.errors.commandExecError'));
+    } catch (err: unknown) {
+      setAuthAddTokenError(err instanceof Error ? err.message : t('auth.errors.commandExecError'));
     } finally {
       setAuthAddTokenRunning(false);
     }
@@ -434,8 +435,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       }
       addLog(t('monitor.telegramPairing.approvedLog', { id: request.id }), 'system');
       await loadTelegramPairingRequests();
-    } catch (e: any) {
-      const message = e?.message || t('monitor.telegramPairing.approveFailed');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : t('monitor.telegramPairing.approveFailed');
       setTelegramPairingError(message);
       addLog(message, 'stderr');
     } finally {
@@ -462,8 +463,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       }
       addLog(t('monitor.telegramPairing.rejectedLog', { id: request.id }), 'system');
       await loadTelegramPairingRequests();
-    } catch (e: any) {
-      const message = e?.message || t('monitor.telegramPairing.rejectFailed');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : t('monitor.telegramPairing.rejectFailed');
       setTelegramPairingError(message);
       addLog(message, 'stderr');
     } finally {
@@ -489,8 +490,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       }
       addLog(t('monitor.telegramPairing.clearedLog'), 'system');
       await loadTelegramPairingRequests();
-    } catch (e: any) {
-      const message = e?.message || t('monitor.telegramPairing.clearFailed');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : t('monitor.telegramPairing.clearFailed');
       setTelegramPairingError(message);
       addLog(message, 'stderr');
     } finally {
@@ -522,8 +523,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       if (probeRes.code === 0 && probeRes.stdout) {
         setRuntimeProfile(JSON.parse(probeRes.stdout));
       }
-    } catch (e: any) {
-      addLog(t('runtime.errors.updateChannelTokenFailed', { channel: channelId, msg: e?.message || e }), 'stderr');
+    } catch (e: unknown) {
+      addLog(t('runtime.errors.updateChannelTokenFailed', { channel: channelId, msg: e instanceof Error ? e.message : String(e) }), 'stderr');
     }
   };
 

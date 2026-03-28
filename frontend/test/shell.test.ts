@@ -56,8 +56,8 @@ describe('shellQuote', () => {
   describe('Sad Path', () => {
     it('非字串型別直接傳回原值（非字串不應 crash）', () => {
       // shellQuote 的型別保護：typeof s !== 'string' → 直接回傳
-      expect(shellQuote(null as any)).toBe(null);
-      expect(shellQuote(undefined as any)).toBe(undefined);
+      expect(shellQuote(null as unknown as string)).toBe(null);
+      expect(shellQuote(undefined as unknown as string)).toBe(undefined);
     });
   });
 });

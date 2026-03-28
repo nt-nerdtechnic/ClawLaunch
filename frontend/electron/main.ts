@@ -33,7 +33,7 @@ process.on('uncaughtException', (err: NodeJS.ErrnoException) => { if (err.code =
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
-const activeProcesses = new Set<any>();
+const activeProcesses = new Set<ReturnType<typeof spawn>>();
 const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean }>();
 let activeLockFilePath: string | null = null;
 
@@ -58,7 +58,7 @@ interface GatewayStartOptions {
 }
 
 interface GatewayWatchdogState {
-  child: any | null;
+  child: ReturnType<typeof spawn> | null;
   command: string;
   stopRequested: boolean;
   restartAttempts: number;
@@ -123,7 +123,7 @@ const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
 
 // ── i18n support for main process ──────────────────────────────────────────
 const currentLocale = 'zh-TW';
-const localeCache: Record<string, any> = {};
+const localeCache: Record<string, unknown> = {};
 
 async function loadLocales() {
   const localesDir = path.join(__dirname, '../src/locales');
@@ -138,11 +138,12 @@ async function loadLocales() {
   }
 }
 
-function t(key: string, params: Record<string, any> = {}): string {
+function t(key: string, params: Record<string, unknown> = {}): string {
   const parts = key.split('.');
-  let value = localeCache[currentLocale] || localeCache['en'] || {};
+  let value: unknown = localeCache[currentLocale] ?? localeCache['en'] ?? {};
   for (const part of parts) {
-    value = value?.[part];
+    if (!value || typeof value !== 'object') { value = undefined; break; }
+    value = (value as Record<string, unknown>)[part];
     if (value === undefined) break;
   }
   if (typeof value !== 'string') return key;
@@ -158,7 +159,7 @@ function t(key: string, params: Record<string, any> = {}): string {
 const shellSingleQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const escapeAppleScriptString = (value: string) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
-const sendToRenderer = (channel: string, payload: any) => {
+const sendToRenderer = (channel: string, payload: unknown) => {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   const webContents = mainWindow.webContents;
   if (!webContents || webContents.isDestroyed()) return false;
@@ -287,7 +288,7 @@ const runGatewayHttpWatchdogCheck = async () => {
     } else {
       emitShellStdout('[gateway-http-watchdog] failed to open Terminal for restart\n', 'stderr');
     }
-  } catch (e: any) {
+  } catch (e) {
     emitShellStdout(`[gateway-http-watchdog] check error: ${String(e?.message || e)}\n`, 'stderr');
   } finally {
     gatewayHttpWatchdog.checking = false;
@@ -342,10 +343,10 @@ const spawnWatchedGatewayProcess = (command: string) => {
 
   emitShellStdout(`[gateway-watchdog] process started (pid=${String(child.pid ?? 'unknown')})\n`, 'stdout');
 
-  child.stdout.on('data', (data: any) => {
+  child.stdout.on('data', (data) => {
     emitShellStdout(data.toString(), 'stdout');
   });
-  child.stderr.on('data', (data: any) => {
+  child.stderr.on('data', (data) => {
     emitShellStdout(data.toString(), 'stderr');
   });
 
@@ -416,7 +417,7 @@ interface OpenClawChatInvokeRequest {
   forceLocal?: boolean;
 }
 
-const safeJsonParse = (value: string, fallback: any = null) => {
+const safeJsonParse = (value: string, fallback: unknown = null) => {
   try {
     return JSON.parse(value);
   } catch (_) {
@@ -430,22 +431,22 @@ const normalizeConfigDir = (rawPath?: string) => {
   return trimmed.replace(/[\\/]openclaw\.json$/i, '');
 };
 
-const normalizeArray = (value: any): any[] => (Array.isArray(value) ? value : []);
+const normalizeArray = (value: unknown): unknown[] => (Array.isArray(value) ? (value as unknown[]) : []);
 
-const normalizeString = (value: any, fallback = '') => {
+const normalizeString = (value: unknown, fallback = '') => {
   const text = String(value ?? '').trim();
   return text || fallback;
 };
 
-const normalizeNumber = (value: any, fallback = 0) => {
+const normalizeNumber = (value: unknown, fallback = 0) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 };
 
-const pickFirst = (input: any, keys: string[], fallback: any = '') => {
+const pickFirst = (input: unknown, keys: string[], fallback: unknown = '') => {
   if (!input || typeof input !== 'object') return fallback;
   for (const key of keys) {
-    const value = (input as any)[key];
+    const value = (input as Record<string, unknown>)[key];
     if (value !== undefined && value !== null && String(value).trim() !== '') {
       return value;
     }
@@ -453,9 +454,9 @@ const pickFirst = (input: any, keys: string[], fallback: any = '') => {
   return fallback;
 };
 
-const normalizeBudgetSummary = (budgetSummary: any) => {
-  const raw = budgetSummary && typeof budgetSummary === 'object' ? budgetSummary : {};
-  const evaluations = normalizeArray(raw.evaluations).map((item: any) => ({
+const normalizeBudgetSummary = (budgetSummary: unknown) => {
+  const raw = (budgetSummary && typeof budgetSummary === 'object' ? budgetSummary : {}) as Record<string, unknown>;
+  const evaluations = normalizeArray(raw.evaluations).map((item) => ({
     scope: normalizeString(pickFirst(item, ['scope', 'target', 'id'], 'global')),
     status: normalizeString(pickFirst(item, ['status', 'state'], 'unknown')).toLowerCase(),
     usedCost30d: normalizeNumber(pickFirst(item, ['usedCost30d', 'used', 'usedCost'], 0), 0),
@@ -472,14 +473,14 @@ const normalizeBudgetSummary = (budgetSummary: any) => {
   };
 };
 
-const normalizeReadModelSnapshot = (snapshot: any) => {
-  const raw = snapshot && typeof snapshot === 'object' ? snapshot : {};
-  const sessionsRaw = normalizeArray(raw.sessions);
-  const statusesRaw = normalizeArray(raw.statuses);
-  const tasksSource = Array.isArray(raw.tasks) ? raw.tasks : normalizeArray(raw.tasks?.tasks);
-  const approvalsSource = Array.isArray(raw.approvals) ? raw.approvals : normalizeArray(raw.approvals?.items);
+const normalizeReadModelSnapshot = (snapshot: unknown) => {
+  const raw = (snapshot && typeof snapshot === 'object' ? snapshot : {}) as Record<string, unknown>;
+  const sessionsRaw = normalizeArray(raw.sessions) as Record<string, unknown>[];
+  const statusesRaw = normalizeArray(raw.statuses) as Record<string, unknown>[];
+  const tasksSource = (Array.isArray(raw.tasks) ? raw.tasks : normalizeArray((raw.tasks as Record<string, unknown>)?.tasks)) as Record<string, unknown>[];
+  const approvalsSource = (Array.isArray(raw.approvals) ? raw.approvals : normalizeArray((raw.approvals as Record<string, unknown>)?.items)) as Record<string, unknown>[];
 
-  const statuses = statusesRaw.map((item: any) => ({
+  const statuses = statusesRaw.map((item) => ({
     sessionKey: normalizeString(pickFirst(item, ['sessionKey', 'session_id', 'session'], 'unknown')),
     state: normalizeString(pickFirst(item, ['state', 'status'], 'unknown')).toLowerCase(),
     tokensIn: normalizeNumber(pickFirst(item, ['tokensIn', 'inputTokens', 'tokens_in'], 0), 0),
@@ -489,12 +490,12 @@ const normalizeReadModelSnapshot = (snapshot: any) => {
     contextWindowTokens: normalizeNumber(pickFirst(item, ['contextWindowTokens', 'contextTokens', 'context_limit_tokens'], 0), 0),
   }));
 
-  const statusMap = new Map<string, any>();
+  const statusMap = new Map<string, (typeof statuses)[number]>();
   for (const status of statuses) {
     if (status.sessionKey) statusMap.set(status.sessionKey, status);
   }
 
-  const sessions = sessionsRaw.map((item: any) => {
+  const sessions = sessionsRaw.map((item) => {
     const sessionKey = normalizeString(pickFirst(item, ['sessionKey', 'session_id', 'id', 'key'], 'unknown'));
     const mappedStatus = statusMap.get(sessionKey);
     return {
@@ -520,7 +521,7 @@ const normalizeReadModelSnapshot = (snapshot: any) => {
     };
   });
 
-  const tasks = tasksSource.map((item: any) => ({
+  const tasks = tasksSource.map((item) => ({
     id: normalizeString(pickFirst(item, ['id', 'taskId', 'task_id', 'key'], 'unknown-task')),
     title: normalizeString(pickFirst(item, ['title', 'name', 'summary'], 'Untitled Task')),
     status: normalizeString(pickFirst(item, ['status', 'state'], 'unknown')).toLowerCase(),
@@ -530,7 +531,7 @@ const normalizeReadModelSnapshot = (snapshot: any) => {
     ),
   }));
 
-  const approvals = approvalsSource.map((item: any) => ({
+  const approvals = approvalsSource.map((item) => ({
     id: normalizeString(pickFirst(item, ['id', 'approvalId', 'requestId'], 'unknown-approval')),
     status: normalizeString(pickFirst(item, ['status', 'state'], 'pending')).toLowerCase(),
     summary: normalizeString(pickFirst(item, ['summary', 'title', 'reason'], 'Approval Request')),
@@ -549,14 +550,14 @@ const normalizeReadModelSnapshot = (snapshot: any) => {
   };
 };
 
-const resolveTimestampFromLogEntry = (entry: any): string => {
+const resolveTimestampFromLogEntry = (entry: unknown): string => {
   return normalizeString(
     pickFirst(entry, ['timestamp', 'session_timestamp', 'generatedAt', 'updatedAt', 'createdAt', 'at'], ''),
     '',
   );
 };
 
-const resolveTokensFromLogEntry = (entry: any) => {
+const resolveTokensFromLogEntry = (entry: unknown) => {
   const tokensIn = normalizeNumber(
     pickFirst(entry, ['input_tokens', 'tokensIn', 'inputTokens', 'tokens_in', 'usageIn'], 0),
     0,
@@ -570,12 +571,13 @@ const resolveTokensFromLogEntry = (entry: any) => {
 
 const estimateUsageCost = (tokensIn: number, tokensOut: number) => ((tokensIn + tokensOut * 2) / 1_000_000) * 0.5;
 
-const resolveCostFromLogEntry = (entry: any, tokensIn: number, tokensOut: number) => {
-  const usageCostFromMessage = normalizeNumber(entry?.message?.usage?.cost?.total, NaN);
-  const usageCost = normalizeNumber(entry?.usage?.cost?.total, NaN);
-  const costObjectTotal = normalizeNumber(entry?.cost?.total, NaN);
+const resolveCostFromLogEntry = (entry: unknown, tokensIn: number, tokensOut: number) => {
+  const e = entry as { message?: { usage?: { cost?: { total?: unknown } } }; usage?: { cost?: { total?: unknown } }; cost?: { total?: unknown } };
+  const usageCostFromMessage = normalizeNumber(e?.message?.usage?.cost?.total, NaN);
+  const usageCost = normalizeNumber(e?.usage?.cost?.total, NaN);
+  const costObjectTotal = normalizeNumber(e?.cost?.total, NaN);
   const directCost = normalizeNumber(
-    pickFirst(entry, ['estimatedCost', 'totalCost', 'usageCost', 'costUsd', 'usd_cost', 'cost'], NaN),
+    pickFirst(e, ['estimatedCost', 'totalCost', 'usageCost', 'costUsd', 'usd_cost', 'cost'], NaN),
     NaN,
   );
 
@@ -587,7 +589,7 @@ const resolveCostFromLogEntry = (entry: any, tokensIn: number, tokensOut: number
   return estimateUsageCost(tokensIn, tokensOut);
 };
 
-const resolveCostFromSessionEntry = (session: any, tokensIn: number, tokensOut: number) => {
+const resolveCostFromSessionEntry = (session: unknown, tokensIn: number, tokensOut: number) => {
   const directCost = normalizeNumber(
     pickFirst(session, ['estimatedCost', 'totalCost', 'usageCost', 'costUsd', 'usd_cost', 'cost'], NaN),
     NaN,
@@ -628,15 +630,16 @@ const parseSessionJsonlForUsage = (content: string, agentId: string): RuntimeUsa
   let currentModel = '';
 
   for (const line of content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
-    let entry: any;
-    try { entry = JSON.parse(line); } catch { continue; }
+    let entry: unknown;
+    try { entry = JSON.parse(line) as unknown; } catch { continue; }
 
-    if (entry.type === 'session' && entry.id) currentSessionId = String(entry.id);
-    if (entry.sessionId) currentSessionId = String(entry.sessionId);
-    if (entry.message?.model) currentModel = String(entry.message.model);
+    const e = entry as { type?: string; id?: string; sessionId?: string; timestamp?: string; message?: { model?: string; role?: string; usage?: Record<string, unknown>; timestamp?: string; provider?: string } };
+    if (e.type === 'session' && e.id) currentSessionId = String(e.id);
+    if (e.sessionId) currentSessionId = String(e.sessionId);
+    if (e.message?.model) currentModel = String(e.message.model);
 
-    if (entry.type === 'message' && entry.message?.role === 'assistant' && entry.message?.usage) {
-      const usage = entry.message.usage;
+    if (e.type === 'message' && e.message?.role === 'assistant' && e.message?.usage) {
+      const usage = e.message.usage;
 
       const tokensIn = normalizeNumber(
         pickFirst(usage, ['input', 'inputTokens', 'input_tokens', 'prompt_tokens', 'promptTokens'], 0), 0);
@@ -652,14 +655,14 @@ const parseSessionJsonlForUsage = (content: string, agentId: string): RuntimeUsa
       if (tokens === 0) continue;
 
       const cost = normalizeNumber(
-        usage?.cost?.total ?? usage?.cost ?? usage?.estimatedCost ?? usage?.totalCost ?? 0, 0);
+        (usage?.cost as Record<string, unknown>)?.total ?? usage?.cost ?? usage?.estimatedCost ?? usage?.totalCost ?? 0, 0);
 
-      const timestamp = String(entry.timestamp || entry.message?.timestamp || '');
+      const timestamp = String(e.timestamp || e.message?.timestamp || '');
       const day = timestamp.length >= 10 ? timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
-      const model: string | undefined = entry.message?.model || currentModel || undefined;
+      const model: string | undefined = e.message?.model || currentModel || undefined;
       // Prioritize message.provider (e.g., "minimax", "openai"), use fallback for inference only.
-      const provider = typeof entry.message?.provider === 'string' && entry.message.provider
-        ? entry.message.provider
+      const provider = typeof e.message?.provider === 'string' && e.message.provider
+        ? e.message.provider
         : inferProviderFromModel(model);
 
       events.push({
@@ -700,7 +703,7 @@ const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
   >();
 
   for (const line of lines) {
-    let entry: any = null;
+    let entry: unknown = null;
     try {
       entry = JSON.parse(line);
     } catch {
@@ -744,12 +747,13 @@ const buildReadModelHistoryFromJsonl = (content: string, days = 7) => {
     }));
 };
 
-const fallbackHistoryFromSnapshot = (readModel: any, days = 7) => {
-  const sessions = normalizeArray(readModel?.sessions);
+const fallbackHistoryFromSnapshot = (readModel: unknown, days = 7) => {
+  const rm = readModel as Record<string, unknown>;
+  const sessions = normalizeArray(rm?.sessions) as Record<string, unknown>[];
   const daily = new Map<string, { label: string; tokensIn: number; tokensOut: number; totalTokens: number; totalCost: number }>();
 
   for (const session of sessions) {
-    const timestamp = normalizeString(session?.updatedAt || readModel?.generatedAt, '');
+    const timestamp = normalizeString((session?.updatedAt || rm?.generatedAt) as unknown, '');
     if (!timestamp) continue;
     const date = new Date(timestamp);
     if (Number.isNaN(date.getTime())) continue;
@@ -812,10 +816,11 @@ type EventAckRecord = {
   expiresAt: string;
 };
 
-const computeTaskGovernance = (readModel: any, timeoutMs: number, nowIso: string) => {
-  const tasks = normalizeArray(readModel?.tasks);
+const computeTaskGovernance = (readModel: unknown, timeoutMs: number, nowIso: string) => {
+  const rm = readModel as Record<string, unknown>;
+  const tasks = normalizeArray(rm?.tasks) as Record<string, unknown>[];
   const now = new Date(nowIso).getTime();
-  const normalizedTasks = tasks.map((task: any) => ({ ...task }));
+  const normalizedTasks = tasks.map((task) => ({ ...task }));
   const events: GovernanceEvent[] = [];
 
   for (const task of normalizedTasks) {
@@ -843,13 +848,14 @@ const computeTaskGovernance = (readModel: any, timeoutMs: number, nowIso: string
   return { tasks: normalizedTasks, events };
 };
 
-const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[] => {
+const buildGovernanceEvents = (readModel: unknown, nowIso: string): GovernanceEvent[] => {
+  const rm = readModel as Record<string, unknown>;
   const events: GovernanceEvent[] = [];
-  const approvals = normalizeArray(readModel?.approvals);
-  const statuses = normalizeArray(readModel?.statuses);
-  const budgetEvaluations = normalizeArray(readModel?.budgetSummary?.evaluations);
+  const approvals = normalizeArray(rm?.approvals) as Record<string, unknown>[];
+  const statuses = normalizeArray(rm?.statuses) as Record<string, unknown>[];
+  const budgetEvaluations = normalizeArray((rm?.budgetSummary as Record<string, unknown>)?.evaluations) as Record<string, unknown>[];
 
-  const pendingApprovals = approvals.filter((item: any) => {
+  const pendingApprovals = approvals.filter((item) => {
     const status = normalizeString(item?.status, '').toLowerCase();
     return status === '' || status === 'pending' || status === 'requested';
   });
@@ -865,8 +871,8 @@ const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[
     });
   }
 
-  const blockedCount = statuses.filter((s: any) => normalizeString(s?.state, '').toLowerCase() === 'blocked').length;
-  const errorCount = statuses.filter((s: any) => normalizeString(s?.state, '').toLowerCase() === 'error').length;
+  const blockedCount = statuses.filter((s) => normalizeString(s?.state, '').toLowerCase() === 'blocked').length;
+  const errorCount = statuses.filter((s) => normalizeString(s?.state, '').toLowerCase() === 'error').length;
   if (blockedCount > 0 || errorCount > 0) {
     events.push({
       id: 'runtime-risk',
@@ -878,8 +884,8 @@ const buildGovernanceEvents = (readModel: any, nowIso: string): GovernanceEvent[
     });
   }
 
-  const overBudget = budgetEvaluations.filter((b: any) => normalizeString(b?.status, '').toLowerCase() === 'over').length;
-  const warnBudget = budgetEvaluations.filter((b: any) => normalizeString(b?.status, '').toLowerCase() === 'warn').length;
+  const overBudget = budgetEvaluations.filter((b) => normalizeString(b?.status, '').toLowerCase() === 'over').length;
+  const warnBudget = budgetEvaluations.filter((b) => normalizeString(b?.status, '').toLowerCase() === 'warn').length;
   if (overBudget > 0 || warnBudget > 0) {
     events.push({
       id: 'budget-risk',
@@ -971,7 +977,7 @@ const applyAckStateToEvents = (events: GovernanceEvent[], acks: Record<string, E
 const parseAuditLine = (line: string, source: string): AuditTimelineEntry | null => {
   const trimmed = normalizeString(line, '');
   if (!trimmed) return null;
-  let parsed: any = null;
+  let parsed: unknown = null;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
@@ -1077,9 +1083,10 @@ const readEnvOverride = (...keys: string[]) => {
   return '';
 };
 
-const resolveGatewayCredentials = (config: any) => {
-  const configToken = String(config?.gateway?.auth?.token || '').trim();
-  const configPassword = String(config?.gateway?.auth?.password || '').trim();
+const resolveGatewayCredentials = (config: unknown) => {
+  const c = config as { gateway?: { auth?: { token?: string; password?: string } } };
+  const configToken = String(c?.gateway?.auth?.token || '').trim();
+  const configPassword = String(c?.gateway?.auth?.password || '').trim();
   const token = readEnvOverride('OPENCLAW_GATEWAY_TOKEN', 'CLAWDBOT_GATEWAY_TOKEN') || configToken;
   const password = readEnvOverride('OPENCLAW_GATEWAY_PASSWORD') || configPassword;
 
@@ -1106,14 +1113,14 @@ const runShellCommand = (command: string) => new Promise<{ code: number; stdout:
   let stderr = '';
   let settled = false;
 
-  child.stdout.on('data', (data: any) => {
+  child.stdout.on('data', (data) => {
     stdout += data.toString();
   });
-  child.stderr.on('data', (data: any) => {
+  child.stderr.on('data', (data) => {
     stderr += data.toString();
   });
 
-  child.on('error', (error: any) => {
+  child.on('error', (error) => {
     activeProcesses.delete(child);
     if (settled) return;
     settled = true;
@@ -1198,54 +1205,58 @@ const parseGatewayCallStdoutJson = (rawStdout: string) => {
   return null;
 };
 
-const pickTextFromUnknownContent = (content: any): string => {
+const pickTextFromUnknownContent = (content: unknown): string => {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content
       .map((item) => {
         if (typeof item === 'string') return item;
         if (!item || typeof item !== 'object') return '';
+        const it = item as Record<string, unknown>;
         // OpenClaw format: { type: 'text', text: '...' }
-        if (item.type === 'text' && typeof item.text === 'string') return item.text;
+        if (it.type === 'text' && typeof it.text === 'string') return it.text;
         // Some SDKs use output_text/input_text tokens.
-        if ((item.type === 'output_text' || item.type === 'input_text') && typeof item.text === 'string') return item.text;
+        if ((it.type === 'output_text' || it.type === 'input_text') && typeof it.text === 'string') return it.text;
         // Some responses nest text fragments in parts arrays.
-        if (Array.isArray(item.parts)) return pickTextFromUnknownContent(item.parts);
+        if (Array.isArray(it.parts)) return pickTextFromUnknownContent(it.parts);
         // Fallbacks
-        if (typeof item.text === 'string') return item.text;
-        if (typeof item.value === 'string') return item.value;
-        if (typeof item.content === 'string') return item.content;
-        if (item.content && typeof item.content === 'object') return pickTextFromUnknownContent(item.content);
+        if (typeof it.text === 'string') return it.text;
+        if (typeof it.value === 'string') return it.value;
+        if (typeof it.content === 'string') return it.content;
+        if (it.content && typeof it.content === 'object') return pickTextFromUnknownContent(it.content);
         return '';
       })
       .join('');
   }
   if (content && typeof content === 'object') {
-    if (Array.isArray(content.parts)) return pickTextFromUnknownContent(content.parts);
-    if (typeof content.text === 'string') return content.text;
-    if (typeof content.value === 'string') return content.value;
-    if (typeof content.content === 'string') return content.content;
-    if (content.content && typeof content.content === 'object') return pickTextFromUnknownContent(content.content);
+    const c = content as Record<string, unknown>;
+    if (Array.isArray(c.parts)) return pickTextFromUnknownContent(c.parts);
+    if (typeof c.text === 'string') return c.text;
+    if (typeof c.value === 'string') return c.value;
+    if (typeof c.content === 'string') return c.content;
+    if (c.content && typeof c.content === 'object') return pickTextFromUnknownContent(c.content);
   }
   return '';
 };
 
-const extractMessageText = (message: any): string => {
+const extractMessageText = (message: unknown): string => {
   if (!message || typeof message !== 'object') return '';
+  const m = message as Record<string, unknown>;
 
-  const direct = pickTextFromUnknownContent(message.content);
+  const direct = pickTextFromUnknownContent(m.content);
   if (direct) return direct;
 
-  if (typeof message.text === 'string') return message.text;
-  if (typeof message.message === 'string') return message.message;
-  if (typeof message.output_text === 'string') return message.output_text;
+  if (typeof m.text === 'string') return m.text;
+  if (typeof m.message === 'string') return m.message;
+  if (typeof m.output_text === 'string') return m.output_text;
 
   return '';
 };
 
 // Derive a human-readable display name from a session key and its metadata
-const deriveSessionDisplayName = (sessionKey: string, meta: any): string => {
-  if (meta?.displayName && typeof meta.displayName === 'string') return meta.displayName;
+const deriveSessionDisplayName = (sessionKey: string, meta: unknown): string => {
+  const m = meta as { displayName?: string } | null;
+  if (m?.displayName && typeof m.displayName === 'string') return m.displayName;
   const parts = sessionKey.split(':');
   if (parts.length < 3) return sessionKey;
   const type = parts[2];
@@ -1256,20 +1267,22 @@ const deriveSessionDisplayName = (sessionKey: string, meta: any): string => {
   return rest || sessionKey;
 };
 
-const isAssistantMessage = (message: any): boolean => {
+const isAssistantMessage = (message: unknown): boolean => {
   if (!message || typeof message !== 'object') return false;
-  const role = String(message.role || message.type || message.author?.role || '').toLowerCase();
+  const m = message as Record<string, unknown> & { author?: Record<string, unknown> };
+  const role = String(m.role || m.type || m.author?.role || '').toLowerCase();
   return role === 'assistant';
 };
 
-const extractLatestAssistantTextFromHistoryPayload = (payload: any): string => {
-  const history = payload?.result ?? payload;
-  const candidates: any[] = [
+const extractLatestAssistantTextFromHistoryPayload = (payload: unknown): string => {
+  const p = payload as Record<string, unknown>;
+  const history = (p?.result ?? p) as Record<string, unknown> | undefined;
+  const candidates: unknown[] = [
     history?.messages,
     history?.items,
     history?.history,
-    history?.data?.messages,
-    history?.data?.items,
+    (history?.data as Record<string, unknown>)?.messages,
+    (history?.data as Record<string, unknown>)?.items,
     history?.output,
   ];
 
@@ -1286,9 +1299,11 @@ const extractLatestAssistantTextFromHistoryPayload = (payload: any): string => {
   return '';
 };
 
-const extractRunIdFromSendPayload = (payload: any): string => {
-  const result = payload?.result ?? payload;
-  const maybeRunId = result?.runId || result?.run_id || result?.id || '';
+const extractRunIdFromSendPayload = (payload: unknown): string => {
+  const p = payload as Record<string, unknown>;
+  const result = p?.result ?? p;
+  const r = result as Record<string, unknown>;
+  const maybeRunId = r?.runId || r?.run_id || r?.id || '';
   return typeof maybeRunId === 'string' ? maybeRunId : '';
 };
 
@@ -1297,12 +1312,12 @@ const extractRunIdFromSendPayload = (payload: any): string => {
 class GatewayWSClient {
   private ws: WebSocket | null = null;
   private pending = new Map<string, {
-    resolve: (v: any) => void;
+    resolve: (v: unknown) => void;
     reject: (e: Error) => void;
     timeoutId: ReturnType<typeof setTimeout>;
   }>();
   private reqCounter = 0;
-  private chatListeners = new Map<string, (payload: any) => void>();
+  private chatListeners = new Map<string, (payload: unknown) => void>();
   private connectNonce: string | null = null;
   private connectSent = false;
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1317,7 +1332,7 @@ class GatewayWSClient {
     this.connectSent = false;
 
     // Use globalThis.WebSocket (Node 22+) or fall back to nothing (Electron has it built-in)
-    const WS: any = (globalThis as any).WebSocket;
+    const WS = (globalThis as Record<string, unknown>).WebSocket as (new (url: string) => WebSocket) | undefined;
     if (!WS) {
       emitShellStdout('[gateway-ws] WebSocket not available in this environment\n', 'stderr');
       this.onDisconnected?.();
@@ -1333,7 +1348,7 @@ class GatewayWSClient {
     });
 
     ws.addEventListener('message', (event: MessageEvent) => {
-      let frame: any;
+      let frame: unknown;
       try { frame = JSON.parse(String(event.data)); } catch { return; }
       this.handleFrame(frame);
     });
@@ -1345,8 +1360,8 @@ class GatewayWSClient {
       this.onDisconnected?.();
     });
 
-    ws.addEventListener('error', (err: any) => {
-      emitShellStdout(`[gateway-ws] socket error: ${String(err?.message || err)}\n`, 'stderr');
+    ws.addEventListener('error', (err) => {
+      emitShellStdout(`[gateway-ws] socket error: ${String((err as ErrorEvent)?.message || err)}\n`, 'stderr');
     });
   }
 
@@ -1354,7 +1369,7 @@ class GatewayWSClient {
     if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
     const ws = this.ws;
     this.ws = null;
-    try { (ws as any)?.close(); } catch {}
+    try { (ws as WebSocket)?.close(); } catch {}
     this.rejectAllPending('Client disconnected');
   }
 
@@ -1370,10 +1385,10 @@ class GatewayWSClient {
         this.pending.delete(id);
         reject(new Error(`Gateway request timed out: ${method}`));
       }, 30000);
-      this.pending.set(id, { resolve: resolve as (v: any) => void, reject, timeoutId });
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timeoutId });
       try {
-        (this.ws as any).send(JSON.stringify({ type: 'req', id, method, params: params ?? null }));
-      } catch (e: any) {
+        this.ws!.send(JSON.stringify({ type: 'req', id, method, params: params ?? null }));
+      } catch (e) {
         clearTimeout(timeoutId);
         this.pending.delete(id);
         reject(new Error(`Gateway send failed: ${e.message}`));
@@ -1381,15 +1396,14 @@ class GatewayWSClient {
     });
   }
 
-  subscribeChatEvent(sessionKey: string, listener: (payload: any) => void): () => void {
+  subscribeChatEvent(sessionKey: string, listener: (payload: unknown) => void): () => void {
     this.chatListeners.set(sessionKey, listener);
     return () => this.chatListeners.delete(sessionKey);
   }
 
   get isConnected(): boolean {
-    const ws = this.ws as any;
-    if (!ws) return false;
-    return ws.readyState === 1; // WebSocket.OPEN
+    if (!this.ws) return false;
+    return this.ws.readyState === 1; // WebSocket.OPEN
   }
 
   private async sendConnect(): Promise<void> {
@@ -1397,7 +1411,7 @@ class GatewayWSClient {
     this.connectSent = true;
     if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
 
-    const params: Record<string, any> = {
+    const params: Record<string, unknown> = {
       minProtocol: 3,
       maxProtocol: 3,
       client: {
@@ -1413,19 +1427,20 @@ class GatewayWSClient {
     };
 
     try {
-      await this.request<any>('connect', params);
+      await this.request<unknown>('connect', params);
       this.onConnected?.();
-    } catch (e: any) {
-      emitShellStdout(`[gateway-ws] connect request rejected: ${e.message}\n`, 'stderr');
-      (this.ws as any)?.close(4008, 'connect failed');
+    } catch (e) {
+      emitShellStdout(`[gateway-ws] connect request rejected: ${e instanceof Error ? e.message : String(e)}\n`, 'stderr');
+      (this.ws as WebSocket)?.close(4008, 'connect failed');
     }
   }
 
-  private handleFrame(frame: any): void {
-    if (frame.type === 'event') {
-      const evt = frame.event;
+  private handleFrame(frame: unknown): void {
+    const f = frame as { type?: string; event?: string; payload?: Record<string, unknown>; id?: string; ok?: boolean; error?: unknown };
+    if (f.type === 'event') {
+      const evt = f.event;
       if (evt === 'connect.challenge') {
-        const nonce = typeof frame.payload?.nonce === 'string' ? frame.payload.nonce : null;
+        const nonce = typeof f.payload?.nonce === 'string' ? f.payload.nonce : null;
         if (nonce) {
           this.connectNonce = nonce;
           void this.sendConnect();
@@ -1433,28 +1448,29 @@ class GatewayWSClient {
         return;
       }
       if (evt === 'chat') {
-        this.dispatchChatEvent(frame.payload);
+        this.dispatchChatEvent(f.payload);
       }
       return;
     }
 
-    if (frame.type === 'res') {
-      const pending = this.pending.get(frame.id);
+    if (f.type === 'res') {
+      const pending = this.pending.get(f.id ?? '');
       if (pending) {
         clearTimeout(pending.timeoutId);
-        this.pending.delete(frame.id);
-        if (frame.ok) {
-          pending.resolve(frame.payload ?? null);
+        this.pending.delete(f.id ?? '');
+        if (f.ok) {
+          pending.resolve(f.payload ?? null);
         } else {
-          pending.reject(new Error(String(frame.error?.message || frame.error || 'Gateway error')));
+          pending.reject(new Error(String((f.error as { message?: string })?.message || f.error || 'Gateway error')));
         }
       }
       return;
     }
   }
 
-  private dispatchChatEvent(payload: any): void {
-    const sessionKey = String(payload?.sessionKey || '');
+  private dispatchChatEvent(payload: unknown): void {
+    const p = payload as Record<string, unknown>;
+    const sessionKey = String(p?.sessionKey || '');
     if (sessionKey && this.chatListeners.has(sessionKey)) {
       this.chatListeners.get(sessionKey)!(payload);
     } else if (!sessionKey) {
@@ -1486,7 +1502,7 @@ async function resolveOpenClawRuntime() {
   const corePath = String(launcherConfig.corePath || '').trim();
   const configDir = normalizeConfigDir(launcherConfig.configPath);
   const configFilePath = configDir ? path.join(configDir, 'openclaw.json') : '';
-  let openclawConfig: any = {};
+  let openclawConfig: Record<string, unknown> = {};
   if (configFilePath) {
     try {
       const raw = await fs.readFile(configFilePath, 'utf-8');
@@ -1497,7 +1513,7 @@ async function resolveOpenClawRuntime() {
   }
 
   const gatewayCredentials = resolveGatewayCredentials(openclawConfig);
-  const gatewayUrlArg = buildGatewayUrlArg(String(openclawConfig?.gateway?.port ?? ''));
+  const gatewayUrlArg = buildGatewayUrlArg(String((openclawConfig?.gateway as Record<string, unknown>)?.port ?? ''));
   const gatewayAuthArg = buildGatewayAuthArg(gatewayCredentials);
   const envPrefix = `${configDir ? `OPENCLAW_STATE_DIR=${shellQuote(configDir)} ` : ''}${configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} ` : ''}`;
   const cdPrefix = corePath ? `cd ${shellQuote(corePath)} && ` : '';
@@ -1507,7 +1523,7 @@ async function resolveOpenClawRuntime() {
     configFilePath,
     gatewayUrlArg,
     gatewayAuthArg,
-    gatewayPort: String(openclawConfig?.gateway?.port ?? '').trim(),
+    gatewayPort: String((openclawConfig?.gateway as Record<string, unknown>)?.port ?? '').trim(),
     gatewayToken: gatewayCredentials.token || '',
     openclawPrefix: `${cdPrefix}${envPrefix}pnpm openclaw`,
   };
@@ -1835,9 +1851,10 @@ async function createWindow() {
 /**
  * Infer the corresponding UI authChoice from the agent auth-profile
  */
-function inferAuthChoiceFromProfile(profile: any): string {
-  const provider = String(profile?.provider || '').toLowerCase();
-  const mode = String(profile?.mode || profile?.type || '').toLowerCase();
+function inferAuthChoiceFromProfile(profile: unknown): string {
+  const p = profile as Record<string, unknown>;
+  const provider = String(p?.provider || '').toLowerCase();
+  const mode = String(p?.mode || p?.type || '').toLowerCase();
   if (provider === 'anthropic') return mode === 'token' ? 'token' : 'apiKey';
   if (provider === 'openai-codex') return 'openai-codex';
   if (provider === 'openai') return mode === 'oauth' ? 'openai-codex' : 'openai-api-key';
@@ -2017,8 +2034,9 @@ const isPlausibleMachineToken = (value: string) => {
 
 const normalizeConfigDirectory = (rawPath: string) => String(rawPath || '').trim().replace(/[\\/]openclaw\.json$/i, '');
 
-const getProfileProviderAliases = (profileId: string, profile: any) => {
-  const provider = String(profile?.provider || '').toLowerCase();
+const getProfileProviderAliases = (profileId: string, profile: unknown) => {
+  const p = profile as Record<string, unknown>;
+  const provider = String(p?.provider || '').toLowerCase();
   const id = String(profileId || '').toLowerCase();
   const aliases = new Set<string>();
   if (provider) aliases.add(provider);
@@ -2060,8 +2078,9 @@ const providerMatchesAny = (provider: string, filters: string[]) => {
   });
 };
 
-const profileMatchesAliases = (profileId: string, profile: any, aliases: string[]) => {
-  const provider = String(profile?.provider || '').toLowerCase();
+const profileMatchesAliases = (profileId: string, profile: unknown, aliases: string[]) => {
+  const p = profile as Record<string, unknown>;
+  const provider = String(p?.provider || '').toLowerCase();
   const id = String(profileId || '').toLowerCase();
   return aliases.some((alias) => {
     const normalizedAlias = String(alias || '').toLowerCase();
@@ -2069,7 +2088,7 @@ const profileMatchesAliases = (profileId: string, profile: any, aliases: string[
   });
 };
 
-const hasCredential = (profile: any) => {
+const hasCredential = (profile) => {
   const token = String(profile?.token || '').trim();
   const key = String(profile?.key || profile?.apiKey || profile?.api_key || '').trim();
   const access = String(profile?.access || '').trim();
@@ -2096,22 +2115,22 @@ const unwrapCliArg = (rawValue: string) => {
   return value;
 };
 
-async function loadJsonFile(filePath: string): Promise<any | null> {
+async function loadJsonFile(filePath: string): Promise<Record<string, unknown> | null> {
   try {
     const raw = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(raw);
+    return JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
-async function saveJsonFile(filePath: string, data: any): Promise<void> {
+async function saveJsonFile(filePath: string, data: unknown): Promise<void> {
   await fs.writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf-8');
 }
 
 async function getAgentAuthProfilePaths(configDir: string): Promise<string[]> {
   const agentsRoot = path.join(configDir, 'agents');
-  let entries: any[] = [];
+  let entries: import('node:fs').Dirent[] = [];
   try {
     entries = await fs.readdir(agentsRoot, { withFileTypes: true });
   } catch {
@@ -2135,14 +2154,15 @@ async function getAgentAuthProfilePaths(configDir: string): Promise<string[]> {
 async function collectAuthProfiles(configDir: string) {
   const configFilePath = path.join(configDir, 'openclaw.json');
   const configJson = (await loadJsonFile(configFilePath)) || {};
-  const globalProfiles = configJson?.auth?.profiles || {};
+  const globalProfiles = ((configJson.auth as Record<string, unknown>)?.profiles as Record<string, unknown>) || {};
   const agentFiles = await getAgentAuthProfilePaths(configDir);
 
-  const merged = new Map<string, any>();
+  const merged = new Map<string, Record<string, unknown>>();
 
-  const normalizeProfileMeta = (profileId: string, profile: any) => {
-    const provider = String((profile as any)?.provider || String(profileId).split(':')[0] || '').toLowerCase();
-    const mode = String((profile as any)?.mode || (profile as any)?.type || '').toLowerCase();
+  const normalizeProfileMeta = (profileId: string, profile: unknown) => {
+    const p = profile as Record<string, unknown>;
+    const provider = String(p?.provider || String(profileId).split(':')[0] || '').toLowerCase();
+    const mode = String(p?.mode || p?.type || '').toLowerCase();
     return { provider, mode };
   };
 
@@ -2175,7 +2195,7 @@ async function collectAuthProfiles(configDir: string) {
 
   for (const authPath of agentFiles) {
     const parsed = (await loadJsonFile(authPath)) || {};
-    const profiles = parsed?.profiles || {};
+    const profiles = (parsed.profiles as Record<string, unknown>) || {};
     for (const [profileId, profile] of Object.entries(profiles)) {
       const profileKey = String(profileId);
       const meta = normalizeProfileMeta(profileKey, profile);
@@ -2191,10 +2211,10 @@ async function collectAuthProfiles(configDir: string) {
         diagnostics: [],
       };
       entry.agentPresent = true;
-      entry.agentCount += 1;
+      entry.agentCount = ((entry.agentCount as number) || 0) + 1;
       entry.credentialHealthy = hasCredential(profile);
       if (!entry.credentialHealthy) {
-        entry.diagnostics.push('agent_credential_missing_or_invalid');
+        (entry.diagnostics as string[]).push('agent_credential_missing_or_invalid');
       }
       if (!entry.mode) {
         entry.mode = meta.mode;
@@ -2207,27 +2227,28 @@ async function collectAuthProfiles(configDir: string) {
   }
 
   const profiles = Array.from(merged.values()).map((entry) => {
+    const diagnostics = entry.diagnostics as string[];
     if (entry.globalPresent && !entry.agentPresent) {
-      entry.diagnostics.push('global_only');
+      diagnostics.push('global_only');
     }
     if (!entry.globalPresent && entry.agentPresent) {
-      entry.diagnostics.push('agent_only');
+      diagnostics.push('agent_only');
     }
 
-    const severity = entry.diagnostics.includes('agent_credential_missing_or_invalid')
+    const severity = diagnostics.includes('agent_credential_missing_or_invalid')
       ? 'critical'
-      : entry.diagnostics.length > 0
+      : diagnostics.length > 0
         ? 'warn'
         : 'ok';
 
     const repairGuides: string[] = [];
-    if (entry.diagnostics.includes('agent_credential_missing_or_invalid')) {
+    if (diagnostics.includes('agent_credential_missing_or_invalid')) {
       repairGuides.push(t('main.repair.reauth'));
     }
-    if (entry.diagnostics.includes('global_only')) {
+    if (diagnostics.includes('global_only')) {
       repairGuides.push(t('main.repair.onboardSync'));
     }
-    if (entry.diagnostics.includes('agent_only')) {
+    if (diagnostics.includes('agent_only')) {
       repairGuides.push(t('main.repair.agentOnly'));
     }
 
@@ -2238,9 +2259,9 @@ async function collectAuthProfiles(configDir: string) {
 
   const summary = {
     total: profiles.length,
-    healthy: profiles.filter((item: any) => item.severity === 'ok').length,
-    warn: profiles.filter((item: any) => item.severity === 'warn').length,
-    critical: profiles.filter((item: any) => item.severity === 'critical').length,
+    healthy: profiles.filter((item) => item.severity === 'ok').length,
+    warn: profiles.filter((item) => item.severity === 'warn').length,
+    critical: profiles.filter((item) => item.severity === 'critical').length,
   };
 
   return { configFilePath, configJson, agentFiles, profiles, summary };
@@ -2269,7 +2290,7 @@ async function writeFileIfMissing(filePath: string, content: string): Promise<bo
   try {
     await fs.writeFile(filePath, content, { flag: 'wx', encoding: 'utf-8' });
     return true;
-  } catch (error: any) {
+  } catch (error) {
     if (error?.code === 'EEXIST') {
       return false;
     }
@@ -2305,7 +2326,7 @@ async function parseSkillMetadata(skillDir: string, fallbackId: string) {
 /**
  * Scan skill subfolders in the specified directory (skills/ or extensions/ are both allowed)
  */
-async function scanSkillsInDir(dir: string): Promise<any[]> {
+async function scanSkillsInDir(dir: string): Promise<unknown[]> {
     const results = [];
     try {
         const stats = await fs.stat(dir);
@@ -2329,9 +2350,9 @@ async function scanSkillsInDir(dir: string): Promise<any[]> {
 /**
  * Scan installed skills in multiple base paths (including skills in skills/ and extensions/)
  */
-async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
+async function scanInstalledSkills(...basePaths: string[]): Promise<unknown[]> {
     const allIds = new Set<string>();
-    const allSkills: any[] = [];
+    const allSkills: unknown[] = [];
 
     for (const basePath of basePaths) {
         if (!basePath) continue;
@@ -2339,7 +2360,7 @@ async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
         const fromSkills = await scanSkillsInDir(path.join(basePath, 'skills'));
         // Scan extensions/ subdirectory (OpenClaw extensions)
         const extDir = path.join(basePath, 'extensions');
-        const fromExtensions: any[] = [];
+        const fromExtensions: unknown[] = [];
         try {
             const extItems = await fs.readdir(extDir);
             for (const extPkg of extItems) {
@@ -2358,8 +2379,9 @@ async function scanInstalledSkills(...basePaths: string[]): Promise<any[]> {
         } catch (_e) {}
 
         for (const skill of [...fromSkills, ...fromExtensions]) {
-            if (!allIds.has(skill.id)) {
-                allIds.add(skill.id);
+            const s = skill as Record<string, unknown>;
+            if (!allIds.has(s.id as string)) {
+                allIds.add(s.id as string);
                 allSkills.push(skill);
             }
         }
@@ -2414,6 +2436,7 @@ interface ControlQueueItem {
   status: 'pending' | 'acked';
   createdAt: string;
   ackedAt?: string;
+  sourceKey?: string;
 }
 
 interface ControlAuditItem {
@@ -2672,14 +2695,15 @@ async function scanJsonlFile(filePath: string): Promise<void> {
         const ts = evt.timestamp ? new Date(evt.timestamp).getTime() : Date.now();
         const msg = evt.message || {};
         const role = msg.role || '';
-        const contentArr: any[] = Array.isArray(msg.content) ? msg.content : [];
+        const contentArr: unknown[] = Array.isArray(msg.content) ? msg.content as unknown[] : [];
 
         // Extract toolCall entries from assistant messages
         if (role === 'assistant') {
           for (const c of contentArr) {
-            if (!c || c.type !== 'toolCall') continue;
-            const toolName = String(c.name || '');
-            const args = c.arguments || {};
+            const cv = c as Record<string, unknown>;
+            if (!cv || cv.type !== 'toolCall') continue;
+            const toolName = String(cv.name || '');
+            const args = (cv.arguments as Record<string, unknown>) || {};
 
             if (toolName === 'exec') {
               const cmd = String(args.command || '').trim().slice(0, 100);
@@ -2801,14 +2825,14 @@ async function readControlCenterState(): Promise<ControlCenterState> {
       audit: Array.isArray(parsed.audit) ? parsed.audit : [],
       approvals: Array.isArray(parsed.approvals) ? parsed.approvals : [],
       budgetPolicy: {
-        dailyUsdLimit: Number.isFinite(Number((parsed as any)?.budgetPolicy?.dailyUsdLimit))
-          ? Math.max(1, Number((parsed as any).budgetPolicy.dailyUsdLimit))
+        dailyUsdLimit: Number.isFinite(Number(parsed.budgetPolicy?.dailyUsdLimit))
+          ? Math.max(1, Number(parsed.budgetPolicy?.dailyUsdLimit))
           : 20,
-        warnRatio: Number.isFinite(Number((parsed as any)?.budgetPolicy?.warnRatio))
-          ? Math.max(0.1, Math.min(0.95, Number((parsed as any).budgetPolicy.warnRatio)))
+        warnRatio: Number.isFinite(Number(parsed.budgetPolicy?.warnRatio))
+          ? Math.max(0.1, Math.min(0.95, Number(parsed.budgetPolicy?.warnRatio)))
           : 0.8,
       },
-      controlToken: String((parsed as any)?.controlToken || '').trim(),
+      controlToken: String(parsed.controlToken || '').trim(),
     };
   } catch {
     const initial = defaultControlCenterState();
@@ -2901,7 +2925,7 @@ function isControlMutationCommand(fullCommand: string): boolean {
   return prefixes.some((prefix) => fullCommand.startsWith(prefix));
 }
 
-function parseControlPayload(fullCommand: string): any {
+function parseControlPayload(fullCommand: string): unknown {
   const spaceIdx = fullCommand.indexOf(' ');
   if (spaceIdx < 0) return {};
   const raw = fullCommand.slice(spaceIdx + 1).trim();
@@ -2919,9 +2943,9 @@ async function enforceControlMutationTokenGate(fullCommand: string): Promise<{ o
     return { ok: true };
   }
 
-  let payload: any = {};
+  let payload: Record<string, unknown> = {};
   try {
-    payload = parseControlPayload(fullCommand);
+    payload = parseControlPayload(fullCommand) as Record<string, unknown>;
   } catch {
     return { ok: false, message: 'invalid mutation payload' };
   }
@@ -2937,9 +2961,9 @@ async function enforceControlMutationTokenGate(fullCommand: string): Promise<{ o
 }
 
 function pushQueueIfMissing(state: ControlCenterState, item: Omit<ControlQueueItem, 'id' | 'createdAt' | 'status'> & { sourceKey?: string }) {
-  const sourceKey = String((item as any).sourceKey || '').trim();
+  const sourceKey = String(item.sourceKey || '').trim();
   if (sourceKey) {
-    const exists = state.queue.some((entry) => (entry as any).sourceKey === sourceKey && entry.status === 'pending');
+    const exists = state.queue.some((entry) => entry.sourceKey === sourceKey && entry.status === 'pending');
     if (exists) return state;
   }
   const nextItem: ControlQueueItem = {
@@ -2949,7 +2973,7 @@ function pushQueueIfMissing(state: ControlCenterState, item: Omit<ControlQueueIt
     severity: item.severity,
     status: 'pending',
     createdAt: nowIso(),
-    ...(sourceKey ? { sourceKey } as any : {}),
+    ...(sourceKey ? { sourceKey } as Partial<ControlQueueItem> : {}),
   };
   return { ...state, queue: [nextItem, ...state.queue] };
 }
@@ -3080,7 +3104,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
   if (fullCommand === 'app:check-update') {
     try {
       const current = app.getVersion();
-      const releases = await new Promise<any[]>((resolve, reject) => {
+      const releases = await new Promise<unknown[]>((resolve, reject) => {
         const req = https.get(
           'https://api.github.com/repos/nt-nerdtechnic/ClawLaunch/releases?per_page=1',
           { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'NT-ClawLaunch' } },
@@ -3102,13 +3126,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       if (!releases.length) {
         return { code: 0, stdout: JSON.stringify({ current, latest: '', htmlUrl: '', upToDate: true, noReleases: true }), stderr: '', exitCode: 0 };
       }
-      const latest = String(releases[0].tag_name || '').replace(/^v/, '');
-      const htmlUrl = String(releases[0].html_url || '');
-      const changelog = String(releases[0].body || '');
-      const publishedAt = String(releases[0].published_at || '');
+      const rel0 = releases[0] as Record<string, unknown>;
+      const latest = String(rel0.tag_name || '').replace(/^v/, '');
+      const htmlUrl = String(rel0.html_url || '');
+      const changelog = String(rel0.body || '');
+      const publishedAt = String(rel0.published_at || '');
       const isNewer = !!latest && latest !== current;
       return { code: 0, stdout: JSON.stringify({ current, latest, htmlUrl, changelog, publishedAt, upToDate: !isNewer }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'update check failed', exitCode: 1 };
     }
   }
@@ -3122,7 +3147,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         stderr: '',
         exitCode: 0,
       };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'control auth status failed', exitCode: 1 };
     }
   }
@@ -3142,7 +3167,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const next: ControlCenterState = { ...state, controlToken: newToken };
       const audited = await appendControlAudit(next, 'control.auth.setToken', 'control-token', true, newToken ? 'token enabled' : 'token disabled');
       return { code: 0, stdout: JSON.stringify({ tokenRequired: !!audited.controlToken }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'set control token failed', exitCode: 1 };
     }
   }
@@ -3151,7 +3176,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const result = await runControlAutoSync();
       return { code: 0, stdout: JSON.stringify(result), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'control auto sync failed', exitCode: 1 };
     }
   }
@@ -3165,7 +3190,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const state = await readControlCenterState();
       return { code: 0, stdout: JSON.stringify(buildControlOverview(state)), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'control overview failed', exitCode: 1 };
     }
   }
@@ -3179,7 +3204,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         stderr: '',
         exitCode: 0,
       };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'get budget failed', exitCode: 1 };
     }
   }
@@ -3205,7 +3230,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       };
       const audited = await appendControlAudit(next, 'budget.setPolicy', 'budget-policy', true, `limit=${dailyUsdLimit}, warn=${warnRatio}`);
       return { code: 0, stdout: JSON.stringify({ policy: audited.budgetPolicy, snapshot: buildControlBudgetStatus(audited) }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'set budget policy failed', exitCode: 1 };
     }
   }
@@ -3214,7 +3239,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const state = await readControlCenterState();
       return { code: 0, stdout: JSON.stringify({ items: state.approvals }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'list approvals failed', exitCode: 1 };
     }
   }
@@ -3239,7 +3264,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const next: ControlCenterState = { ...state, approvals: [item, ...state.approvals] };
       const audited = await appendControlAudit(next, 'approval.add', item.id, true, `approval created: ${item.title}`);
       return { code: 0, stdout: JSON.stringify({ item, total: audited.approvals.length }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'add approval failed', exitCode: 1 };
     }
   }
@@ -3281,7 +3306,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const next: ControlCenterState = { ...state, approvals };
       const audited = await appendControlAudit(next, 'approval.decide.live', approvalId, true, `live ${decision}`);
       return { code: 0, stdout: JSON.stringify({ dryRun: false, items: audited.approvals }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'decide approval failed', exitCode: 1 };
     }
   }
@@ -3294,7 +3319,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     // No config found — return a non-existent path so reads return [] gracefully
     return path.join(PERSISTENT_CONFIG_DIR, 'tasks-fallback.json');
   };
-  const readNTTasks = async (): Promise<any[]> => {
+  const readNTTasks = async (): Promise<Record<string, unknown>[]> => {
     try {
       const file = await getNTTasksFile();
       const raw = await fs.readFile(file, 'utf-8');
@@ -3302,7 +3327,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       return Array.isArray(parsed) ? parsed : [];
     } catch { return []; }
   };
-  const writeNTTasks = async (tasks: any[]): Promise<void> => {
+  const writeNTTasks = async (tasks: Record<string, unknown>[]): Promise<void> => {
     const file = await getNTTasksFile();
     await fs.writeFile(file, JSON.stringify(tasks, null, 2), 'utf-8');
   };
@@ -3312,7 +3337,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const items = await readNTTasks();
       return { code: 0, stdout: JSON.stringify({ items }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'list tasks failed', exitCode: 1 };
     }
   }
@@ -3347,7 +3372,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       tasks.unshift(task);
       await writeNTTasks(tasks);
       return { code: 0, stdout: JSON.stringify({ item: task, total: tasks.length }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'add task failed', exitCode: 1 };
     }
   }
@@ -3362,20 +3387,20 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
       const tasks = await readNTTasks();
       let found = false;
-      const updated = tasks.map((t: any) => {
+      const updated = tasks.map((t) => {
         if (t.id !== taskId) return t;
         found = true;
-        const next = { ...t, status, updated_at: nowIso() };
+        const next: Record<string, unknown> = { ...t, status, updated_at: nowIso() };
         if (status === 'done') {
           next.overall_progress = 100.0;
-          next.components = (t.components || []).map((c: any) => ({ ...c, progress: 1.0 }));
+          next.components = ((t.components as Record<string, unknown>[] | undefined) || []).map((c) => ({ ...c, progress: 1.0 }));
         }
         return next;
       });
       if (!found) return { code: 1, stdout: '', stderr: 'task not found', exitCode: 1 };
       await writeNTTasks(updated);
       return { code: 0, stdout: JSON.stringify({ items: updated }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'update task status failed', exitCode: 1 };
     }
   }
@@ -3386,9 +3411,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const taskId = String(payload?.taskId || '').trim();
       if (!taskId) return { code: 1, stdout: '', stderr: 'taskId is required', exitCode: 1 };
       const tasks = await readNTTasks();
-      await writeNTTasks(tasks.filter((t: any) => t.id !== taskId));
+      await writeNTTasks(tasks.filter((t) => t.id !== taskId));
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'delete task failed', exitCode: 1 };
     }
   }
@@ -3418,7 +3443,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         return { schedule, command, name, raw: line.trim(), enabled: !isPaused };
       });
       return { code: 0, stdout: JSON.stringify({ entries }), stderr: '', exitCode: 0 };
-    } catch (_e: any) {
+    } catch (_e) {
       return { code: 0, stdout: JSON.stringify({ entries: [] }), stderr: '', exitCode: 0 };
     }
   }
@@ -3446,7 +3471,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       await fs.rm(tmpPath, { force: true }).catch(() => {});
       
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'crontab toggle failed', exitCode: 1 };
     }
   }
@@ -3467,7 +3492,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       await fs.rm(tmpPath, { force: true }).catch(() => {});
       
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'crontab delete failed', exitCode: 1 };
     }
   }
@@ -3524,7 +3549,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }));
 
       return { code: 0, stdout: JSON.stringify({ agents }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'launchagents list failed', exitCode: 1 };
     }
   }
@@ -3547,7 +3572,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         await runSilent(`launchctl load -w "${plist}"`);
       }
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'launchagents toggle failed', exitCode: 1 };
     }
   }
@@ -3565,7 +3590,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       await fs.rm(plist, { force: true }).catch(() => {});
       
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'launchagents delete failed', exitCode: 1 };
     }
   }
@@ -3581,7 +3606,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       } catch {
         return { code: 0, stdout: JSON.stringify({ version: 1, jobs: [] }), stderr: '', exitCode: 0 };
       }
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'cron list failed', exitCode: 1 };
     }
   }
@@ -3597,7 +3622,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       } catch {
         return { code: 0, stdout: JSON.stringify({ version: 1, jobs: [] }), stderr: '', exitCode: 0 };
       }
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'cron list failed', exitCode: 1 };
     }
   }
@@ -3612,14 +3637,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const raw = await fs.readFile(cronPath, 'utf-8');
       const data = JSON.parse(raw);
       let toggled = false;
-      data.jobs = (data.jobs || []).map((job: any) => {
+      data.jobs = (data.jobs || []).map((job) => {
         if (job.id === jobId) { toggled = true; return { ...job, enabled: !job.enabled, updatedAtMs: Date.now() }; }
         return job;
       });
       if (!toggled) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
       await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'cron toggle failed', exitCode: 1 };
     }
   }
@@ -3634,11 +3659,11 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const raw = await fs.readFile(cronPath, 'utf-8');
       const data = JSON.parse(raw);
       const before = (data.jobs || []).length;
-      data.jobs = (data.jobs || []).filter((job: any) => job.id !== jobId);
+      data.jobs = (data.jobs || []).filter((job) => job.id !== jobId);
       if (data.jobs.length === before) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
       await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'cron delete failed', exitCode: 1 };
     }
   }
@@ -3647,7 +3672,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const state = await readControlCenterState();
       return { code: 0, stdout: JSON.stringify({ items: state.projects }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'list projects failed', exitCode: 1 };
     }
   }
@@ -3671,7 +3696,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const next = { ...state, projects: [project, ...state.projects] };
       const audited = await appendControlAudit(next, 'project.add', project.id, true, `project created: ${project.name}`);
       return { code: 0, stdout: JSON.stringify({ item: project, total: audited.projects.length }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'add project failed', exitCode: 1 };
     }
   }
@@ -3680,7 +3705,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const state = await readControlCenterState();
       return { code: 0, stdout: JSON.stringify({ items: state.queue }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'list queue failed', exitCode: 1 };
     }
   }
@@ -3704,7 +3729,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const next = { ...state, queue: [queueItem, ...state.queue] };
       const audited = await appendControlAudit(next, 'queue.add', queueItem.id, true, `queue item created: ${queueItem.title}`);
       return { code: 0, stdout: JSON.stringify({ item: queueItem, total: audited.queue.length }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'add queue failed', exitCode: 1 };
     }
   }
@@ -3729,7 +3754,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const next = { ...state, queue };
       const audited = await appendControlAudit(next, 'queue.ack', itemId, true, 'queue item acknowledged');
       return { code: 0, stdout: JSON.stringify({ items: audited.queue }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'ack queue failed', exitCode: 1 };
     }
   }
@@ -3738,7 +3763,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     try {
       const state = await readControlCenterState();
       return { code: 0, stdout: JSON.stringify({ items: state.audit }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e?.message || 'list audit failed', exitCode: 1 };
     }
   }
@@ -3750,7 +3775,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const payload = JSON.parse(payloadStr || '{}');
       startGatewayHttpWatchdog(payload || {});
       return { code: 0, stdout: 'gateway http watchdog configured', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stderr: e?.message || 'Invalid gateway:http-watchdog-start-json payload', exitCode: 1 };
     }
   }
@@ -3789,7 +3814,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
       const child = spawnWatchedGatewayProcess(actualCmd);
       return { code: 0, stdout: String(child.pid ?? ''), exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stderr: e?.message || 'Invalid gateway:start-bg-json payload', exitCode: 1 };
     }
   }
@@ -3816,12 +3841,12 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const payloadStr = fullCommand.replace('snapshot:read-model', '').trim();
       const payload = payloadStr ? JSON.parse(payloadStr) : {};
       const historyCandidatePaths: string[] = Array.isArray(payload?.historyCandidatePaths)
-        ? payload.historyCandidatePaths.map((item: any) => String(item || '').trim()).filter(Boolean)
+        ? payload.historyCandidatePaths.map((item) => String(item || '').trim()).filter(Boolean)
         : [];
       const historyDays = Math.max(1, Math.min(30, Number(payload?.historyDays || 7)));
       const taskHeartbeatTimeoutMs = Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(payload?.taskHeartbeatTimeoutMs || 10 * 60 * 1000)));
       const candidatePaths: string[] = Array.isArray(payload?.candidatePaths)
-        ? payload.candidatePaths.map((item: any) => String(item || '').trim()).filter(Boolean)
+        ? payload.candidatePaths.map((item) => String(item || '').trim()).filter(Boolean)
         : [];
 
       for (const snapshotPath of candidatePaths) {
@@ -3832,7 +3857,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           const readModel = normalizeReadModelSnapshot(rawSnapshot);
           const nowIso = new Date().toISOString();
           const taskGovernance = computeTaskGovernance(readModel, taskHeartbeatTimeoutMs, nowIso);
-          readModel.tasks = taskGovernance.tasks;
+          readModel.tasks = taskGovernance.tasks as typeof readModel.tasks;
 
           const runtimeDir = path.dirname(snapshotPath);
           const ackMap = await loadEventAcks(runtimeDir);
@@ -3844,7 +3869,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
           const auditTimeline = await buildAuditTimeline(runtimeDir, governanceEvents);
           const dailyDigest = buildDailyDigestMarkdown(auditTimeline);
-          let history: any[] = [];
+          let history: unknown[] = [];
           let historySourcePath = '';
 
           for (const historyPath of historyCandidatePaths) {
@@ -3888,7 +3913,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
 
       return { code: 1, stdout: '', stderr: 'No readable snapshot found', exitCode: 1 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
@@ -3909,7 +3934,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       // Restart file watchers so new corePath/workspacePath are watched
       void startActivityWatcher();
       return { code: 0, stdout: `Config saved to ${configFilePath}`, stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
@@ -3937,7 +3962,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       } catch {
         return { code: 0, stdout: content, stderr: '', exitCode: 0 };
       }
-    } catch (_e: any) {
+    } catch (_e) {
       return { code: 1, stdout: '{}', stderr: 'No config file found', exitCode: 1 };
     }
   }
@@ -3982,8 +4007,8 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         // Fix missing models array in each provider (OpenClaw >=2026.3.x requires this field)
         if (parsed.models && typeof parsed.models.providers === 'object' && parsed.models.providers !== null) {
           for (const [providerKey, providerVal] of Object.entries(parsed.models.providers)) {
-            if (providerVal && typeof providerVal === 'object' && !Array.isArray((providerVal as any).models)) {
-              (providerVal as any).models = [];
+            if (providerVal && typeof providerVal === 'object' && !Array.isArray((providerVal as Record<string, unknown>).models)) {
+              (providerVal as Record<string, unknown>).models = [];
               changed = true;
             }
           }
@@ -3995,7 +4020,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
 
       return { code: 0, stdout: JSON.stringify({ changed }), exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stderr: e.message, exitCode: 1 };
     }
   }
@@ -4007,7 +4032,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     let corePath = '';
     let configPath = '';
     let workspacePath = '';
-    let existingConfig: any = {};
+    let existingConfig: Record<string, unknown> = {};
 
     // Strictly read ONLY from NEW config file. No more "guessing" or legacy fallback.
     try {
@@ -4022,7 +4047,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         try {
           const content = await fs.readFile(openclawFile, 'utf-8');
           existingConfig = parseOpenClawConfig(content);
-          if (existingConfig.workspace) workspacePath = existingConfig.workspace;
+          if (existingConfig.workspace) workspacePath = existingConfig.workspace as string;
         } catch {}
       }
     } catch {}
@@ -4076,7 +4101,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       await fs.cp(sourcePath, targetPath, { recursive: true });
       
       return { code: 0, stdout: t('main.ipc.success.skillImported', { name: skillName }), exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stderr: e.message, exitCode: 1 };
     }
   }
@@ -4111,7 +4136,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
       await fs.rm(resolvedTarget, { recursive: true, force: true });
       return { code: 0, stdout: t('main.ipc.success.skillRemoved'), exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stderr: e.message, exitCode: 1 };
     }
   }
@@ -4148,10 +4173,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
             // Supplementary scan of agent auth-profiles to fill meta-only entries in global profiles
             const agentAuth = await collectAuthProfiles(finalConfigDirPath);
-            const healthyAgentProfiles = agentAuth.profiles.filter((p: any) => p.credentialHealthy);
+            const healthyAgentProfiles = agentAuth.profiles.filter((p) => p.credentialHealthy);
             if (healthyAgentProfiles.length > 0) {
               // Merge providers (including agent-only providers like openai-codex)
-              const agentProviders = healthyAgentProfiles.map((p: any) => String(p.provider || '').toLowerCase()).filter(Boolean);
+              const agentProviders = healthyAgentProfiles.map((p) => String(p.provider || '').toLowerCase()).filter(Boolean);
               configData.providers = Array.from(new Set([...configData.providers, ...agentProviders]));
               // If authChoice is undetected, infer from the highest priority healthy agent profile
               if (!configData.authChoice) {
@@ -4182,7 +4207,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
             };
         }
         return { code: 1, stdout: '', stderr: 'No config found at path', exitCode: 1 };
-    } catch(e: any) {
+    } catch(e) {
         return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
@@ -4197,7 +4222,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
       const data = await collectAuthProfiles(configDir);
       return { code: 0, stdout: JSON.stringify({ profiles: data.profiles, summary: data.summary }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
@@ -4218,8 +4243,10 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       const configFilePath = path.join(configDir, 'openclaw.json');
       const configJson = (await loadJsonFile(configFilePath)) || {};
       let removedGlobal = false;
-      if (configJson?.auth?.profiles && Object.prototype.hasOwnProperty.call(configJson.auth.profiles, profileId)) {
-        delete configJson.auth.profiles[profileId];
+      const configAuth = configJson.auth as Record<string, unknown> | undefined;
+      const configProfiles = configAuth?.profiles as Record<string, unknown> | undefined;
+      if (configProfiles && Object.prototype.hasOwnProperty.call(configProfiles, profileId)) {
+        delete configProfiles[profileId];
         removedGlobal = true;
       }
       if (removedGlobal) {
@@ -4230,8 +4257,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       let removedAgentFiles = 0;
       for (const authPath of agentFiles) {
         const parsed = (await loadJsonFile(authPath)) || {};
-        if (parsed?.profiles && Object.prototype.hasOwnProperty.call(parsed.profiles, profileId)) {
-          delete parsed.profiles[profileId];
+        const parsedProfiles = parsed.profiles as Record<string, unknown> | undefined;
+        if (parsedProfiles && Object.prototype.hasOwnProperty.call(parsedProfiles, profileId)) {
+          delete parsedProfiles[profileId];
           await saveJsonFile(authPath, parsed);
           removedAgentFiles += 1;
         }
@@ -4243,7 +4271,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         stderr: '',
         exitCode: 0,
       };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
@@ -4292,11 +4320,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       //       authChoice must be persisted via Launcher settings (config:write) to ensure it's available after restart.
       if (authChoice === 'minimax-coding-plan-global-token' || authChoice === 'minimax-coding-plan-cn-token') {
         const configJson = (await loadJsonFile(configFilePath)) || {};
-        const providers = configJson?.models?.providers && typeof configJson.models.providers === 'object'
-          ? configJson.models.providers
+        const configModels = (configJson.models as Record<string, unknown>) || {};
+        const configProviders = (configModels.providers as Record<string, unknown>) || {};
+        const providers: Record<string, unknown> = configProviders && typeof configProviders === 'object'
+          ? configProviders
           : {};
-        const portalProvider = providers['minimax-portal'] && typeof providers['minimax-portal'] === 'object'
-          ? providers['minimax-portal']
+        const portalProvider: Record<string, unknown> = providers['minimax-portal'] && typeof providers['minimax-portal'] === 'object'
+          ? (providers['minimax-portal'] as Record<string, unknown>)
           : {};
         const baseUrl = authChoice === 'minimax-coding-plan-cn-token'
           ? 'https://api.minimaxi.com/anthropic'
@@ -4305,9 +4335,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         const nextJson = {
           ...configJson,
           models: {
-            ...(configJson.models || {}),
+            ...configModels,
             providers: {
-              ...providers,
+              ...configProviders,
               'minimax-portal': {
                 ...portalProvider,
                 baseUrl,
@@ -4353,13 +4383,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
       const aliases = getChoiceAliases(authChoice);
       const listed = await collectAuthProfiles(configDir);
-      const hasMatched = listed.profiles.some((profile: any) => profileMatchesAliases(profile.profileId, { provider: profile.provider }, aliases) && (CREDENTIALLESS_AUTH_CHOICES.has(authChoice) || profile.agentPresent));
+      const hasMatched = listed.profiles.some((profile) => profileMatchesAliases(String(profile.profileId || ''), { provider: profile.provider }, aliases) && (CREDENTIALLESS_AUTH_CHOICES.has(authChoice) || profile.agentPresent));
       if (!hasMatched) {
         return { code: 1, stdout: '', stderr: 'Auth write finished but no matched profile found in dual layers', exitCode: 1 };
       }
 
       return { code: 0, stdout: JSON.stringify({ authChoice, aliases, secretSanitized: secret !== rawSecret }), stderr: '', exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
@@ -4375,14 +4405,14 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
 
       const filters = Array.isArray(payload?.providers)
-        ? payload.providers.map((item: any) => String(item || '').toLowerCase()).filter(Boolean)
+        ? payload.providers.map((item) => String(item || '').toLowerCase()).filter(Boolean)
         : [];
 
       const authOverview = await collectAuthProfiles(configDir);
       const healthyProviders = Array.from(new Set(
         authOverview.profiles
-          .filter((profile: any) => profile.agentPresent && profile.credentialHealthy)
-          .flatMap((profile: any) => getProfileProviderAliases(profile.profileId, { provider: profile.provider }))
+          .filter((profile) => profile.agentPresent && profile.credentialHealthy)
+          .flatMap((profile) => getProfileProviderAliases(String(profile.profileId || ''), { provider: profile.provider }))
       ));
       const effectiveFilters = healthyProviders.length > 0 ? healthyProviders : filters;
 
@@ -4430,7 +4460,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       }
 
       const agentsRoot = path.join(configDir, 'agents');
-      let entries: any[] = [];
+      let entries: import('node:fs').Dirent[] = [];
       try {
         entries = await fs.readdir(agentsRoot, { withFileTypes: true });
       } catch {
@@ -4468,9 +4498,9 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
           const provider = String(providerKey || '').toLowerCase();
           if (!providerMatchesAny(provider, effectiveFilters)) continue;
 
-          const rawModels = Array.isArray((providerConfig as any)?.models) ? (providerConfig as any).models : [];
+          const rawModels = Array.isArray((providerConfig as Record<string, unknown>)?.models) ? (providerConfig as Record<string, unknown>).models as unknown[] : [];
           const resolvedModels: string[] = rawModels
-            .map((item: any) => String(item?.id || item?.name || '').trim())
+            .map((item) => String((item as Record<string, unknown>)?.id || (item as Record<string, unknown>)?.name || '').trim())
             .filter(Boolean);
 
           if (!grouped.has(provider)) {
@@ -4497,7 +4527,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         stderr: '',
         exitCode: 0,
       };
-    } catch (e: any) {
+    } catch (e) {
       return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
     }
   }
@@ -4510,7 +4540,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         const files = await fs.readdir(targetPath);
         const isEmpty = files.filter(f => !f.startsWith('.')).length === 0;
         return { code: 0, stdout: JSON.stringify({ isEmpty }), exitCode: 0 };
-    } catch (e: any) {
+    } catch (e) {
         if (e.code === 'ENOENT') {
             return { code: 0, stdout: JSON.stringify({ isEmpty: true, notExist: true }), exitCode: 0 };
         }
@@ -4539,7 +4569,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                 resolve({ code: 0, stdout: JSON.stringify(['main', ...tags]), exitCode: 0 });
             });
         });
-    } catch (e: any) {
+    } catch (e) {
         return { code: 1, stderr: e.message, exitCode: 1 };
     }
   }
@@ -4584,7 +4614,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
         await fs.mkdir(finalCorePath, { recursive: true });
 
         return new Promise((resolve) => {
-            let childProcess: any;
+            let childProcess: ReturnType<typeof spawn>;
           const runCommandWithStreaming = (cmd: string, title: string) => {
             return new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
               emitShellStdout(`>>> ${title}\n`, 'stdout');
@@ -4593,19 +4623,19 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
               let stdout = '';
               let stderr = '';
 
-              proc.stdout.on('data', (data: any) => {
+              proc.stdout.on('data', (data) => {
                 const chunk = data.toString();
                 stdout += chunk;
                 emitShellStdout(chunk, 'stdout');
               });
 
-              proc.stderr.on('data', (data: any) => {
+              proc.stderr.on('data', (data) => {
                 const chunk = data.toString();
                 stderr += chunk;
                 emitShellStdout(chunk, 'stderr');
               });
 
-              proc.on('error', (err: any) => {
+              proc.on('error', (err) => {
                 activeProcesses.delete(proc);
                 resolveStep({ code: 1, stdout, stderr: stderr || err.message || 'Unknown error' });
               });
@@ -4635,15 +4665,15 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
 
             activeProcesses.add(childProcess);
 
-            childProcess.stdout.on('data', (data: any) => {
+            childProcess.stdout.on('data', (data) => {
                 emitShellStdout(data.toString(), 'stdout');
             });
 
-            childProcess.stderr.on('data', (data: any) => {
+            childProcess.stderr.on('data', (data) => {
                 emitShellStdout(data.toString(), 'stderr');
             });
 
-            childProcess.on('error', (err: any) => {
+            childProcess.on('error', (err) => {
               activeProcesses.delete(childProcess);
                 resolve({ code: 1, stderr: `Spawn error: ${err.message}`, exitCode: 1 });
             });
@@ -4830,13 +4860,13 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
                         }), 
                         exitCode: 0 
                     });
-                } catch (e: any) {
+                } catch (e) {
                     resolve({ code: 1, stderr: e.message, exitCode: 1 });
                 }
                 activeProcesses.delete(childProcess);
             });
         });
-    } catch (e: any) {
+    } catch (e) {
         return { code: 1, stderr: e.message, exitCode: 1 };
     }
   }
@@ -4860,7 +4890,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
       stderr += chunk;
       emitShellStdout(chunk, 'stderr');
     });
-    child.on('error', (error: any) => {
+    child.on('error', (error) => {
       activeProcesses.delete(child);
       if (settled) return;
       settled = true;
@@ -4926,7 +4956,7 @@ ipcMain.handle('usage:scan-sessions', async (_event, payload?: string) => {
     }
 
     return { code: 0, stdout: JSON.stringify(events), stderr: '' };
-  } catch (e: any) {
+  } catch (e) {
     return { code: 1, stdout: '[]', stderr: String(e?.message || 'scan failed') };
   }
 });
@@ -4967,7 +4997,7 @@ ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
     try {
       process.kill(pid, 'SIGTERM');
       termSent.push(pid);
-    } catch (e: any) {
+    } catch (e) {
       failed.push({ pid, reason: e?.message || 'SIGTERM failed' });
     }
   }
@@ -4986,7 +5016,7 @@ ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
     try {
       process.kill(pid, 'SIGKILL');
       forceKilled.push(pid);
-    } catch (e: any) {
+    } catch (e) {
       failed.push({ pid, reason: e?.message || 'SIGKILL failed' });
     }
   }
@@ -5005,7 +5035,7 @@ ipcMain.handle('shell:open-external', async (_event, url: string) => {
     try {
         await shell.openExternal(url);
         return { success: true };
-    } catch (e: any) {
+    } catch (e) {
         return { success: false, error: e.message };
     }
 });
@@ -5075,8 +5105,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
     };
   }
 
-  const params: Record<string, any> = {
-    sessionKey: request.sessionKey,
+  const params: Record<string, unknown> = {
     message: request.message,
     deliver: Boolean(request.deliver),
     idempotencyKey: request.requestId,
@@ -5102,7 +5131,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
   };
 
   // Subscribe to WebSocket chat events for this session
-  const unsubscribe = gwsClient!.subscribeChatEvent(request.sessionKey, (payload: any) => {
+  const unsubscribe = gwsClient!.subscribeChatEvent(request.sessionKey, (payload) => {
     const chatState = activeChatRequests.get(request.requestId);
     if (!chatState) return;
     if (chatState.aborted) {
@@ -5110,9 +5139,10 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
       activeChatRequests.delete(request.requestId);
       return;
     }
-    const state = String(payload?.state || '');
+    const p = payload as Record<string, unknown>;
+    const state = String(p?.state || '');
     if (state === 'delta') {
-      const delta = extractMessageText(payload?.message);
+      const delta = extractMessageText(p?.message);
       if (delta) emitChunk({ delta, state: 'delta' });
     } else if (state === 'final') {
       unsubscribe();
@@ -5123,7 +5153,7 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
       emitChunk({ done: true, state: 'aborted' });
       activeChatRequests.delete(request.requestId);
     } else if (state === 'error') {
-      const errorMsg = String(payload?.error || payload?.message || 'Chat error');
+      const errorMsg = String(p?.error || p?.message || 'Chat error');
       unsubscribe();
       emitChunk({ error: errorMsg, done: true, state: 'error' });
       activeChatRequests.delete(request.requestId);
@@ -5131,13 +5161,13 @@ ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvok
   });
 
   try {
-    const sendResult = await gwsClient!.request<any>('chat.send', params);
+    const sendResult = await gwsClient!.request<unknown>('chat.send', params);
     const runId = extractRunIdFromSendPayload(sendResult);
     if (runId) {
       const state = activeChatRequests.get(request.requestId);
       if (state) activeChatRequests.set(request.requestId, { ...state, runId });
     }
-  } catch (e: any) {
+  } catch (e) {
     unsubscribe();
     activeChatRequests.delete(request.requestId);
     return {
@@ -5172,13 +5202,13 @@ ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
   }
 
   try {
-    const abortParams: Record<string, any> = { sessionKey: chatState.sessionKey };
+    const abortParams: Record<string, unknown> = { sessionKey: chatState.sessionKey };
     if (chatState.runId) abortParams.runId = chatState.runId;
     if (chatState.agentId) abortParams.agentId = chatState.agentId;
 
     await gwsClient.request('chat.abort', abortParams);
     return { success: true };
-  } catch (e: any) {
+  } catch (e) {
     return { success: false, error: e.message };
   }
 });
@@ -5225,7 +5255,7 @@ ipcMain.handle('openclaw:sessions.list', async () => {
       const sessionsDir = path.join(agentsDir, agentId, 'sessions');
       const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
 
-      let sessionsIndex: Record<string, any> = {};
+      let sessionsIndex: Record<string, unknown> = {};
       try {
         const raw = await fs.readFile(sessionsJsonPath, 'utf-8');
         sessionsIndex = JSON.parse(raw);
@@ -5233,13 +5263,14 @@ ipcMain.handle('openclaw:sessions.list', async () => {
         continue; // no sessions.json for this agent
       }
 
-      for (const [sessionKey, meta] of Object.entries(sessionsIndex) as [string, any][]) {
+      for (const [sessionKey, metaRaw] of Object.entries(sessionsIndex) as [string, unknown][]) {
+        const meta = metaRaw as Record<string, unknown>;
         const sessionId = String(meta?.sessionId || '');
         if (!sessionId) continue;
 
         // Prefer explicit sessionFile, fallback to <sessionId>.jsonl
         const sessionFile: string = (typeof meta?.sessionFile === 'string' && meta.sessionFile)
-          ? meta.sessionFile
+          ? (meta.sessionFile as string)
           : path.join(sessionsDir, `${sessionId}.jsonl`);
 
         let content = '';
@@ -5300,7 +5331,7 @@ ipcMain.handle('openclaw:sessions.list', async () => {
     });
 
     return { code: 0, stdout: JSON.stringify(sessions), stderr: '' };
-  } catch (e: any) {
+  } catch (e) {
     return { code: 1, stdout: '', stderr: e?.message || 'Unknown error' };
   }
 });
@@ -5323,10 +5354,10 @@ ipcMain.handle('openclaw:session.load', async (_event, payload: { sessionKey: st
     let sessionFile = '';
     try {
       const raw = await fs.readFile(path.join(sessionsDir, 'sessions.json'), 'utf-8');
-      const index = JSON.parse(raw) as Record<string, any>;
-      const meta = index[sessionKey];
+      const index = JSON.parse(raw) as Record<string, unknown>;
+      const meta = index[sessionKey] as Record<string, unknown>;
       if (meta?.sessionFile && typeof meta.sessionFile === 'string') {
-        sessionFile = meta.sessionFile;
+        sessionFile = meta.sessionFile as string;
       } else if (meta?.sessionId) {
         sessionFile = path.join(sessionsDir, `${meta.sessionId}.jsonl`);
       }
@@ -5374,12 +5405,12 @@ ipcMain.handle('openclaw:session.load', async (_event, payload: { sessionKey: st
     }
 
     return { code: 0, stdout: JSON.stringify(messages), stderr: '' };
-  } catch (e: any) {
+  } catch (e) {
     return { code: 1, stdout: '', stderr: e?.message || 'Unknown error' };
   }
 });
 
-ipcMain.handle('events:ack', async (_event, payload: any) => {
+ipcMain.handle('events:ack', async (_event, payload) => {
   try {
     const eventId = normalizeString(payload?.eventId, '');
     if (!eventId) {
@@ -5416,12 +5447,12 @@ ipcMain.handle('events:ack', async (_event, payload: any) => {
       expiresAt: ackMap[eventId].expiresAt,
       runtimeDir,
     };
-  } catch (e: any) {
+  } catch (e) {
     return { success: false, error: e.message };
   }
 });
 
-ipcMain.handle('events:state', async (_event, payload: any) => {
+ipcMain.handle('events:state', async (_event, payload) => {
   try {
     const runtimeCandidates = [
       normalizeString(payload?.runtimeDir, ''),
@@ -5437,7 +5468,7 @@ ipcMain.handle('events:state', async (_event, payload: any) => {
 
     const ackMap = await loadEventAcks(runtimeDir);
     return { success: true, runtimeDir, acks: ackMap };
-  } catch (e: any) {
+  } catch (e) {
     return { success: false, error: e.message };
   }
 });
@@ -5452,7 +5483,7 @@ ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
       return { success: false, error: openError };
     }
     return { success: true };
-  } catch (e: any) {
+  } catch (e) {
     return { success: false, error: e.message };
   }
 });
@@ -5467,7 +5498,7 @@ ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string
       : filePath;
     await fs.writeFile(resolved, content, 'utf-8');
     return { success: true };
-  } catch (e: any) {
+  } catch (e) {
     return { success: false, error: e.message };
   }
 });

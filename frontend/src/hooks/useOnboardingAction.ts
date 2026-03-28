@@ -37,7 +37,7 @@ interface UseOnboardingActionReturn {
   executing: boolean;
   error: string | null;
   logs: { text: string; source: string; time: string }[];
-  execute: (step: OnboardingStep, payload?: any) => Promise<boolean>;
+  execute: (step: OnboardingStep, payload?: unknown) => Promise<boolean>;
   reset: () => void;
 }
 
@@ -51,7 +51,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   const hasOAuthProfile = (authChoice: string, rawConfig: string) => {
     const parsed = JSON.parse(rawConfig);
     const profiles = parsed?.auth?.profiles || {};
-    const entries = Object.entries(profiles) as Array<[string, any]>;
+    const entries = Object.entries(profiles) as Array<[string, Record<string, unknown>]>;
 
     const aliases = AUTH_CHOICE_PROVIDER_ALIASES[authChoice] || [authChoice];
     return entries.some(([profileId, profile]) => {
@@ -64,7 +64,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     });
   };
 
-  const isCommandSuccess = (res: any) => res?.exitCode === 0 || res?.code === 0;
+  const isCommandSuccess = (res: { code?: number; exitCode?: number }) => res?.exitCode === 0 || res?.code === 0;
 
   const sanitizeSecret = (value: string) => String(value || '').replace(/\s+/g, '');
 
@@ -73,7 +73,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     return AUTH_CHOICE_PROVIDER_ALIASES[key] || [key];
   };
 
-  const profileMatchesProvider = (profileId: string, profile: any, aliases: string[]) => {
+  const profileMatchesProvider = (profileId: string, profile: Record<string, unknown>, aliases: string[]) => {
     const provider = String(profile?.provider || '').toLowerCase();
     const id = String(profileId || '').toLowerCase();
     return aliases.some((alias) => {
@@ -82,7 +82,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     });
   };
 
-  const hasAgentCredential = (profile: any) => {
+  const hasAgentCredential = (profile: Record<string, unknown>) => {
     const token = String(profile?.token || '').trim();
     const access = String(profile?.access || '').trim();
     if (token) {
@@ -97,7 +97,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   const readAgentAuthProfiles = async (configPath: string) => {
     const agentsDir = `${configPath}/agents`;
     const findCmd = `find ${shellQuote(agentsDir)} -type f -path '*/agent/auth-profiles.json' 2>/dev/null | head -1`;
-    const findRes = await (window as any).electronAPI.exec(findCmd);
+    const findRes = await window.electronAPI.exec(findCmd);
     if (!isCommandSuccess(findRes) || !findRes.stdout) {
       return null;
     }
@@ -105,7 +105,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const profilePath = String(findRes.stdout || '').trim().split(/\r?\n/)[0] || '';
     if (!profilePath) return null;
 
-    const readRes = await (window as any).electronAPI.exec(`cat ${shellQuote(profilePath)}`);
+    const readRes = await window.electronAPI.exec(`cat ${shellQuote(profilePath)}`);
     if (!isCommandSuccess(readRes) || !readRes.stdout) {
       return null;
     }
@@ -129,7 +129,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     const aliases = resolveProviderAliases(params.authChoice);
     const parsed = await readOpenClawConfig(params.configPath);
     const globalProfiles = parsed?.auth?.profiles || {};
-    const globalEntries = Object.entries(globalProfiles) as Array<[string, any]>;
+    const globalEntries = Object.entries(globalProfiles) as Array<[string, Record<string, unknown>]>;
     const hasGlobalProfile = globalEntries.some(([profileId, profile]) => profileMatchesProvider(profileId, profile, aliases));
     if (!hasGlobalProfile) {
       throw new Error(t('onboarding.errors.globalProfileNotFound', { providers: aliases.join('/') }));
@@ -143,7 +143,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     }
 
     const agentProfiles = agentAuth.parsed?.profiles || {};
-    const agentEntries = Object.entries(agentProfiles) as Array<[string, any]>;
+    const agentEntries = Object.entries(agentProfiles) as Array<[string, Record<string, unknown>]>;
     const matchedAgentEntry = agentEntries.find(([profileId, profile]) => profileMatchesProvider(profileId, profile, aliases));
     if (!matchedAgentEntry) {
       throw new Error(
@@ -173,7 +173,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   }) => {
     const parsed = await readOpenClawConfig(params.configPath);
     const globalProfiles = parsed?.auth?.profiles || {};
-    const globalEntries = Object.entries(globalProfiles) as Array<[string, any]>;
+    const globalEntries = Object.entries(globalProfiles) as Array<[string, Record<string, unknown>]>;
     if (globalEntries.length === 0) {
       throw new Error(t('onboarding.errors.globalProfilesEmpty'));
     }
@@ -184,7 +184,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     }
 
     const agentProfiles = agentAuth.parsed?.profiles || {};
-    const agentEntries = Object.entries(agentProfiles) as Array<[string, any]>;
+    const agentEntries = Object.entries(agentProfiles) as Array<[string, Record<string, unknown>]>;
     const matched = globalEntries.find(([globalProfileId, globalProfile]) => {
       const provider = String(globalProfile?.provider || '').toLowerCase();
       const profileId = String(globalProfileId || '').toLowerCase();
@@ -236,10 +236,10 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   };
 
   const resolveExecCmd = async (corePath: string): Promise<string> => {
-    const hasPnpmLock = await (window as any).electronAPI.exec(`test -f ${shellQuote(`${corePath}/pnpm-lock.yaml`)}`);
+    const hasPnpmLock = await window.electronAPI.exec(`test -f ${shellQuote(`${corePath}/pnpm-lock.yaml`)}`);
     if (isCommandSuccess(hasPnpmLock)) return 'pnpm';
 
-    const hasNpmLock = await (window as any).electronAPI.exec(`test -f ${shellQuote(`${corePath}/package-lock.json`)}`);
+    const hasNpmLock = await window.electronAPI.exec(`test -f ${shellQuote(`${corePath}/package-lock.json`)}`);
     if (isCommandSuccess(hasNpmLock)) return 'npm run';
 
     return 'pnpm';
@@ -261,7 +261,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     };
 
     if (allowPersistedRecovery && (!runtimePaths.corePath || !runtimePaths.configPath || !runtimePaths.workspacePath)) {
-      const readRes = await (window as any).electronAPI.exec('config:read');
+      const readRes = await window.electronAPI.exec('config:read');
       if (isCommandSuccess(readRes) && readRes.stdout) {
         try {
           const saved = JSON.parse(readRes.stdout);
@@ -276,7 +276,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       allowPersistedRecovery
       && (!runtimePaths.corePath || !runtimePaths.configPath || !runtimePaths.workspacePath)
     ) {
-      const detectRes = await (window as any).electronAPI.exec('detect:paths');
+      const detectRes = await window.electronAPI.exec('detect:paths');
       if (isCommandSuccess(detectRes) && detectRes.stdout) {
         try {
           const detected = JSON.parse(detectRes.stdout);
@@ -301,7 +301,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     if (Object.keys(pathPatch).length > 0) {
       setConfig(pathPatch);
       try {
-        await (window as any).electronAPI.exec(`config:write ${JSON.stringify({ ...config, ...pathPatch })}`);
+        await window.electronAPI.exec(`config:write ${JSON.stringify({ ...config, ...pathPatch })}`);
       } catch {
         // Runtime recovery should proceed even if persistence fails.
       }
@@ -312,7 +312,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
   const readOpenClawConfig = async (configPath: string) => {
     const configFile = `${configPath}/openclaw.json`;
-    const res = await (window as any).electronAPI.exec(`cat ${shellQuote(configFile)}`);
+    const res = await window.electronAPI.exec(`cat ${shellQuote(configFile)}`);
     if (!isCommandSuccess(res) || !res.stdout) {
       throw new Error(t('onboarding.errors.readConfigFailed'));
     }
@@ -335,7 +335,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     addLocalLog(t('onboarding.logs.securityModeEnabled'), 'system');
 
     addLocalLog(t('onboarding.logs.checkingCli'), 'system');
-    const versionRes = await (window as any).electronAPI.exec(`cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`);
+    const versionRes = await window.electronAPI.exec(`cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`);
     if (!isCommandSuccess(versionRes)) {
       throw new Error(versionRes.stderr || t('onboarding.errors.cliNotStarted'));
     }
@@ -359,7 +359,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       }
     }
 
-    const gatewayRes = await (window as any).electronAPI.exec(gatewayStatusCmd);
+    const gatewayRes = await window.electronAPI.exec(gatewayStatusCmd);
     if (!isCommandSuccess(gatewayRes)) {
       const gatewayErr = gatewayRes.stderr || gatewayRes.stdout || '';
       if (/device signature invalid|signature invalid|1008/i.test(gatewayErr)) {
@@ -380,7 +380,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   }) => {
     params.addLocalLog(t('onboarding.logs.runningDoctor'), 'system');
     const doctorCmd = `cd ${shellQuote(params.corePath)} && ${params.envPrefix}${params.execCmd} openclaw doctor --non-interactive`;
-    const doctorRes = await (window as any).electronAPI.exec(doctorCmd);
+    const doctorRes = await window.electronAPI.exec(doctorCmd);
     const doctorOutput = `${doctorRes?.stdout || ''}\n${doctorRes?.stderr || ''}`;
 
     if (!isCommandSuccess(doctorRes)) {
@@ -429,7 +429,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     let parseWarningLogged = false;
 
     while (Date.now() - startedAt < timeoutMs) {
-      const res = await (window as any).electronAPI.exec(`cat ${shellQuote(configFile)}`);
+      const res = await window.electronAPI.exec(`cat ${shellQuote(configFile)}`);
       if (isCommandSuccess(res) && res.stdout) {
         try {
           if (hasOAuthProfile(params.authChoice, res.stdout)) {
@@ -458,7 +458,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     setLogs([]);
   }, []);
 
-  const execute = async (step: OnboardingStep, _payload?: any): Promise<boolean> => {
+  const execute = async (step: OnboardingStep, _payload?: unknown): Promise<boolean> => {
     setExecuting(true);
     setError(null);
     setLogs([]);
@@ -495,7 +495,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           configPath,
           workspacePath: workspacePath || ''
         };
-        const migrateRes = await (window as any).electronAPI.exec(`config:migrate-openclaw ${JSON.stringify(migratePayload)}`);
+        const migrateRes = await window.electronAPI.exec(`config:migrate-openclaw ${JSON.stringify(migratePayload)}`);
         if (!isCommandSuccess(migrateRes)) {
           addLocalLog(t('onboarding.logs.migrateConfigFailed'), 'stderr');
         }
@@ -529,7 +529,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             if (!hasAnyChannel) throw new Error(t('onboarding.errors.noChannelsConfigured'));
             const selectedPlatform = String(config.platform || '').trim().toLowerCase();
             if (selectedPlatform) {
-              const selectedChannel = (channels as any)?.[selectedPlatform];
+              const selectedChannel = (channels as Record<string, unknown>)?.[selectedPlatform];
               const hasSelectedChannel =
                 !!selectedChannel &&
                 (typeof selectedChannel !== 'object' || Object.keys(selectedChannel).length > 0);
@@ -537,14 +537,14 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
                 throw new Error(t('onboarding.errors.channelNotConfigured', { platform: selectedPlatform }));
               }
               // Verify enabled=true
-              if (typeof selectedChannel === 'object' && selectedChannel.enabled === false) {
+              if (typeof selectedChannel === 'object' && selectedChannel !== null && (selectedChannel as Record<string, unknown>).enabled === false) {
                 throw new Error(t('onboarding.errors.channelDisabled', { platform: selectedPlatform }));
               }
               // Verify token is non-empty (whatsapp/irc/signal/imessage don't need tokens, skip)
               const tokenlessChannels = new Set(['whatsapp', 'irc', 'signal', 'imessage']);
               if (!tokenlessChannels.has(selectedPlatform) && typeof selectedChannel === 'object') {
                 const channelTokenKey = selectedPlatform === 'googlechat' ? 'webhookUrl' : 'botToken';
-                const storedToken = String(selectedChannel[channelTokenKey] || '').trim();
+                const storedToken = String(((selectedChannel as Record<string, unknown>)[channelTokenKey]) || '').trim();
                 if (!storedToken) {
                   addLocalLog(t('onboarding.logs.channelTokenEmpty', { platform: selectedPlatform, key: channelTokenKey }), 'stderr');
                 }
@@ -558,7 +558,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
             } else {
               // When installDaemon=false, Gateway isn't started yet (manual start from dashboard); only verify CLI availability
-              const versionRes = await (window as any).electronAPI.exec(
+              const versionRes = await window.electronAPI.exec(
                 `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
               );
               if (!isCommandSuccess(versionRes)) {
@@ -602,24 +602,24 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             }
 
             addLocalLog(t('onboarding.logs.cleanupOAuth', { provider: oauthTarget.provider, method: oauthTarget.method || 'default' }), 'system');
-            await (window as any).electronAPI.exec(
+            await window.electronAPI.exec(
               `pkill -f ${shellQuote(`openclaw models auth login --provider ${oauthTarget.provider}`)} || true`,
             );
 
             if (selectedAuthChoice === 'openai-codex') {
               addLocalLog(t('onboarding.logs.cleanupOpenAICallback'), 'system');
-              await (window as any).electronAPI.exec(`lsof -nP -iTCP:1455 -sTCP:LISTEN -t | xargs -I{} kill -TERM {} 2>/dev/null || true`);
+              await window.electronAPI.exec(`lsof -nP -iTCP:1455 -sTCP:LISTEN -t | xargs -I{} kill -TERM {} 2>/dev/null || true`);
             }
 
             const providerFlag = `--provider ${shellQuote(oauthTarget.provider)}`;
             const methodFlag = oauthTarget.method ? ` --method ${shellQuote(oauthTarget.method)}` : '';
             const interactiveCmd = `${envPrefix}${execCmd} openclaw models auth login ${providerFlag}${methodFlag}`;
-            const resRaw: any = await execInTerminal(interactiveCmd, {
+            const resRaw = await execInTerminal(interactiveCmd, {
               title: t('onboarding.oauthTitle'),
               holdOpen: true,
               cwd: corePath
             });
-            const code = resRaw.code ?? resRaw.exitCode;
+            const code = resRaw.code ?? (resRaw as { code: number; exitCode?: number }).exitCode;
             if (typeof code === 'number' && code !== 0) {
               throw new Error(resRaw.stderr || t('onboarding.errors.oauthFailed'));
             }
@@ -660,7 +660,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             authChoice: selectedAuthChoice,
             secret: sanitizedSecret,
           };
-          const addProfileRes = await (window as any).electronAPI.exec(`auth:add-profile ${JSON.stringify(addProfilePayload)}`);
+          const addProfileRes = await window.electronAPI.exec(`auth:add-profile ${JSON.stringify(addProfilePayload)}`);
           if (!isCommandSuccess(addProfileRes)) {
             throw new Error(addProfileRes.stderr || t('onboarding.errors.coreAuthFailed'));
           }
@@ -739,7 +739,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             // Defer channel activation to the messaging step to avoid coupling auth/binding during initialization.
             if (platform) {
               const enableChannelCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.enabled true --json`;
-              const enableRes = await (window as any).electronAPI.exec(enableChannelCmd);
+              const enableRes = await window.electronAPI.exec(enableChannelCmd);
               if (!isCommandSuccess(enableRes)) {
                 addLocalLog(t('onboarding.logs.enableChannelFailed', { platform }), 'stderr');
               } else {
@@ -757,7 +757,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               break;
             }
             const channelCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw channels add --channel ${shellQuote(channelId)} ${channelFlags}`;
-            const res = await (window as any).electronAPI.exec(channelCmd);
+            const res = await window.electronAPI.exec(channelCmd);
             if (isCommandSuccess(res)) {
               success = true;
               if (channelId !== platform) {
@@ -798,7 +798,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               addLocalLog(t('onboarding.logs.pluginRegistryFallback'), 'system');
               const safeToken = shellQuote(JSON.stringify(config.botToken));
               const configSetCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.${directKey} ${safeToken} --json`;
-              const configSetRes = await (window as any).electronAPI.exec(configSetCmd);
+              const configSetRes = await window.electronAPI.exec(configSetCmd);
               if (isCommandSuccess(configSetRes)) {
                 success = true;
                 addLocalLog(t('onboarding.logs.configSetDirectSuccess', { platform, key: directKey }), 'system');
@@ -836,7 +836,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           if (channelsRequireSafeGroupDefault.has(platform)) {
             addLocalLog(t('onboarding.logs.applyingGroupPolicy', { platform }), 'system');
             const setPolicyCmd = `${cdCorePath} && ${envPrefix}${execCmd} openclaw config set channels.${platform}.groupPolicy ${shellQuote('"open"')} --json`;
-            const setPolicyRes = await (window as any).electronAPI.exec(setPolicyCmd);
+            const setPolicyRes = await window.electronAPI.exec(setPolicyCmd);
             if (!isCommandSuccess(setPolicyRes)) {
               addLocalLog(
                 t('onboarding.logs.applyGroupPolicyFailed', { platform }),
@@ -870,7 +870,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
           // The final step doesn't install a daemon; Gateway is manually started from the dashboard.
           addLocalLog(t('onboarding.logs.daemonDisabled'), 'system');
-          const versionRes = await (window as any).electronAPI.exec(
+          const versionRes = await window.electronAPI.exec(
             `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
           );
           if (!isCommandSuccess(versionRes)) {
@@ -885,9 +885,9 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       setExecuting(false);
       return true;
 
-    } catch (err: any) {
-      setError(err.message);
-      addLocalLog(t('onboarding.logs.executionException', { msg: err.message }), 'stderr');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+      addLocalLog(t('onboarding.logs.executionException', { msg: err instanceof Error ? err.message : String(err) }), 'stderr');
       setExecuting(false);
       return false;
     }

@@ -1,9 +1,10 @@
 import { execInTerminal } from '../utils/terminal';
+import type { Config } from '../store';
 
 const NT_CLAW_TERMINAL_MARKER_PREFIX = '__NT_CLAWLAUNCH_MANAGED__';
 
 type LogSource = 'system' | 'stderr' | 'stdout';
-type TFn = (key: string, params?: Record<string, any>) => string;
+type TFn = (key: string, params?: Record<string, unknown>) => string;
 
 interface GatewayConflictModal {
   message: string;
@@ -12,12 +13,12 @@ interface GatewayConflictModal {
 }
 
 interface UseGatewayActionsParams {
-  config: any;
-  runtimeProfile: any;
+  config: Config;
+  runtimeProfile: Record<string, unknown> | null;
   running: boolean;
   setRunning: (running: boolean) => void;
   shellQuote: (value: string) => string;
-  buildOpenClawEnvPrefix: (cfg?: any) => string;
+  buildOpenClawEnvPrefix: (cfg?: Partial<Config>) => string;
   addLog: (msg: string, source?: LogSource) => void;
   t: TFn;
   gatewayConflictModal: GatewayConflictModal | null;
@@ -42,27 +43,27 @@ export function useGatewayActions({
   setGatewayConflictActionMessage,
   closeGatewayConflictModal,
 }: UseGatewayActionsParams) {
-  const shouldUseExternalTerminal = (cfg?: any) =>
+  const shouldUseExternalTerminal = (cfg?: Partial<Config>) =>
     (cfg?.useExternalTerminal ?? config.useExternalTerminal) !== false;
 
   // Get gateway port from openclaw.json (runtimeProfile)
   // overrideProfile: 當 runtimeProfile hook state 尚未載入時可提供備援資料（例如 App 啟動時序問題）
-  const getGatewayPort = (overrideProfile?: any): number | null => {
+  const getGatewayPort = (overrideProfile?: Record<string, unknown> | null): number | null => {
     const source = overrideProfile ?? runtimeProfile;
-    const raw = String(source?.gateway?.port ?? '').trim();
+    const raw = String((source?.gateway as Record<string, unknown> | undefined)?.port ?? '').trim();
     if (!raw || !/^\d+$/.test(raw)) return null;
     const port = Number(raw);
     return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
   };
 
   // Check if gateway is listening using lsof (returns null if port is unknown)
-  const isGatewayListening = async (overrideProfile?: any): Promise<boolean | null> => {
+  const isGatewayListening = async (overrideProfile?: Record<string, unknown> | null): Promise<boolean | null> => {
     if (!window.electronAPI) return null;
     const port = getGatewayPort(overrideProfile);
     if (!port) return null;
     try {
-      const res: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
-      const code = res.code ?? res.exitCode;
+      const res = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+      const code = res.code;
       return code === 0 && !!String(res.stdout || '').trim();
     } catch {
       return null;
@@ -88,7 +89,7 @@ export function useGatewayActions({
 
   // overrideRuntimeProfile: 當 hook state 的 runtimeProfile 尚未載入完成時，
   // 可傳入 openclaw.json probe 的結果以取得正確的 gateway port 進行偵測。
-  const syncGatewayStatus = async (overrideRuntimeProfile?: any) => {
+  const syncGatewayStatus = async (overrideRuntimeProfile?: Record<string, unknown> | null) => {
     try {
       const listening = await isGatewayListening(overrideRuntimeProfile ?? undefined);
       if (listening !== null) {
@@ -132,8 +133,8 @@ export function useGatewayActions({
                 addLog(t('logs.portKilled', { port, pids: Array.from(new Set(allKilled)).join(', ') }), 'system');
               }
             }
-          } catch (e: any) {
-            addLog(t('logs.errors.killPortError', { port, msg: e?.message || e }), 'stderr');
+          } catch (e: unknown) {
+            addLog(t('logs.errors.killPortError', { port, msg: e instanceof Error ? e.message : String(e) }), 'stderr');
           }
         }
 
@@ -147,14 +148,14 @@ export function useGatewayActions({
       const skipGatewayStop = options?.killTerminalAndPortHolders && !config.installDaemon;
       if (!skipGatewayStop) {
         const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
-        const resRaw: any = shouldUseExternalTerminal()
+        const resRaw = shouldUseExternalTerminal()
           ? await execInTerminal(cmd, {
               title: 'Stopping OpenClaw Gateway',
               holdOpen: false,
               cwd: config.corePath,
             })
           : await window.electronAPI.exec(cmd);
-        const code = resRaw.code ?? resRaw.exitCode;
+        const code = resRaw.code;
 
         if (code !== 0) {
           addLog(t('logs.stopGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
@@ -163,8 +164,8 @@ export function useGatewayActions({
 
       setRunning(false);
       addLog(t('logs.gatewayStopped'), 'system');
-    } catch (e: any) {
-      addLog(t('logs.stopGatewayFailed', { msg: e.message }), 'stderr');
+    } catch (e: unknown) {
+      addLog(t('logs.stopGatewayFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
     }
   };
 
@@ -198,7 +199,7 @@ export function useGatewayActions({
 
       // Port conflict check before startup (only executed if port is set in openclaw.json)
       if (port) {
-        const precheckRes: any = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+        const precheckRes = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
         const precheckCode = precheckRes.code ?? precheckRes.exitCode;
         const precheckOutput = String(precheckRes.stdout || '').trim();
         if (precheckCode === 0 && precheckOutput) {
@@ -227,12 +228,12 @@ export function useGatewayActions({
 
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
 
-        const resRaw: any = await execInTerminal(startCmd, {
+        const resRaw = await execInTerminal(startCmd, {
           title: 'Starting OpenClaw Gateway',
           holdOpen: true,
           cwd: config.corePath,
         });
-        const code = resRaw.code ?? resRaw.exitCode;
+        const code = resRaw.code;
         if (typeof code === 'number' && code !== 0) {
           addLog(t('logs.startGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
           return;
@@ -242,8 +243,8 @@ export function useGatewayActions({
       } else if (config.installDaemon) {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
         const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`;
-        const resRaw: any = await window.electronAPI.exec(cmd);
-        const code = resRaw.code ?? resRaw.exitCode;
+        const resRaw = await window.electronAPI.exec(cmd);
+        const code = resRaw.code;
         if (code === 0) {
           addLog(t('logs.gatewayStartCmdSent'), 'system');
         } else {
@@ -257,8 +258,8 @@ export function useGatewayActions({
           command: runCmd,
           autoRestart: !!config.autoRestartGateway,
         };
-        const resRaw: any = await window.electronAPI.exec(`gateway:start-bg-json ${JSON.stringify(payload)}`);
-        const code = resRaw.code ?? resRaw.exitCode;
+        const resRaw = await window.electronAPI.exec(`gateway:start-bg-json ${JSON.stringify(payload)}`);
+        const code = resRaw.code;
         if (code !== 0) {
           addLog(t('logs.startGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
           return;
@@ -284,7 +285,7 @@ export function useGatewayActions({
             startupGraceMs: 20000,
             restartCooldownMs: 20000,
           };
-          const wdRes: any = await window.electronAPI.exec(`gateway:http-watchdog-start-json ${JSON.stringify(watchdogPayload)}`);
+          const wdRes = await window.electronAPI.exec(`gateway:http-watchdog-start-json ${JSON.stringify(watchdogPayload)}`);
           const wdCode = wdRes.code ?? wdRes.exitCode;
           if (wdCode === 0) {
             addLog(
@@ -300,8 +301,8 @@ export function useGatewayActions({
       } else {
         addLog(t('logs.errors.portNotListen'), 'stderr');
       }
-    } catch (e: any) {
-      addLog(t('logs.startGatewayFailed', { msg: e.message }), 'stderr');
+    } catch (e: unknown) {
+      addLog(t('logs.startGatewayFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
     }
   };
 
@@ -336,8 +337,8 @@ export function useGatewayActions({
         setGatewayConflictActionMessage(errorMsg);
         addLog(errorMsg, 'stderr');
       }
-    } catch (e: any) {
-      const errorMsg = e?.message || t('logs.errors.portKillError', { port: gatewayConflictModal.port });
+    } catch (e: unknown) {
+      const errorMsg = e instanceof Error ? e.message : t('logs.errors.portKillError', { port: gatewayConflictModal.port });
       setGatewayConflictActionMessage(errorMsg);
       addLog(errorMsg, 'stderr');
     } finally {

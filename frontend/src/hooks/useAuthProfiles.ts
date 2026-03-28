@@ -65,10 +65,10 @@ export function useAuthProfiles(
       const rows = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
       setAuthProfiles(rows);
       setAuthProfileSummary(parsed?.summary || null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setAuthProfiles([]);
       setAuthProfileSummary(null);
-      setAuthProfilesError(e?.message || t('auth.errors.loadProfilesFailed'));
+      setAuthProfilesError(e instanceof Error ? e.message : t('auth.errors.loadProfilesFailed'));
     } finally {
       setAuthProfilesLoading(false);
     }

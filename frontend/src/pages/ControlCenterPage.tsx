@@ -202,10 +202,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     try {
       const res = await window.electronAPI.exec('control:tasks:list');
       console.log('[ControlCenter] loadTasks res:', res.stdout);
-      const items: ManualTask[] = (JSON.parse(res.stdout || '{}').items || []).map((t: any) => ({
+      const items: ManualTask[] = (JSON.parse(res.stdout || '{}').items || []).map((t: Record<string, unknown>) => ({
         id: String(t.id || ''),
         title: String(t.title || ''),
-        status: (['todo','in_progress','blocked','done'].includes(t.status) ? t.status : 'todo') as TaskStatus,
+        status: (['todo','in_progress','blocked','done'].includes(t.status as string) ? t.status as string : 'todo') as TaskStatus,
         priority: String(t.priority || 'medium'),
         overall_progress: Number(t.overall_progress ?? 0),
         updated_at: String(t.updated_at || t.updatedAt || ''),
@@ -241,9 +241,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
 
   const loadObservedEvents = useCallback(async () => {
     try {
-      const api = window.electronAPI as any;
-      if (!api.listActivityEvents) return;
-      const res = await api.listActivityEvents({ limit: 200 });
+      if (!window.electronAPI.listActivityEvents) return;
+      const res = await window.electronAPI.listActivityEvents({ limit: 200 });
       // res is { code, stdout, stderr } — events are inside stdout JSON
       const parsed = JSON.parse(res?.stdout || '{}');
       if (Array.isArray(parsed?.events)) setObservedEvents(parsed.events);
@@ -253,11 +252,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const triggerScan = useCallback(async () => {
     setScanning(true);
     try {
-      const api = window.electronAPI as any;
-      if (api.scanActivityNow) {
-        const r = await api.scanActivityNow();
-        // scanActivityNow returns { code, stdout } directly from ipcMain.handle
-        // just trigger then reload
+      if (window.electronAPI.scanActivityNow) {
+        const r = await window.electronAPI.scanActivityNow();
         void r;
       }
       await loadObservedEvents();
@@ -271,8 +267,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       await Promise.all([loadCron(), loadTasks(), loadSystem(), loadObservedEvents()]);
       if (onRefreshSnapshot) await onRefreshSnapshot();
       setLastRefreshed(new Date());
-    } catch (e: any) {
-      setError(e?.message || t('controlCenter.errors.genericLoadFailed'));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('controlCenter.errors.genericLoadFailed'));
     } finally { setLoading(false); }
   }, [loadCron, loadTasks, loadSystem, loadObservedEvents, onRefreshSnapshot, t]);
 
@@ -301,8 +297,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       setError('');
       await execCmd(`system:crontab:toggle ${JSON.stringify({ raw })}`);
       await loadSystem();
-    } catch (e: any) {
-      setError(e.message || 'Toggle crontab failed');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Toggle crontab failed');
     }
   };
 
@@ -311,8 +307,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       setError('');
       await execCmd(`system:crontab:delete ${JSON.stringify({ raw })}`);
       await loadSystem();
-    } catch (e: any) {
-      setError(e.message || 'Delete crontab failed');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Delete crontab failed');
     }
   };
 
@@ -321,8 +317,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       setError('');
       await execCmd(`system:launchagents:toggle ${JSON.stringify({ label })}`);
       await loadSystem();
-    } catch (e: any) {
-      setError(e.message || 'Toggle LaunchAgent failed');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Toggle LaunchAgent failed');
     }
   };
 
@@ -331,8 +327,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       setError('');
       await execCmd(`system:launchagents:delete ${JSON.stringify({ label })}`);
       await loadSystem();
-    } catch (e: any) {
-      setError(e.message || 'Delete LaunchAgent failed');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Delete LaunchAgent failed');
     }
   };
 

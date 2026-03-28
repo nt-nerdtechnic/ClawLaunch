@@ -133,8 +133,8 @@ export function SkillManager() {
       } else {
         setScanError(result?.stderr || t('skillManager.status.scanFailed'));
       }
-    } catch (e: any) {
-      setScanError(e?.message || t('skillManager.status.unknownScanError'));
+    } catch (e: unknown) {
+      setScanError(e instanceof Error ? e.message : t('skillManager.status.unknownScanError'));
     }
     setScanning(false);
   }, [setCoreSkills, setWorkspaceSkills, t]);

@@ -10,7 +10,7 @@ import { execInTerminal } from '../../utils/terminal';
 type PathKey = 'corePath' | 'configPath' | 'workspacePath';
 
 type SetupStepModelProps = {
-    onNext: () => void;
+    onNext?: () => void;
 };
 
 type PathItemProps = {
@@ -192,7 +192,7 @@ const SetupStepModel = ({ onNext }: SetupStepModelProps) => {
             }
 
             if ((newConfig.apiKey && newConfig.apiKey.length > 0) || newConfig.model || newConfig.authChoice) {
-                onNext();
+                onNext?.();
             }
     }
   };
@@ -283,7 +283,7 @@ const SetupStepModel = ({ onNext }: SetupStepModelProps) => {
     if (currentChoice && (!currentChoice.reqKey || config.apiKey)) {
       const success = await onboardingAction.execute('model');
       if (success) {
-        onNext();
+        onNext?.();
       }
     }
   };

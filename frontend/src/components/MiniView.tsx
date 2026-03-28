@@ -1,6 +1,7 @@
 import { Play, Square, Settings2, ShieldCheck, Zap, Activity } from 'lucide-react';
 import { useStore } from '../store';
 import { useTranslation } from 'react-i18next';
+import type { ReactNode } from 'react';
 
 interface MiniViewProps {
   running: boolean;
@@ -80,7 +81,7 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
   );
 }
 
-function QuickBtn({ icon, label, active = false, onClick }: { icon: any, label: string, active?: boolean, onClick?: () => void }) {
+function QuickBtn({ icon, label, active = false, onClick }: { icon: ReactNode, label: string, active?: boolean, onClick?: () => void }) {
     return (
         <div onClick={onClick} className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all cursor-pointer shadow-sm
         ${active ? 'bg-blue-600/10 border-blue-500/30 text-blue-600 dark:text-blue-400' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-700 hover:text-slate-600 dark:hover:text-slate-300'}`}>

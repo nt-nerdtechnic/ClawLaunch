@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { RefreshCcw, ArrowUpCircle, Loader2, CheckCircle } from 'lucide-react';
 import TerminalLog from './common/TerminalLog';
 import { useTranslation } from 'react-i18next';
+import type { LogEntry } from '../store';
 
 const UpdateBanner = () => {
   const { t } = useTranslation();
@@ -9,8 +10,8 @@ const UpdateBanner = () => {
   const [updating, setUpdating] = useState(false);
   const [complete, setComplete] = useState(false);
   const [versions, setVersions] = useState({ local: '...', remote: '...' });
-  const [localLogs, setLocalLogs] = useState<any[]>([]);
-  const logCleanupRef = useRef<any>(null);
+  const [localLogs, setLocalLogs] = useState<LogEntry[]>([]);
+  const logCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     checkVersion();

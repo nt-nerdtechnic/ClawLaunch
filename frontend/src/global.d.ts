@@ -83,6 +83,9 @@ declare global {
       loadChatSession: (payload: { sessionKey: string; agentId: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
       onChatChunk: (callback: (chunk: OpenClawChatChunk) => void) => () => void;
       onGatewayStatus: (callback: (status: { connected: boolean }) => void) => () => void;
+      scanSessions: (payload?: string) => Promise<{ code: number; stdout: string; stderr: string }>;
+      listActivityEvents: (options: { limit?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;
+      scanActivityNow: () => Promise<{ code: number; stdout: string }>;
     };
   }
 }

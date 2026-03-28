@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Key, Loader2, ShieldCheck, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getProviderGroups } from '../constants/providers';
+import type { Config } from '../store';
+import type { TelegramAuthorizedUser } from '../hooks/useTelegramPairing';
 
 interface AuthProfileRow {
   profileId: string;
@@ -46,28 +48,28 @@ interface ChannelOption {
 // Instances moved inside component to support t()
 
 interface RuntimeSettingsPageProps {
-  config: any;
-  setConfig: (config: any) => void;
-  runtimeProfile: any;
+  config: Config;
+  setConfig: (config: Partial<Config>) => void;
+  runtimeProfile: Record<string, unknown> | null;
   runtimeDraftModel: string;
   setRuntimeDraftModel: (model: string) => void;
   runtimeDraftBotToken: string;
   setRuntimeDraftBotToken: (token: string) => void;
   runtimeDraftGatewayPort: string;
   setRuntimeDraftGatewayPort: (port: string) => void;
-  dynamicModelOptions: any[];
+  dynamicModelOptions: Array<{ provider: string; group: string; models: string[] }>;
   dynamicModelLoading: boolean;
   selectedModelProvider: string;
   selectedModelAuthorized: boolean;
   getProviderDisplayLabel: (provider: string, fallback?: string) => string;
   authorizedProviderBadges: string[];
-  modelOptionGroups: any[];
+  modelOptionGroups: Array<{ provider: string; group: string; models: string[] }>;
   effectiveAuthorizedProviders: string[];
   isModelAuthorizedByProvider: (model: string) => boolean;
 
   // Auth Profiles
   authProfiles: AuthProfileRow[];
-  authProfileSummary: any;
+  authProfileSummary: { total: number; healthy: number; warn: number; critical: number } | null;
   authProfilesLoading: boolean;
   authProfilesError: string;
   authRemovingId: string;
@@ -94,7 +96,7 @@ interface RuntimeSettingsPageProps {
 
   // Telegram
   telegramPairingRequests: TelegramPairingRequest[];
-  telegramAuthorizedUsers: any[];
+  telegramAuthorizedUsers: TelegramAuthorizedUser[];
   telegramPairingLoading: boolean;
   telegramPairingApprovingCode: string;
   telegramPairingRejectingCode: string;
@@ -201,7 +203,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
 
   // Sync channel tokens from runtimeProfile (excluding telegram, handled by runtimeDraftBotToken)
   useEffect(() => {
-    const channels = (runtimeProfile?.channels || {}) as Record<string, any>;
+    const channels = (runtimeProfile?.channels || {}) as Record<string, Record<string, unknown>>;
     const tokens: Record<string, string> = {};
     for (const ch of CHANNEL_OPTIONS) {
       if (ch.id === 'telegram') continue;
@@ -307,7 +309,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                 className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
               />
             </div>
-            {runtimeDraftGatewayPort !== (runtimeProfile?.gateway?.port ? String(runtimeProfile.gateway.port) : '') && (
+            {runtimeDraftGatewayPort !== ((runtimeProfile?.gateway as Record<string, unknown> | undefined)?.port ? String((runtimeProfile?.gateway as Record<string, unknown>)?.port) : '') && (
               <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-amber-500 dark:text-amber-400 font-bold">
                 <span>({t('settings.modifiedUnsaved')})</span>
               </div>
@@ -942,7 +944,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {telegramAuthorizedUsers.map((user: any) => (
+                    {telegramAuthorizedUsers.map((user: TelegramAuthorizedUser) => (
                       <span
                         key={String(user?.id || '')}
                         className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/30 dark:text-emerald-300"

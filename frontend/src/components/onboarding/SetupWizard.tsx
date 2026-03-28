@@ -20,7 +20,7 @@ type StepId = 'welcome' | 'prereqs' | 'initialize' | 'model' | 'messaging' | 'sk
 
 type StepDefinition = {
   id: StepId;
-  component: React.ComponentType<any>;
+  component: React.ComponentType<{ onNext?: () => void; onComplete?: () => void }>;
 };
 
 /**

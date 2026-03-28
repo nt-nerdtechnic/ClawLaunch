@@ -5,21 +5,22 @@ import { DecisionDashboard } from '../components/monitor/DecisionDashboard';
 import { ActionCenter } from '../components/ActionCenter';
 import { StaffGrid } from '../components/StaffGrid';
 import TerminalLog from '../components/common/TerminalLog';
+import type { Config, LogEntry, AuditTimelineItem, ReadModelSnapshot } from '../store';
 
 interface MonitorPageProps {
   running: boolean;
   onToggleGateway: () => void;
   onNavigate?: (path: string) => void;
-  config: any;
+  config: Config;
   resolvedConfigDir: string;
-  snapshot: any;
+  snapshot: ReadModelSnapshot | null;
   envStatus: {
     node: 'loading' | 'ok' | 'error';
     git: 'loading' | 'ok' | 'error';
     pnpm: 'loading' | 'ok' | 'error';
   };
-  logs: any[];
-  auditTimeline: any[];
+  logs: LogEntry[];
+  auditTimeline: AuditTimelineItem[];
   dailyDigest: string;
   gatewayRuntimeZones: Array<{
     key: string;

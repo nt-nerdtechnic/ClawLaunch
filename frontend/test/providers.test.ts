@@ -80,7 +80,7 @@ describe('OAUTH_AUTH_CHOICES', () => {
 });
 
 describe('getProviderGroups', () => {
-  const groups = getProviderGroups(t as any);
+  const groups = getProviderGroups(t as unknown as TFunction);
 
   it('至少包含 anthropic、openai、google 三個 Provider 群組', () => {
     const ids = groups.map((g) => g.id);

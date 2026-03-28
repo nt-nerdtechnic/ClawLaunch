@@ -71,7 +71,7 @@ const PathItem = ({
     );
 };
 
-const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
+const SetupStepInitialize = ({ onNext }: { onNext?: () => void }) => {
     const { config, setConfig, addLog, logs } = useStore();
     const { t } = useTranslation();
     const logEndRef = useRef<HTMLDivElement | null>(null);
@@ -428,7 +428,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
 
                     {!initializing ? (
                         <button 
-                            onClick={initialized ? onNext : handleInitialize}
+                            onClick={initialized ? () => onNext?.() : handleInitialize}
                             disabled={!isReady && !initialized}
                             className={`w-full py-5 rounded-2xl font-black text-white shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-sm ${
                                 (isReady || initialized) 

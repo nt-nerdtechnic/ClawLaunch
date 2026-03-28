@@ -514,7 +514,7 @@ export function Analytics() {
                         fontSize: '11px',
                         color: (isDark ? '#f1f5f9' : '#0f172a')
                     }}
-                    formatter={(value: any) => [formatCompactNumber(Number(value) || 0), undefined]}
+                    formatter={(value: unknown) => [formatCompactNumber(Number(value) || 0), undefined]}
                   />
                   <Area type="monotone" dataKey="in" name={t('analytics.labels.input')} stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorIn)" stackId="1" />
                   <Area type="monotone" dataKey="out" name={t('analytics.labels.output')} stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorOut)" stackId="1" />
@@ -560,7 +560,7 @@ export function Analytics() {
                         borderRadius: '16px',
                         fontSize: '11px'
                     }}
-                    formatter={(value: any) => [formatCompactNumber(Number(value) || 0), undefined]}
+                    formatter={(value: unknown) => [formatCompactNumber(Number(value) || 0), undefined]}
                   />
                   <Line type="stepAfter" dataKey="in" name={t('analytics.labels.inputLoad')} stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }} />
                   <Line type="stepAfter" dataKey="out" name={t('analytics.labels.outputDensity')} stroke="#fbbf24" strokeWidth={2} dot={{ r: 4, fill: '#fbbf24', strokeWidth: 0 }} />
@@ -668,7 +668,7 @@ export function Analytics() {
                       borderRadius: '16px',
                       boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
                     }}
-                    formatter={(value: any) => [formatCompactNumber(Number(value) || 0), undefined]}
+                    formatter={(value: unknown) => [formatCompactNumber(Number(value) || 0), undefined]}
                   />
                   <Legend />
                 </PieChart>

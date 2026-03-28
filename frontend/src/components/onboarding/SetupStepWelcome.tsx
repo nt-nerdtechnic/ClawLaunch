@@ -6,7 +6,7 @@ import { useStore, type Config } from '../../store';
 import { useTranslation } from 'react-i18next';
 
 interface SetupStepWelcomeProps {
-  onNext: () => void;
+  onNext?: () => void;
 }
 
 /**
@@ -77,7 +77,7 @@ const SetupStepWelcome: React.FC<SetupStepWelcomeProps> = ({ onNext }) => {
       setConfig(nextPatch);
       persistConfig(nextPatch);
     }
-    onNext();
+    onNext?.();
   };
 
   const currentLang = language || i18n.language || 'zh-TW';

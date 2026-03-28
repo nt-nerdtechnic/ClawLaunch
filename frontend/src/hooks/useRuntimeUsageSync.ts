@@ -24,7 +24,7 @@ export function useRuntimeUsageSync() {
   const setRuntimeUsageEvents = useStore((s) => s.setRuntimeUsageEvents);
 
   const scan = useCallback(async () => {
-    const api = (window as any).electronAPI;
+    const api = window.electronAPI;
     console.log('[RTUsage] scan start | configPath:', config.configPath, '| corePath:', config.corePath, '| scanSessions:', typeof api?.scanSessions);
     if (!api?.scanSessions) {
       console.warn('[RTUsage] scanSessions not available on electronAPI');

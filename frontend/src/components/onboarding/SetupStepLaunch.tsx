@@ -6,7 +6,7 @@ import TerminalLog from '../common/TerminalLog';
 import { useOnboardingAction } from '../../hooks/useOnboardingAction';
 
 interface SetupStepLaunchProps {
-  onComplete: () => void;
+  onComplete?: () => void;
 }
 
 type LaunchStatus = 'preparing' | 'success' | 'partial_failure';
@@ -71,7 +71,7 @@ const SetupStepLaunch: React.FC<SetupStepLaunchProps> = ({ onComplete }) => {
   // Auto-complete upon success; no user interaction required
   React.useEffect(() => {
     if (status === 'success') {
-      onComplete();
+      onComplete?.();
     }
   }, [onComplete, status]);
 
@@ -144,7 +144,7 @@ const SetupStepLaunch: React.FC<SetupStepLaunchProps> = ({ onComplete }) => {
                             {t('launch.ui.retryCheck')}
                       </button>
                       <button
-                          onClick={onComplete}
+                          onClick={() => onComplete?.()}
                           className="flex-1 bg-amber-500 hover:bg-amber-400 text-white px-6 py-4 rounded-2xl font-black transition-all shadow-lg active:scale-95 text-sm"
                       >
                             {t('launch.ui.enterDashboard')}
@@ -239,7 +239,7 @@ const SetupStepLaunch: React.FC<SetupStepLaunchProps> = ({ onComplete }) => {
           </div>
 
           <button 
-            onClick={onComplete}
+            onClick={() => onComplete?.()}
             className="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-black text-white font-black py-5 px-8 rounded-[24px] transition-all shadow-2xl shadow-gray-200 active:scale-[0.98] group"
           >
             {t('launch.success.enterBtn')} 
