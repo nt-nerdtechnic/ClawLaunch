@@ -9,6 +9,7 @@ import SetupStepLaunch from './SetupStepLaunch';
 import SetupStepInitialize from './SetupStepInitialize';
 import SetupStepPrereqs from './SetupStepPrereqs';
 import { useTranslation } from 'react-i18next';
+import { LanguageToggle } from '../LanguageToggle';
 import { useStore } from '../../store';
 
 type SetupWizardProps = {
@@ -151,12 +152,13 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
         </button>
       )}
 
-      {/* Brand Logo (Claw icon) */}
-      <div className="mt-12 flex items-center gap-4">
+      {/* Brand Logo & Language Toggle */}
+      <div className="mt-12 flex items-center justify-between w-full">
         <div className="flex items-center gap-2 opacity-20 grayscale">
           <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white font-bold">{t('wizard.brand.mark')}</div>
           <span className="font-bold text-gray-900 tracking-tighter">{t('wizard.brand.name')}</span>
         </div>
+        <LanguageToggle />
       </div>
       </div>{/* end my-auto wrapper */}
     </div>

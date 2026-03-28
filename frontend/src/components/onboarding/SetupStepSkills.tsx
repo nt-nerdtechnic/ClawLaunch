@@ -32,7 +32,15 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
     setErrorMsg('');
     setScanning(true);
     try {
-      const result = await window.electronAPI.exec('detect:paths');
+      // Pass the store's current config paths explicitly so detect:paths uses the correct
+      // new-project paths instead of re-reading the global clawlaunch.json (which may still
+      // contain paths from a previously opened project).
+      const scanArg = JSON.stringify({
+        corePath: config.corePath,
+        configPath: config.configPath,
+        workspacePath: config.workspacePath,
+      });
+      const result = await window.electronAPI.exec(`detect:paths ${scanArg}`);
       if (result?.exitCode === 0 && result.stdout) {
         try {
           const data = JSON.parse(result.stdout);
@@ -52,7 +60,7 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
       setErrorMsg(getErrorMessage(e, t('setupSkills.manager.errorScan')));
     }
     setScanning(false);
-  }, [acting, scanning, setCoreSkills, setWorkspaceSkills, t]);
+  }, [acting, config.corePath, config.configPath, config.workspacePath, scanning, setCoreSkills, setWorkspaceSkills, t]);
 
   // Auto-skip: Existing user with skill settings don't need to stay on this step
   const autoAdvancedRef = React.useRef(false);

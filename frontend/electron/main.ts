@@ -4025,7 +4025,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     }
   }
 
-  if (fullCommand === 'detect:paths') {
+  if (fullCommand === 'detect:paths' || fullCommand.startsWith('detect:paths ')) {
     const dir = path.join(app.getPath('home'), '.clawlaunch');
     const newConfigPath = path.join(dir, 'clawlaunch.json');
 
@@ -4034,25 +4034,39 @@ ipcMain.handle('shell:exec', async (_event, command: string, args: string[] = []
     let workspacePath = '';
     let existingConfig: Record<string, unknown> = {};
 
-    // Strictly read ONLY from NEW config file. No more "guessing" or legacy fallback.
-    try {
-      const raw = await fs.readFile(newConfigPath, 'utf-8');
-      const cfg = JSON.parse(raw);
-      if (cfg.corePath) corePath = cfg.corePath;
-      if (cfg.configPath) configPath = cfg.configPath;
-      if (cfg.workspacePath) workspacePath = cfg.workspacePath;
-      
-      if (configPath) {
-        const openclawFile = path.join(configPath, 'openclaw.json');
-        try {
-          const content = await fs.readFile(openclawFile, 'utf-8');
-          existingConfig = parseOpenClawConfig(content);
-          if (existingConfig.workspace) workspacePath = existingConfig.workspace as string;
-        } catch {}
-      }
-    } catch {}
+    // If explicit paths are passed as JSON argument, use them directly and skip reading the global file.
+    // This prevents stale paths from a previous project polluting a new-project onboarding scan.
+    const detectArg = fullCommand.slice('detect:paths'.length).trim();
+    if (detectArg) {
+      try {
+        const explicit = JSON.parse(detectArg);
+        if (explicit.corePath) corePath = String(explicit.corePath);
+        if (explicit.configPath) configPath = String(explicit.configPath);
+        if (explicit.workspacePath) workspacePath = String(explicit.workspacePath);
+      } catch {}
+    } else {
+      // Strictly read ONLY from NEW config file. No more "guessing" or legacy fallback.
+      try {
+        const raw = await fs.readFile(newConfigPath, 'utf-8');
+        const cfg = JSON.parse(raw);
+        if (cfg.corePath) corePath = cfg.corePath;
+        if (cfg.configPath) configPath = cfg.configPath;
+        if (cfg.workspacePath) workspacePath = cfg.workspacePath;
 
-    // Still scan for skills IF paths were explicitly provided in config
+        if (configPath) {
+          const openclawFile = path.join(configPath, 'openclaw.json');
+          try {
+            const content = await fs.readFile(openclawFile, 'utf-8');
+            existingConfig = parseOpenClawConfig(content);
+            // Only fall back to openclaw.json workspace when clawlaunch.json has no workspacePath,
+            // to prevent a stale workspace from a previous project overriding the current one.
+            if (existingConfig.workspace && !workspacePath) workspacePath = existingConfig.workspace as string;
+          } catch {}
+        }
+      } catch {}
+    }
+
+    // Scan for skills using the resolved (or explicitly provided) paths
     const coreSkills = corePath ? await scanSkillsInDir(path.join(corePath, 'skills')) : [];
     const workspaceSkills = workspacePath ? await scanInstalledSkills(workspacePath) : [];
 

@@ -1,7 +1,7 @@
 // TODO: Refactor setup steps with complete type definitions
 // setup step has incomplete types, resolvable with config typings
 import React from 'react';
-import { Package, Sparkles, ArrowRight, Layers, Settings, Database, Globe } from 'lucide-react';
+import { Package, Sparkles, ArrowRight, Layers, Settings, Database } from 'lucide-react';
 import { useStore, type Config } from '../../store';
 import { useTranslation } from 'react-i18next';
 
@@ -13,30 +13,9 @@ interface SetupStepWelcomeProps {
  * SetupStepWelcome: Step 0 - Environment Choice
  * Implements the "Split Selection" UI with language selector.
  */
-const LANGUAGE_OPTIONS = [
-  { code: 'zh-TW', label: '繁體中文' },
-  { code: 'zh-CN', label: '简体中文' },
-  { code: 'en', label: 'English' },
-];
-
 const SetupStepWelcome: React.FC<SetupStepWelcomeProps> = ({ onNext }) => {
-  const { setUserType, setConfig, setDetectedConfig, detectedConfig, language, setLanguage } = useStore();
-  const { t, i18n } = useTranslation();
-
-  const handleLanguageChange = async (code: string) => {
-    i18n.changeLanguage(code);
-    setLanguage(code);
-    // Persist immediately to JSON so the preference is saved from the very start
-    if (window.electronAPI) {
-      const current = useStore.getState().config;
-      const next = { ...current, language: code };
-      try {
-        await window.electronAPI.exec(`config:write ${JSON.stringify(next)}`);
-      } catch {
-        // Ignore
-      }
-    }
-  };
+  const { setUserType, setConfig, setDetectedConfig, detectedConfig } = useStore();
+  const { t } = useTranslation();
 
   const persistConfig = async (patch: Partial<Config>) => {
     if (!window.electronAPI) return;
@@ -80,28 +59,8 @@ const SetupStepWelcome: React.FC<SetupStepWelcomeProps> = ({ onNext }) => {
     onNext?.();
   };
 
-  const currentLang = language || i18n.language || 'zh-TW';
-
   return (
     <div className="w-full max-w-3xl mx-auto bg-white rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 p-10 animate-in fade-in zoom-in-95 duration-500">
-      {/* Language Selector */}
-      <div className="flex justify-end mb-6 gap-1.5">
-        {LANGUAGE_OPTIONS.map(({ code, label }) => (
-          <button
-            key={code}
-            onClick={() => handleLanguageChange(code)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all ${
-              currentLang === code
-                ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25'
-                : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600'
-            }`}
-          >
-            <Globe size={11} />
-            {label}
-          </button>
-        ))}
-      </div>
-
       <div className="mb-12 text-center">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-2xl text-blue-600 mb-6 rotate-3 hover:rotate-0 transition-transform duration-300">
           <Sparkles size={32} />
