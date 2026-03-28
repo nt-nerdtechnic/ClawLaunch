@@ -206,6 +206,9 @@
     "unavailable": "当前环境无法调用聊天 IPC",
     "coreRequired": "核心尚未启动，请先启动 Gateway（Core）再发送对话",
     "inputHint": "Enter 发送，Shift+Enter 换行",
+    "commandHint": "/stop 停止 · /new 新对话",
+    "wsDisconnected": "WebSocket 未连线",
+    "queuedMessages": "已排队 {{count}} 则",
     "sessions": {
       "title": "对话记录",
       "openPanel": "切换对话",
@@ -213,7 +216,8 @@
       "loading": "读取中...",
       "empty": "暂无 Session 记录",
       "manual": "手动输入",
-      "useManual": "套用此 Session"
+      "useManual": "套用此 Session",
+      "new": "新对话"
     }
   },
   "monitor": {

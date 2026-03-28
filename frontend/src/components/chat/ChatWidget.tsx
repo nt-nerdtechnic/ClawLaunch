@@ -1,8 +1,88 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Cpu, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, Check, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { marked } from 'marked';
 import { useStore } from '../../store';
 import type { ChatMessage } from '../../store';
+
+// Configure marked for chat rendering
+marked.setOptions({ breaks: true, gfm: true });
+
+function renderMarkdown(text: string): string {
+  if (!text.trim()) return '';
+  try {
+    return marked.parse(text) as string;
+  } catch {
+    return text;
+  }
+}
+
+// Command shortcuts (matches OpenClaw WebUI)
+const STOP_COMMANDS = new Set(['/stop', 'stop', 'esc', 'abort', 'wait', 'exit']);
+function isStopCommand(text: string) { return STOP_COMMANDS.has(text.trim().toLowerCase()); }
+function isNewSessionCommand(text: string) {
+  const t = text.trim().toLowerCase();
+  return t === '/new' || t === '/reset' || t.startsWith('/new ') || t.startsWith('/reset ');
+}
+
+// ─── Telegram HTML support ────────────────────────────────────────────────────
+const TG_SAFE_TAGS = new Set([
+  'b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del',
+  'code', 'pre', 'a', 'blockquote', 'tg-spoiler', 'br', 'span',
+]);
+
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function sanitizeTgNode(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return escHtml(node.textContent ?? '');
+  if (node.nodeType !== Node.ELEMENT_NODE) return '';
+  const el = node as Element;
+  const tag = el.tagName.toLowerCase();
+  const children = () => Array.from(el.childNodes).map(sanitizeTgNode).join('');
+  if (tag === 'div' || tag === 'body' || tag === 'html') return children();
+  if (!TG_SAFE_TAGS.has(tag)) return children(); // strip unknown tags, keep text
+  if (tag === 'br') return '<br>';
+  let attrs = '';
+  if (tag === 'a') {
+    const href = el.getAttribute('href') ?? '';
+    if (/^https?:\/\//.test(href)) {
+      attrs = ` href="${escHtml(href)}" target="_blank" rel="noopener noreferrer"`;
+    }
+  }
+  if (tag === 'tg-spoiler') attrs = ' class="tg-spoiler"';
+  return `<${tag}${attrs}>${children()}</${tag}>`;
+}
+
+function sanitizeTgHtml(html: string): string {
+  if (typeof DOMParser === 'undefined') return escHtml(html);
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const root = doc.body.firstChild as Element | null;
+  if (!root) return '';
+  return Array.from(root.childNodes).map(sanitizeTgNode).join('');
+}
+
+const TG_HTML_RE = /<(?:b|i|u|s|code|pre|a[\s>]|blockquote|tg-spoiler)[ >/]/i;
+function isTgFormatted(text: string): boolean { return TG_HTML_RE.test(text); }
+
+// Inline keyboard buttons  ── [[Button A | Button B]] per row
+const BTN_BLOCK_RE = /\n?\[\[([^\]]+)\]\]/g;
+function parseButtonBlocks(text: string): { body: string; rows: string[][] } {
+  const rows: string[][] = [];
+  BTN_BLOCK_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = BTN_BLOCK_RE.exec(text)) !== null) {
+    const row = match[1].split('|').map((s) => s.trim()).filter(Boolean);
+    if (row.length) rows.push(row);
+  }
+  const body = rows.length ? text.replace(/\n?\[\[[^\]]+\]\]/g, '').trimEnd() : text;
+  return { body, rows };
+}
 
 const clampText = (value: string) => value.replace(/\s+/g, ' ').trim();
 
@@ -79,6 +159,9 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
+  const messageQueueRef = useRef<string[]>([]);
+  const [queueCount, setQueueCount] = useState(0);
+  const handleSendRef = useRef<(msgOverride?: string) => Promise<void>>(undefined as unknown as (msgOverride?: string) => Promise<void>);
 
   const activeMessages = useMemo(
     () => chat.messages.filter((item) => item.sessionKey === chat.activeSessionKey && item.agentId === chat.activeAgentId),
@@ -107,11 +190,19 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       const isDone = chunk.done || (chunk.state && chunk.state !== 'delta');
       if (isDone) {
         completeChatMessage(messageId);
+        // Desktop notification when window is not focused
+        if ((document.hidden || !chat.isOpen) && 'Notification' in window && Notification.permission === 'granted') {
+          const preview = (chunk.delta || '').slice(0, 100).trim();
+          if (preview) {
+            const n = new Notification('OpenClaw Core', { body: preview, silent: false });
+            n.onclick = () => { window.focus(); };
+          }
+        }
       }
     });
 
     return () => off();
-  }, [appendChatChunk, chat.activeAgentId, chat.activeSessionKey, completeChatMessage, markChatMessageError, requestMap, setChatRuntimeMode]);
+  }, [appendChatChunk, chat.activeAgentId, chat.activeSessionKey, chat.isOpen, completeChatMessage, markChatMessageError, requestMap, setChatRuntimeMode]);
 
   useEffect(() => {
     if (!window.electronAPI?.onGatewayStatus) return;
@@ -143,6 +234,20 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     if (!chat.isOpen) return;
     clearChatUnread();
   }, [chat.isOpen, clearChatUnread]);
+
+  // Request desktop notification permission once
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      void Notification.requestPermission();
+    }
+  }, []);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    textareaRef.current.style.height = 'auto';
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+  }, [inputValue]);
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -176,8 +281,14 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   // 串流結束後，若面板開著則自動刷新 session 列表（讓新建的 session 能即時出現）
   const prevIsStreaming = useRef(false);
   useEffect(() => {
-    if (prevIsStreaming.current && !chat.isStreaming && sessionPanelOpen) {
-      void fetchSessions();
+    if (prevIsStreaming.current && !chat.isStreaming) {
+      if (sessionPanelOpen) void fetchSessions();
+      // Flush queued messages
+      if (messageQueueRef.current.length > 0) {
+        const next = messageQueueRef.current.shift()!;
+        setQueueCount(messageQueueRef.current.length);
+        void handleSendRef.current?.(next);
+      }
     }
     prevIsStreaming.current = chat.isStreaming;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -261,9 +372,24 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [chat.isOpen, sessionPanelOpen, setChatOpen]);
 
-  const handleSend = async () => {
-    const message = inputValue.trim();
-    if (!message || chat.isStreaming) return;
+  const handleSend = useCallback(async (msgOverride?: string) => {
+    const message = (msgOverride ?? inputValue).trim();
+    if (!message) return;
+
+    // --- Command shortcuts (WebUI parity) ---
+    if (isStopCommand(message)) {
+      setInputValue('');
+      void handleAbort();
+      return;
+    }
+    if (isNewSessionCommand(message)) {
+      setInputValue('');
+      const newKey = crypto.randomUUID();
+      setActiveChatSession(newKey);
+      resetChatMessages();
+      setSessionPanelOpen(false);
+      return;
+    }
 
     if (!running) {
       addChatMessage({
@@ -278,6 +404,15 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       return;
     }
 
+    // Queue when streaming
+    if (chat.isStreaming) {
+      messageQueueRef.current = [...messageQueueRef.current, message];
+      setQueueCount(messageQueueRef.current.length);
+      if (!msgOverride) setInputValue('');
+      return;
+    }
+
+    if (!msgOverride) setInputValue('');
     applySessionAgent();
 
     const requestId = nextRequestId();
@@ -304,10 +439,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     });
 
     setRequestMap((prev) => ({ ...prev, [requestId]: assistantMessageId }));
-    setInputValue('');
-    if (textareaRef.current) {
-      textareaRef.current.value = '';
-    }
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     if (!window.electronAPI?.invokeChat) {
       markChatMessageError(assistantMessageId, t('chat.unavailable'));
@@ -323,9 +455,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       deliver: false,
     });
 
-    if (res.mode) {
-      setChatRuntimeMode(res.mode, res.reason || '');
-    }
+    if (res.mode) setChatRuntimeMode(res.mode, res.reason || '');
 
     if (!res.success) {
       markChatMessageError(assistantMessageId, res.error || t('chat.errorGeneric'));
@@ -336,15 +466,20 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       appendChatChunk(assistantMessageId, res.content, chat.activeSessionKey, chat.activeAgentId);
       completeChatMessage(assistantMessageId);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running]);
 
-  const handleAbort = async () => {
+  // Keep ref in sync for queue flush
+  useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
+
+  const handleAbort = useCallback(async () => {
+    // Allow /stop typed in textarea to also abort
     if (!window.electronAPI?.abortChat) return;
     const pendingRequestIds = Object.keys(requestMap);
     if (pendingRequestIds.length === 0) return;
     const latest = pendingRequestIds[pendingRequestIds.length - 1];
     await window.electronAPI.abortChat(latest);
-  };
+  }, [requestMap]);
 
   const panelBase = compact
     ? 'w-[min(calc(100vw-0.75rem),320px)] h-[min(78vh,520px)] sm:w-[320px]'
@@ -552,7 +687,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             )}
             <div className="space-y-2">
               {activeMessages.map((msg) => (
-                <ChatBubble key={msg.id} msg={msg} />
+                <ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} />
               ))}
             </div>
           </div>
@@ -582,10 +717,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={t('chat.placeholder')}
-                rows={2}
+                rows={1}
                 onCompositionStart={() => { composingRef.current = true; }}
                 onCompositionEnd={() => { composingRef.current = false; }}
-                className="min-h-14 flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 aria-label={t('chat.placeholder')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) {
@@ -594,30 +729,45 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                   }
                 }}
               />
-              {!chat.isStreaming ? (
-                <button
-                  type="button"
-                  onClick={() => void handleSend()}
-                  disabled={!inputValue.trim() || !running}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  title={!running ? t('chat.coreRequired') : t('chat.send')}
-                  aria-label={!running ? t('chat.coreRequired') : t('chat.send')}
-                >
-                  <Send size={16} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleAbort()}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500"
-                  title={t('chat.stop')}
-                  aria-label={t('chat.stop')}
-                >
-                  <Square size={14} className="fill-current" />
-                </button>
-              )}
+              <div className="relative flex-none">
+                {!chat.isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={!inputValue.trim() || !running}
+                    className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    title={!running ? t('chat.coreRequired') : t('chat.send')}
+                    aria-label={!running ? t('chat.coreRequired') : t('chat.send')}
+                  >
+                    <Send size={16} />
+                    {queueCount > 0 && (
+                      <span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">
+                        {queueCount}
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleAbort()}
+                    className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500"
+                    title={t('chat.stop')}
+                    aria-label={t('chat.stop')}
+                  >
+                    <Square size={14} className="fill-current" />
+                    {queueCount > 0 && (
+                      <span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">
+                        {queueCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="mt-2 text-right text-[10px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</div>
+            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
+              <span className="text-[9px] text-slate-300 dark:text-slate-700">{t('chat.commandHint', '/stop 停止 · /new 新對話')}</span>
+              <span>{t('chat.inputHint')}</span>
+            </div>
           </div>
         </div>
       )}
@@ -662,36 +812,163 @@ function parseMessageContent(content: string): ParsedMessage | null {
   };
 }
 
-function ChatBubble({ msg }: { msg: ChatMessage }) {
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5 py-1">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-slate-500"
+          style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function StreamingIndicator() {
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="inline-block h-1 w-1 rounded-full bg-slate-400 dark:bg-slate-500"
+          style={{ animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: (text: string) => void }) {
   const isUser = msg.role === 'user';
-  const parsed = isUser ? parseMessageContent(msg.content) : null;
+  const isSystem = msg.role === 'system';
+  const [copied, setCopied] = useState(false);
+  const [spoilerRevealed, setSpoilerRevealed] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (_) { /* ignore */ }
+  }, [msg.content]);
+
+  const parsedPrefix = useMemo(() => isUser ? parseMessageContent(msg.content) : null, [isUser, msg.content]);
+
+  // For assistant messages: extract inline buttons and detect HTML mode
+  const { body: bodyWithoutButtons, rows: buttonRows } = useMemo(
+    () => (!isUser && !isSystem) ? parseButtonBlocks(msg.content) : { body: msg.content, rows: [] },
+    [isUser, isSystem, msg.content]
+  );
+
+  const useTgHtml = !isUser && !isSystem && isTgFormatted(bodyWithoutButtons);
+
+  const renderedTgHtml = useMemo(
+    () => useTgHtml ? sanitizeTgHtml(bodyWithoutButtons) : '',
+    [useTgHtml, bodyWithoutButtons]
+  );
+  const renderedMd = useMemo(
+    () => (!useTgHtml && !isUser && !isSystem) ? renderMarkdown(bodyWithoutButtons) : '',
+    [useTgHtml, isUser, isSystem, bodyWithoutButtons]
+  );
+
+  // System message
+  if (isSystem) {
+    return (
+      <div className="flex justify-center py-1">
+        <span className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+          {msg.content}
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[92%] rounded-2xl border px-3 py-2.5 text-sm leading-relaxed shadow-sm sm:max-w-[88%] ${isUser ? 'border-sky-500/70 bg-gradient-to-br from-sky-500 to-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>
-        {parsed ? (
+    <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`relative max-w-[92%] rounded-2xl border px-3 py-2.5 text-sm leading-relaxed shadow-sm sm:max-w-[88%] ${
+        isUser
+          ? 'border-sky-500/70 bg-gradient-to-br from-sky-500 to-sky-600 text-white'
+          : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+      }`}>
+
+        {/* Copy button (assistant only, hover reveal) */}
+        {!isUser && msg.status !== 'streaming' && msg.content && (
+          <button
+            type="button"
+            onClick={() => void handleCopy()}
+            className="absolute right-2 top-2 rounded-md p-1 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            title="Copy message"
+            aria-label="Copy message"
+          >
+            {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+          </button>
+        )}
+
+        {/* ── Message body ── */}
+        {parsedPrefix ? (
           <>
-            {/* 來源 badge 列 */}
+            {/* Source badge row (Telegram/Slack platform prefix) */}
             <div className="mb-1.5 flex flex-wrap items-center gap-1">
               <span className="inline-flex items-center rounded-md bg-white/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-100">
-                {parsed.platform}
+                {parsedPrefix.platform}
               </span>
-              <span className="text-[11px] font-semibold text-sky-50">{parsed.senderName}</span>
-              <span className="text-[9px] text-sky-200/70">{parsed.timestamp}</span>
+              <span className="text-[11px] font-semibold text-sky-50">{parsedPrefix.senderName}</span>
+              <span className="text-[9px] text-sky-200/70">{parsedPrefix.timestamp}</span>
             </div>
-            {/* 主要訊息內容 */}
-            <div className="whitespace-pre-wrap break-words">{parsed.body || (msg.status === 'streaming' ? '...' : '')}</div>
-            {/* message_id */}
-            {parsed.messageId && (
-              <div className="mt-1 text-[9px] text-sky-200/50">#{parsed.messageId}</div>
+            <div className="whitespace-pre-wrap break-words">{parsedPrefix.body}</div>
+            {parsedPrefix.messageId && (
+              <div className="mt-1 text-[9px] text-sky-200/50">#{parsedPrefix.messageId}</div>
             )}
           </>
+        ) : isUser ? (
+          <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+        ) : msg.status === 'streaming' && !msg.content ? (
+          <TypingDots />
+        ) : useTgHtml ? (
+          /* Telegram HTML mode */
+          <div
+            className={`tg-message-html break-words ${spoilerRevealed ? 'spoilers-revealed' : ''}`}
+            // eslint-disable-next-line react/no-danger
+            dangerouslySetInnerHTML={{ __html: renderedTgHtml }}
+            onClick={(e) => {
+              if ((e.target as Element).closest('.tg-spoiler')) setSpoilerRevealed(true);
+            }}
+          />
         ) : (
-          <div className="whitespace-pre-wrap break-words">{msg.content || (msg.status === 'streaming' ? '...' : '')}</div>
+          /* Markdown mode */
+          <div
+            className="prose-chat break-words"
+            // eslint-disable-next-line react/no-danger
+            dangerouslySetInnerHTML={{ __html: renderedMd }}
+          />
         )}
+
+        {/* ── Inline keyboard buttons (類 Telegram Inline Keyboard) ── */}
+        {buttonRows.length > 0 && msg.status !== 'streaming' && (
+          <div className="mt-2.5 flex flex-col gap-1.5">
+            {buttonRows.map((row, ri) => (
+              <div key={ri} className="flex gap-1.5">
+                {row.map((label, bi) => (
+                  <button
+                    key={bi}
+                    type="button"
+                    onClick={() => onButtonClick?.(label)}
+                    className="tg-kbd-btn flex-1 truncate rounded-xl border border-sky-300/70 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition-all hover:border-sky-400 hover:bg-sky-100 active:scale-95 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:border-sky-600 dark:hover:bg-sky-900/60"
+                    title={label}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Footer: timestamp + status indicator ── */}
         <div className={`mt-1.5 flex items-center gap-1 text-[10px] ${isUser ? 'text-sky-100/90' : 'text-slate-400 dark:text-slate-500'}`}>
           <span>{formatTime(msg.createdAt)}</span>
-          {msg.status === 'streaming' && <Cpu size={10} className="animate-pulse" />}
+          {msg.status === 'streaming' && msg.content && <StreamingIndicator />}
           {msg.status === 'error' && <span className="text-rose-400">{msg.error}</span>}
         </div>
       </div>

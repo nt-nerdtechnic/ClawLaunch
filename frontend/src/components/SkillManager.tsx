@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import type { SkillItem } from '../store';
 import { Info, Lock, ChevronDown, ChevronUp, Puzzle, ShieldCheck, RefreshCw, PackagePlus, Trash2, FolderOpen, Blocks, AlertCircle } from 'lucide-react';
@@ -111,7 +111,7 @@ export function SkillManager() {
   const [acting, setActing] = useState(false);
   const [scanError, setScanError] = useState('');
 
-  const rescan = async () => {
+  const rescan = useCallback(async () => {
     if (!window.electronAPI) {
       setScanError(t('skillManager.status.electronUnavailable'));
       return;
@@ -137,14 +137,14 @@ export function SkillManager() {
       setScanError(e?.message || t('skillManager.status.unknownScanError'));
     }
     setScanning(false);
-  };
+  }, [setCoreSkills, setWorkspaceSkills, t]);
 
   useEffect(() => {
     // Prioritize data detected during App.tsx initialization; trigger only if completely missing and not currently detecting
     if (coreSkills.length === 0 && workspaceSkills.length === 0) {
       rescan();
     }
-  }, []);
+  }, [coreSkills.length, workspaceSkills.length, rescan]);
 
   const handleImport = async () => {
     if (!window.electronAPI || acting) return;

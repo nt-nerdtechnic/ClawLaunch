@@ -1,5 +1,5 @@
 // TODO: Refactor onboarding steps with complete type definitions
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Package, Settings, Database, ArrowRight, Loader2, CheckCircle2, AlertCircle, Monitor, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
 import { useTranslation } from 'react-i18next';
@@ -89,6 +89,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
     const [existingItems, setExistingItems] = useState<string[]>([]);
     const [hasInitializeAttempt, setHasInitializeAttempt] = useState(false);
     const validateDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    const hasAutoValidatedRef = useRef(false);
 
     const pushProgress = (message: string) => {
         setProgress(message);
@@ -119,44 +120,7 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
         fetchVersions();
     }, []);
 
-    // Auto-validate filled paths for new projects; show "directory already contains data" warning immediately
-    useEffect(() => {
-        const autoValidatePrefilled = async () => {
-            const keysToCheck: Array<'corePath' | 'configPath' | 'workspacePath'> = ['corePath', 'configPath', 'workspacePath'];
-            for (const key of keysToCheck) {
-                const val = config[key];
-                if (val && typeof val === 'string' && val.trim()) {
-                    await validatePath(key, val.trim());
-                }
-            }
-        };
-        autoValidatePrefilled();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const handlePathChange = (key: 'corePath' | 'configPath' | 'workspacePath', val: string) => {
-        setConfig({ [key]: val });
-        clearTimeout(validateDebounceRef.current[key]);
-        validateDebounceRef.current[key] = setTimeout(() => {
-            if (val.trim()) validatePath(key, val.trim());
-            else {
-                setWarnings(prev => ({ ...prev, [key]: '' }));
-                setInfos(prev => ({ ...prev, [key]: '' }));
-            }
-        }, 500);
-    };
-
-    const handleBrowse = async (key: 'corePath' | 'configPath' | 'workspacePath') => {
-        if (window.electronAPI && window.electronAPI.selectDirectory) {
-            const selectedPath = await window.electronAPI.selectDirectory();
-            if (selectedPath) {
-                setConfig({ [key]: selectedPath });
-                validatePath(key, selectedPath);
-            }
-        }
-    };
-
-    const validatePath = async (key: 'corePath' | 'configPath' | 'workspacePath', path: string) => {
+    const validatePath = useCallback(async (key: 'corePath' | 'configPath' | 'workspacePath', path: string) => {
         setChecking(true);
         try {
             const resolvedPath = resolveInitializedPath(key, path);
@@ -187,6 +151,53 @@ const SetupStepInitialize = ({ onNext }: { onNext: () => void }) => {
             console.error("Validation failed", e);
         } finally {
             setChecking(false);
+        }
+    }, [t]);
+
+    // Auto-validate prefilled paths once after config is available.
+    useEffect(() => {
+        if (hasAutoValidatedRef.current) return;
+
+        const keysToCheck: Array<'corePath' | 'configPath' | 'workspacePath'> = ['corePath', 'configPath', 'workspacePath'];
+        const hasPrefilledPath = keysToCheck.some((key) => {
+            const val = config[key];
+            return typeof val === 'string' && val.trim().length > 0;
+        });
+
+        if (!hasPrefilledPath) return;
+        hasAutoValidatedRef.current = true;
+
+        const autoValidatePrefilled = async () => {
+            for (const key of keysToCheck) {
+                const val = config[key];
+                if (val && typeof val === 'string' && val.trim()) {
+                    await validatePath(key, val.trim());
+                }
+            }
+        };
+
+        void autoValidatePrefilled();
+    }, [config, validatePath]);
+
+    const handlePathChange = (key: 'corePath' | 'configPath' | 'workspacePath', val: string) => {
+        setConfig({ [key]: val });
+        clearTimeout(validateDebounceRef.current[key]);
+        validateDebounceRef.current[key] = setTimeout(() => {
+            if (val.trim()) validatePath(key, val.trim());
+            else {
+                setWarnings(prev => ({ ...prev, [key]: '' }));
+                setInfos(prev => ({ ...prev, [key]: '' }));
+            }
+        }, 500);
+    };
+
+    const handleBrowse = async (key: 'corePath' | 'configPath' | 'workspacePath') => {
+        if (window.electronAPI && window.electronAPI.selectDirectory) {
+            const selectedPath = await window.electronAPI.selectDirectory();
+            if (selectedPath) {
+                setConfig({ [key]: selectedPath });
+                validatePath(key, selectedPath);
+            }
         }
     };
 

@@ -214,6 +214,9 @@
     "unavailable": "Chat IPC is unavailable in this environment",
     "coreRequired": "Core is not running. Start Gateway (Core) before sending a chat message",
     "inputHint": "Enter to send, Shift+Enter for newline",
+    "commandHint": "/stop abort \u00b7 /new session",
+    "wsDisconnected": "WebSocket disconnected",
+    "queuedMessages": "{{count}} queued",
     "sessions": {
       "title": "Chat History",
       "openPanel": "Switch Session",
@@ -221,7 +224,8 @@
       "loading": "Loading...",
       "empty": "No sessions found",
       "manual": "Manual Input",
-      "useManual": "Use This Session"
+      "useManual": "Use This Session",
+      "new": "New Session"
     }
   },
   "monitor": {

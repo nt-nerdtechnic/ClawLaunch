@@ -214,6 +214,9 @@
     "unavailable": "目前環境無法呼叫聊天 IPC",
     "coreRequired": "核心尚未啟動，請先啟動 Gateway（Core）再送出對話",
     "inputHint": "Enter 送出，Shift+Enter 換行",
+    "commandHint": "/stop 停止 · /new 新對話",
+    "wsDisconnected": "WebSocket 未連線",
+    "queuedMessages": "已佇列 {{count}} 則訊息",
     "sessions": {
       "title": "對話紀錄",
       "openPanel": "切換對話",
@@ -221,7 +224,8 @@
       "loading": "讀取中...",
       "empty": "尚無 Session 紀錄",
       "manual": "手動輸入",
-      "useManual": "套用此 Session"
+      "useManual": "套用此 Session",
+      "new": "新對話"
     }
   },
   "monitor": {
