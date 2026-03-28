@@ -7,6 +7,7 @@ import SetupStepMessaging from './SetupStepMessaging';
 import SetupStepSkills from './SetupStepSkills';
 import SetupStepLaunch from './SetupStepLaunch';
 import SetupStepInitialize from './SetupStepInitialize';
+import SetupStepPrereqs from './SetupStepPrereqs';
 import { useTranslation } from 'react-i18next';
 import { LanguageToggle } from '../LanguageToggle';
 import { useStore } from '../../store';
@@ -15,7 +16,7 @@ type SetupWizardProps = {
   onFinished: () => void;
 };
 
-type StepId = 'welcome' | 'initialize' | 'model' | 'messaging' | 'skills' | 'launch';
+type StepId = 'welcome' | 'prereqs' | 'initialize' | 'model' | 'messaging' | 'skills' | 'launch';
 
 type StepDefinition = {
   id: StepId;
@@ -68,7 +69,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   // Define dynamic step paths
   const steps: StepDefinition[] = [
     { id: 'welcome', component: SetupStepWelcome },
-    ...(userType === 'new' ? ([{ id: 'initialize', component: SetupStepInitialize }] as StepDefinition[]) : []),
+    ...(userType === 'new' ? ([{ id: 'prereqs', component: SetupStepPrereqs }, { id: 'initialize', component: SetupStepInitialize }] as StepDefinition[]) : []),
     { id: 'model', component: SetupStepModel },
     { id: 'messaging', component: SetupStepMessaging },
     { id: 'skills', component: SetupStepSkills },
@@ -78,7 +79,7 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
   const totalSteps = steps.length;
   const setupStepIds: ('initialize' | 'model' | 'messaging' | 'skills')[] = steps
     .map((step) => step.id)
-    .filter((id): id is 'initialize' | 'model' | 'messaging' | 'skills' => id !== 'welcome' && id !== 'launch');
+    .filter((id): id is 'initialize' | 'model' | 'messaging' | 'skills' => id !== 'welcome' && id !== 'launch' && id !== 'prereqs');
   const currentStepId: StepId | undefined = steps[currentStep]?.id;
   const currentSetupStepId =
     currentStepId === 'initialize' || currentStepId === 'model' || currentStepId === 'messaging' || currentStepId === 'skills'
