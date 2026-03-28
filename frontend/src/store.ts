@@ -220,7 +220,7 @@ interface AppState {
   setAuditTimeline: (items: AuditTimelineItem[]) => void;
   setDailyDigest: (digest: string) => void;
   ackEventLocal: (eventId: string, ttlMs?: number) => void;
-  setRawSnapshot: (rawSnapshot: any | null) => void;
+  setRawSnapshot: (rawSnapshot: ReadModelSnapshot | null) => void;
   setSnapshotSourcePath: (path: string) => void;
   runtimeUsageEvents: RuntimeUsageEvent[];
   setRuntimeUsageEvents: (events: RuntimeUsageEvent[]) => void;

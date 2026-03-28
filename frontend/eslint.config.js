@@ -20,7 +20,7 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off', // TODO: Phase 2 - turn to 'warn' after runtime types are established
+      '@typescript-eslint/no-explicit-any': 'warn', // Phase 2: gradually reduce any usage
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/ban-ts-comment': 'warn', // TODO: Remove @ts-nocheck in onboarding first
       '@typescript-eslint/prefer-as-const': 'warn',

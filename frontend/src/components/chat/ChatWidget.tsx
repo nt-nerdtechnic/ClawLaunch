@@ -929,7 +929,6 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
           /* Telegram HTML mode */
           <div
             className={`tg-message-html break-words ${spoilerRevealed ? 'spoilers-revealed' : ''}`}
-            // eslint-disable-next-line react/no-danger
             dangerouslySetInnerHTML={{ __html: renderedTgHtml }}
             onClick={(e) => {
               if ((e.target as Element).closest('.tg-spoiler')) setSpoilerRevealed(true);
@@ -939,7 +938,6 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
           /* Markdown mode */
           <div
             className="prose-chat break-words"
-            // eslint-disable-next-line react/no-danger
             dangerouslySetInnerHTML={{ __html: renderedMd }}
           />
         )}
