@@ -9,7 +9,6 @@ import SetupStepLaunch from './SetupStepLaunch';
 import SetupStepInitialize from './SetupStepInitialize';
 import SetupStepPrereqs from './SetupStepPrereqs';
 import { useTranslation } from 'react-i18next';
-import { LanguageToggle } from '../LanguageToggle';
 import { useStore } from '../../store';
 
 type SetupWizardProps = {
