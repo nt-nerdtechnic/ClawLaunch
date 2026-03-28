@@ -24,12 +24,17 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
   const [scanning, setScanning] = React.useState(false);
   const [acting, setActing] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState('');
+  // Use refs for the in-flight guards so they never appear in useCallback deps
+  // (putting `scanning` in deps would recreate `rescan` on every state flip → infinite loop)
+  const scanningRef = React.useRef(false);
+  const actingRef = React.useRef(false);
 
   const detectedSkills: SkillItem[] = workspaceSkills || [];
 
   const rescan = React.useCallback(async () => {
-    if (!window.electronAPI || scanning || acting) return;
+    if (!window.electronAPI || scanningRef.current || actingRef.current) return;
     setErrorMsg('');
+    scanningRef.current = true;
     setScanning(true);
     try {
       // Pass the store's current config paths explicitly so detect:paths uses the correct
@@ -59,8 +64,9 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
     } catch (e: unknown) {
       setErrorMsg(getErrorMessage(e, t('setupSkills.manager.errorScan')));
     }
+    scanningRef.current = false;
     setScanning(false);
-  }, [acting, config.corePath, config.configPath, config.workspacePath, scanning, setCoreSkills, setWorkspaceSkills, t]);
+  }, [config.corePath, config.configPath, config.workspacePath, setCoreSkills, setWorkspaceSkills, t]);
 
   // Auto-skip: Existing user with skill settings don't need to stay on this step
   const autoAdvancedRef = React.useRef(false);
@@ -78,8 +84,9 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
   }, [coreSkills.length, detectedSkills.length, onNext, rescan, userType]);
 
   const handleImport = React.useCallback(async () => {
-    if (!window.electronAPI || acting || scanning) return;
+    if (!window.electronAPI || actingRef.current || scanningRef.current) return;
     setErrorMsg('');
+    actingRef.current = true;
     setActing(true);
     try {
       const result = await window.electronAPI.exec('skill:import');
@@ -93,20 +100,23 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
     } catch (e: unknown) {
       setErrorMsg(getErrorMessage(e, t('setupSkills.manager.errorImport')));
     }
+    actingRef.current = false;
     setActing(false);
-  }, [acting, rescan, scanning, t]);
+  }, [rescan, t]);
 
   const handleRemove = React.useCallback(async (skillId: string, skillName: string) => {
-    if (!window.electronAPI || acting || scanning) return;
+    if (!window.electronAPI || actingRef.current || scanningRef.current) return;
     const confirmed = confirm(t('setupSkills.manager.removeConfirm', { name: skillName }));
     if (!confirmed) return;
 
     setErrorMsg('');
+    actingRef.current = true;
     setActing(true);
     try {
       const baseDir = config.workspacePath || config.configPath;
       if (!baseDir) {
         setErrorMsg(t('setupSkills.manager.errorMissingBaseDir'));
+        actingRef.current = false;
         setActing(false);
         return;
       }
@@ -118,8 +128,9 @@ const SetupStepSkills: React.FC<SetupStepSkillsProps> = ({ onNext }) => {
     } catch (e: unknown) {
       setErrorMsg(getErrorMessage(e, t('setupSkills.manager.errorRemove')));
     }
+    actingRef.current = false;
     setActing(false);
-  }, [acting, config.configPath, config.workspacePath, rescan, scanning, t]);
+  }, [config.configPath, config.workspacePath, rescan, t]);
 
 
 
