@@ -31,6 +31,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
   const { t } = useTranslation();
   const { running, config, resolvedConfigDir } = props;
   const [chatSessionCount, setChatSessionCount] = useState(0);
+  const [auditFilter, setAuditFilter] = useState<'today' | 'all'>('today');
   const [auditLog, setAuditLog] = useState<AuditLogSummary>({
     writes: 0,
     changedPaths: 0,
@@ -84,6 +85,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           "const raw = fs.readFileSync(file, 'utf8');",
           "const lines = raw.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);",
           "let writes = 0; let changedPaths = 0; let suspicious = 0; let lastTs = 0;",
+          "const filterMode = process.env.FILTER_MODE || 'today';",
           "const today = new Date();",
           "const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');",
           "for (const line of lines) {",
@@ -96,7 +98,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           "  const tsMs = date.getTime();",
           "  if (tsMs > lastTs) lastTs = tsMs;",
           "  const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');",
-          "  if (key !== todayKey) continue;",
+          "  if (filterMode === 'today' && key !== todayKey) continue;",
           "  writes += 1;",
           "  const changedPathValue = Number(item?.changedPathCount ?? 0);",
           "  changedPaths += Number.isFinite(changedPathValue) ? changedPathValue : 0;",
@@ -104,7 +106,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           "}",
           "process.stdout.write(JSON.stringify({ ok: true, writes, changedPaths, suspicious, updatedAt: lastTs ? new Date(lastTs).toISOString() : '' }));",
         ].join(' ');
-        const cmd = `AUDIT_LOG=${shellQuote(auditLogPath)} node -e ${shellQuote(parserScript)}`;
+        const cmd = `AUDIT_LOG=${shellQuote(auditLogPath)} FILTER_MODE=${auditFilter} node -e ${shellQuote(parserScript)}`;
 
         try {
           const res = await window.electronAPI.exec(cmd);
@@ -142,7 +144,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [running, config.configPath, config.corePath, config.workspacePath, resolvedConfigDir]);
+  }, [running, auditFilter, config.configPath, config.corePath, config.workspacePath, resolvedConfigDir]);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,22 +240,39 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
 
       <section id="monitor-config-audit" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              {t('monitor.decision.taskHeartbeat')}
-            </h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                {t('monitor.decision.taskHeartbeat')}
+              </h3>
+              <div className="flex gap-1">
+                {(['today', 'all'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setAuditFilter(f)}
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                      auditFilter === f
+                        ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100'
+                        : 'bg-white dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                    }`}
+                  >
+                    {f === 'today' ? t('monitor.decision.auditFilterToday') : t('monitor.decision.auditFilterAll')}
+                  </button>
+                ))}
+              </div>
+            </div>
             <HeartPulse size={18} className="text-rose-500" />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.checkedToday')}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{auditFilter === 'today' ? t('monitor.decision.checkedToday') : t('monitor.decision.checkedAll')}</div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.writes}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.eligibleToday')}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{auditFilter === 'today' ? t('monitor.decision.eligibleToday') : t('monitor.decision.eligibleAll')}</div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.changedPaths}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{t('monitor.decision.startedToday')}</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{auditFilter === 'today' ? t('monitor.decision.startedToday') : t('monitor.decision.startedAll')}</div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-slate-100">{auditLog.suspicious}</div>
             </div>
           </div>
