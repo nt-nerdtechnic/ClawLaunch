@@ -318,6 +318,21 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   };
 
+  const deleteAllStoppedAgents = async () => {
+    const targets = launchAgents.filter(a => !a.running && !a.loaded);
+    for (const agent of targets) await deleteLaunchAgent(agent.label);
+  };
+
+  const deleteAllDisabledCrontab = async () => {
+    const targets = crontabEntries.filter(e => e.enabled === false);
+    for (const entry of targets) await deleteCrontab(entry.raw);
+  };
+
+  const deleteAllDisabledCronJobs = async () => {
+    const targets = cronJobs.filter(j => !j.enabled);
+    for (const job of targets) await deleteCron(job.id);
+  };
+
   // ── Merged activity feed ───────────────────────────────────────────────────
 
   const activityFeed = useMemo((): ActivityItem[] => {
@@ -527,6 +542,20 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
+              {agentFilter === 'stopped' && launchAgents.filter(a => !a.running && !a.loaded).length > 0 && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      const count = launchAgents.filter(a => !a.running && !a.loaded).length;
+                      setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllStoppedAgents() });
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                  >
+                    <Trash2 size={8} />
+                    {t('common.clearAll', '全部清除')}
+                  </button>
+                </div>
+              )}
               {launchAgents.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
               ) : launchAgents
@@ -634,6 +663,20 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
+              {ctFilter === 'disabled' && crontabEntries.filter(e => e.enabled === false).length > 0 && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      const count = crontabEntries.filter(e => e.enabled === false).length;
+                      setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停用', { count }), onConfirm: () => void deleteAllDisabledCrontab() });
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                  >
+                    <Trash2 size={8} />
+                    {t('common.clearAll', '全部清除')}
+                  </button>
+                </div>
+              )}
               {crontabEntries.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
               ) : crontabEntries
@@ -727,6 +770,20 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
+              {cjFilter === 'disabled' && cronJobs.filter(j => !j.enabled).length > 0 && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      const count = cronJobs.filter(j => !j.enabled).length;
+                      setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllDisabledCronJobs() });
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                  >
+                    <Trash2 size={8} />
+                    {t('common.clearAll', '全部清除')}
+                  </button>
+                </div>
+              )}
 
               <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
                 {cronJobs.length === 0 ? (
