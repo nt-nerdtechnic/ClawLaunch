@@ -74,6 +74,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
       const res = await runSilent('crontab -l');
       const lines = res.stdout.split('\n');
       const newLines = lines.filter(l => l.trim() !== raw.trim());
+      if (newLines.length === lines.length) return { code: 1, stdout: '', stderr: 'crontab entry not found', exitCode: 1 };
       const tmpPath = path.join(app.getPath('temp'), `crontab_${Date.now()}`);
       await fs.writeFile(tmpPath, newLines.join('\n'), 'utf-8');
       await runSilent(`crontab "${tmpPath}"`);
@@ -181,7 +182,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
       const home = process.env['HOME'] || '';
       const plist = path.join(home, `Library/LaunchAgents/${agentLabel}.plist`);
       await runSilent(`launchctl unload -w "${plist}"`);
-      await fs.rm(plist, { force: true }).catch(() => {});
+      await fs.rm(plist).catch(() => {});
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'launchagents delete failed', exitCode: 1 };

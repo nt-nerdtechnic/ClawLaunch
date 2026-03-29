@@ -8,6 +8,7 @@ import {
   Code2, FileEdit, Settings, ScanLine,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
+import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -224,6 +225,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [error, setError]             = useState('');
   const [view, setView]               = useState<'all' | 'cron' | 'task' | 'obs'>('all');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
   const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'stopped'>('running');
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
@@ -349,8 +351,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   };
 
   const deleteCron = async (jobId: string) => {
-    await execCmd(`cron:delete ${JSON.stringify({ jobId, stateDir })}`);
-    await loadCron();
+    try {
+      setError('');
+      await execCmd(`cron:delete ${JSON.stringify({ jobId, stateDir })}`);
+      await loadCron();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Delete cron job failed');
+    }
   };
 
   const toggleCrontab = async (raw: string) => {
@@ -821,7 +828,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           className={`p-1 rounded-lg transition-all ${agent.loaded ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-emerald-600'}`}>
                           {agent.loaded ? <Pause size={10} /> : <Play size={10} />}
                         </button>
-                        <button onClick={() => void deleteLaunchAgent(agent.label)}
+                        <button
+                          onClick={() => setDeleteConfirm({ name: agent.name, onConfirm: () => void deleteLaunchAgent(agent.label) })}
                           className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
                           <Trash2 size={10} />
                         </button>
@@ -918,7 +926,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         className={`p-1 rounded-lg transition-all ${entry.enabled !== false ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-amber-600'}`}>
                         {entry.enabled !== false ? <Pause size={10} /> : <Play size={10} />}
                       </button>
-                      <button onClick={() => void deleteCrontab(entry.raw)}
+                      <button
+                        onClick={() => setDeleteConfirm({ name: entry.name, onConfirm: () => void deleteCrontab(entry.raw) })}
                         className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
                         <Trash2 size={10} />
                       </button>
@@ -1041,7 +1050,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}>
                             {job.enabled ? <Pause size={10} /> : <Play size={10} />}
                           </button>
-                          <button onClick={() => void deleteCron(job.id)}
+                          <button
+                            onClick={() => setDeleteConfirm({ name: job.name, onConfirm: () => void deleteCron(job.id) })}
                             className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
                             <Trash2 size={10} />
                           </button>
@@ -1078,6 +1088,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           {error}
         </div>
       )}
+
+      <DeleteConfirmDialog
+        open={deleteConfirm !== null}
+        itemName={deleteConfirm?.name ?? ''}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => { deleteConfirm?.onConfirm(); setDeleteConfirm(null); }}
+        t={t}
+      />
     </div>
   );
 };
