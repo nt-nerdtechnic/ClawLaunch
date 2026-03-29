@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
   Play, Pause, Trash2, RefreshCw,
-  AlertTriangle, CheckCircle, Clock,
+  AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
@@ -68,8 +68,20 @@ interface CronJob {
   delivery: { mode: string; channel?: string };
 }
 
-// Unified activity entries
-type ActivityItem = { type: 'cron'; id: string; name: string; time: number; status?: 'ok' | 'error'; duration?: number; hasError: boolean; error?: string; schedule: CronSchedule };
+// Active OpenClaw session
+interface ActiveSession {
+  key: string;
+  kind: string;
+  updatedAt: string;
+  ageMs: number;
+  sessionId: string;
+  systemSent?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  model?: string;
+  contextTokens?: number;
+}
 
 interface ControlCenterPageProps {
   onRefreshSnapshot?: () => Promise<void>;
@@ -188,10 +200,11 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [cronJobs, setCronJobs]       = useState<CronJob[]>([]);
   const [crontabEntries, setCrontabEntries] = useState<CrontabEntry[]>([]);
   const [launchAgents, setLaunchAgents]     = useState<LaunchAgent[]>([]);
-  const [loading, setLoading]         = useState(false);
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [cronLoading, setCronLoading] = useState(false);
   const [systemLoading, setSystemLoading] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [sessionScanLoading, setSessionScanLoading] = useState(false);
+  const [lastSessionsScanned, setLastSessionsScanned] = useState<Date | null>(null);
   const [error, setError]             = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
   const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'stopped'>('running');
@@ -241,25 +254,69 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   }, []);
 
+  const loadActiveSessions = useCallback(async () => {
+    try {
+      setSessionScanLoading(true);
+      console.log('[ControlCenter] Scanning active sessions...');
+      const res = await window.electronAPI.scanActiveSessions({ activeMinutes: 3 });
+      console.log('[ControlCenter] scanActiveSessions response:', res);
+      if (res.code !== 0) {
+        console.warn('[ControlCenter] scanActiveSessions error code:', res.code, 'stderr:', res.stderr);
+        throw new Error(res.stderr || 'scan active sessions failed');
+      }
+      const parsed = JSON.parse(res.stdout || '{}');
+      const sessions = parsed.sessions || [];
+      console.log('[ControlCenter] loadActiveSessions parsed:', parsed);
+      console.log('[ControlCenter] loadActiveSessions got', sessions.length, 'sessions:', sessions);
+      setActiveSessions(sessions);
+      setLastSessionsScanned(new Date());
+    } catch (e) {
+      console.error('[ControlCenter] loadActiveSessions failed:', e);
+      setActiveSessions([]);
+    } finally {
+      setSessionScanLoading(false);
+    }
+  }, []);
+
+  const abortSession = useCallback(async (sessionKey: string, agentId?: string) => {
+    try {
+      setError('');
+      const res = await window.electronAPI.abortSession({ sessionKey, agentId });
+      if (!res.success) {
+        setError(res.error || 'abort session failed');
+        return;
+      }
+      console.log('[ControlCenter] abortSession success for', sessionKey);
+      await loadActiveSessions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'abort session failed');
+    }
+  }, [loadActiveSessions]);
+
   const refresh = useCallback(async () => {
-    setLoading(true);
     setError('');
     try {
       await Promise.all([loadCron(), loadSystem()]);
       if (onRefreshSnapshot) await onRefreshSnapshot();
-      setLastRefreshed(new Date());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('controlCenter.errors.genericLoadFailed'));
-    } finally { setLoading(false); }
+    }
   }, [loadCron, loadSystem, onRefreshSnapshot, t]);
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    loadActiveSessions();
+  }, [refresh, loadActiveSessions]);
+  
   useEffect(() => {
     const id = setInterval(() => void Promise.all([loadCron(), loadSystem()]), 30000);
     return () => clearInterval(id);
   }, [loadCron, loadSystem]);
+
+  useEffect(() => {
+    const id = setInterval(() => void loadActiveSessions(), 5000);
+    return () => clearInterval(id);
+  }, [loadActiveSessions]);
 
   // ── Cron actions ───────────────────────────────────────────────────────────
 
@@ -368,25 +425,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     for (const job of targets) await toggleCron(job.id);
   };
 
-  // ── Merged activity feed ───────────────────────────────────────────────────
-
-  const activityFeed = useMemo((): ActivityItem[] => {
-    return cronJobs
-      .filter(j => j.state?.lastRunAtMs)
-      .map(j => ({
-        type: 'cron' as const,
-        id: j.id,
-        name: j.name,
-        time: j.state.lastRunAtMs!,
-        status: j.state.lastStatus,
-        duration: j.state.lastDurationMs,
-        hasError: (j.state.consecutiveErrors ?? 0) > 0,
-        error: j.state.lastError,
-        schedule: j.schedule,
-      }))
-      .sort((a, b) => a.time - b.time);
-  }, [cronJobs]);
-
   // ── KPI ────────────────────────────────────────────────────────────────────
 
   const kpi = useMemo(() => {
@@ -394,14 +432,15 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     const activeCrons = (cronJobs || []).filter(j => j.enabled).length;
     const totalAgents = (launchAgents || []).length;
     const runningAgents = (launchAgents || []).filter(a => a.running || a.loaded).length;
+    const activeSessionsCount = (activeSessions || []).length;
 
     return {
-      activityTimeline: activityFeed.length,
+      activeSessions: activeSessionsCount,
       systemServices: { running: runningAgents, total: totalAgents },
       crontabEntriesCount: (crontabEntries || []).length,
       cronSchedules: { active: activeCrons, total: totalCrons },
     };
-  }, [activityFeed, cronJobs, launchAgents, crontabEntries]);
+  }, [activeSessions, cronJobs, launchAgents, crontabEntries]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -430,10 +469,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             targetId: 'application-scheduling-section'
           },
           { 
-            label: t('controlCenter.kpi.activityTimeline', '作業時間軸'), 
-            value: kpi.activityTimeline, 
+            label: t('controlCenter.kpi.activeSessions', '執行中工作'), 
+            value: kpi.activeSessions, 
             color: 'text-indigo-600 dark:text-indigo-400',
-            targetId: 'activity-timeline-section'
+            targetId: 'active-sessions-section'
           },
         ].map(({ label, value, color, targetId }) => (
           <button 
@@ -449,8 +488,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
-        {/* ── Activity timeline ── full width, pinned to bottom ── */}
-        <div id="activity-timeline-section" className="xl:col-span-3 order-last bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+        {/* ── Active OpenClaw Sessions ── full width, pinned to bottom ── */}
+        <div id="active-sessions-section" className="xl:col-span-3 order-last bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
           <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(99,102,241,0.5),transparent)' }} />
           <div className="p-6 space-y-3">
 
@@ -458,80 +497,95 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity size={13} className="text-indigo-500" />
-                <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 dark:text-slate-100">{t('controlCenter.timeline.title')}</h3>
-                <span className="text-[10px] text-slate-400">{t('controlCenter.timeline.count', { count: activityFeed.length })}</span>
+                <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 dark:text-slate-100">{t('controlCenter.activeSessions.title', '執行中工作')}</h3>
+                <span className="text-[10px] text-slate-400">{activeSessions.length} {t('controlCenter.timeline.count', { count: activeSessions.length })}</span>
               </div>
               <div className="flex items-center gap-2">
-                {lastRefreshed && (
+                {lastSessionsScanned && (
                   <span className="text-[10px] text-slate-400 tabular-nums">
-                    {lastRefreshed.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    {lastSessionsScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </span>
                 )}
                 <button
-                  onClick={() => void refresh()}
+                  onClick={() => void loadActiveSessions()}
                   title={t('controlCenter.actions.refresh')}
                   className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all"
                 >
-                  <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
+                  <RefreshCw size={10} className={sessionScanLoading ? 'animate-spin' : ''} />
                 </button>
               </div>
             </div>
 
-
-            {/* Timeline list */}
+            {/* Sessions list */}
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-0.5">
-              {activityFeed.length === 0 ? (
+              {activeSessions.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                   <Activity size={28} className="mb-2 opacity-25" />
-                  <span className="text-sm">{t('controlCenter.timeline.empty')}</span>
+                  <span className="text-sm">{t('controlCenter.activeSessions.empty', '無執行中工作')}</span>
                 </div>
-              ) : activityFeed.map((item, i) => {
-                if (item.type === 'cron') {
-                  const isOk = item.status === 'ok';
-                  const isErr = item.status === 'error';
-                  return (
-                    <div
-                      key={`cron-${item.id}-${i}`}
-                      className={`rounded-2xl border px-3.5 py-2.5 transition-all ${
-                        item.hasError
-                          ? 'border-rose-200 dark:border-rose-800/40 bg-rose-50/30 dark:bg-rose-950/10'
-                          : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {/* Schedule icon */}
-                        <div className="shrink-0 w-5 h-5 rounded-lg bg-violet-50 dark:bg-violet-950/40 flex items-center justify-center">
-                          <CalendarClock size={10} className="text-violet-500" />
-                        </div>
-                        <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
-                          {item.name}
-                        </span>
-                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time, t)}</span>
+              ) : activeSessions.map((session, i) => {
+                const isRecent = session.ageMs < 30000; // Recent if < 30s
+                return (
+                  <div
+                    key={`session-${session.key}-${i}`}
+                    className={`rounded-2xl border px-3.5 py-2.5 transition-all ${
+                      isRecent
+                        ? 'border-violet-200 dark:border-violet-800/40 bg-violet-50/30 dark:bg-violet-950/10'
+                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {/* Session icon with pulse indicator */}
+                      <div className={`shrink-0 w-5 h-5 rounded-lg flex items-center justify-center ${
+                        isRecent 
+                          ? 'bg-violet-100 dark:bg-violet-900/40' 
+                          : 'bg-slate-100 dark:bg-slate-800/40'
+                      }`}>
+                        {isRecent && <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />}
+                        {!isRecent && <Activity size={10} className="text-slate-500" />}
                       </div>
-                      <div className="mt-1.5 flex items-center gap-2 pl-7 text-[10px] flex-wrap">
-                        {/* Status */}
-                        <span className={`flex items-center gap-0.5 font-medium ${isOk ? 'text-emerald-600 dark:text-emerald-400' : isErr ? 'text-rose-500' : 'text-slate-400'}`}>
-                          {isOk ? <CheckCircle size={9} /> : isErr ? <AlertTriangle size={9} /> : <Clock size={9} />}
-                          {isOk ? t('common.status.success') : isErr ? t('common.status.failure') : t('common.status.exec')}
+                      <div className="flex-1 min-w-0">
+                        <span className="block text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
+                          {session.sessionId || session.key}
                         </span>
-                        {item.duration !== undefined && (
-                          <>
-                            <span className="text-slate-300 dark:text-slate-700">·</span>
-                            <span className="text-slate-400">{(item.duration / 1000).toFixed(1)}s</span>
-                          </>
-                        )}
-                        <span className="text-slate-300 dark:text-slate-700">·</span>
-                        <span className="text-violet-400/80 font-mono">{formatInterval(item.schedule, t)}</span>
-                        {item.hasError && item.error && (
-                          <>
-                            <span className="text-slate-300 dark:text-slate-700">·</span>
-                            <span className="text-rose-400 truncate max-w-[140px]">{item.error}</span>
-                          </>
+                        {session.model && (
+                          <span className="block text-[10px] text-slate-400 truncate">{session.model}</span>
                         )}
                       </div>
+                      <button
+                        onClick={() => void abortSession(session.key, session.model)}
+                        title={t('controlCenter.actions.abort', '停止')}
+                        className="shrink-0 px-2 py-1 text-[10px] font-bold rounded-lg bg-rose-100 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white transition-all active:scale-95"
+                      >
+                        {t('controlCenter.actions.abort', '停止')}
+                      </button>
                     </div>
-                  );
-                } else { return null; }
+                    <div className="mt-1.5 flex items-center gap-2 pl-7 text-[10px] flex-wrap">
+                      <span className="flex items-center gap-0.5 font-medium text-slate-400">
+                        <Activity size={9} className="animate-pulse text-indigo-500" />
+                        {t('common.status.exec')}
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-700">·</span>
+                      <span className="text-slate-500 tabular-nums">
+                        {(session.ageMs / 1000).toFixed(1)}s ago
+                      </span>
+                      {session.totalTokens !== undefined && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-700">·</span>
+                          <span className="text-slate-400 font-mono">
+                            {session.totalTokens} tokens
+                          </span>
+                        </>
+                      )}
+                      {session.kind && (
+                        <>
+                          <span className="text-slate-300 dark:text-slate-700">·</span>
+                          <span className="text-indigo-400/80 font-mono text-[9px]">{session.kind}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
               })}
             </div>
           </div>
@@ -547,7 +601,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               <div className="flex items-center gap-2 mb-3">
                 <Server size={12} className="text-emerald-500" />
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.services.title')}</span>
-                <span className="text-[9px] text-slate-400">LaunchAgents</span>
+                <span className="text-[9px] text-slate-400">LaunchAgents · {launchAgents.length} {t('controlCenter.services.countSuffix', '項')}</span>
                 <div className="flex items-center gap-1 ml-auto">
                   {(['all', 'running', 'stopped'] as const).map(f => {
                     const isActive = agentFilter === f;
@@ -577,48 +631,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
-              {(() => {
-                const visible = launchAgents.filter(a => {
-                  if (agentFilter === 'running') return a.running || a.loaded;
-                  if (agentFilter === 'stopped') return !a.running && !a.loaded;
-                  return true;
-                });
-                const canStart = visible.some(a => !a.loaded);
-                const canStop  = visible.some(a => a.loaded);
-                const canClear = agentFilter === 'stopped' && visible.some(a => !a.running && !a.loaded);
-                if (!canStart && !canStop && !canClear) return null;
-                return (
-                  <div className="flex justify-end items-center gap-1.5">
-                    {canStart && (
-                      <button
-                        onClick={() => void startAllUnloadedAgents()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
-                      >
-                        <Play size={8} />{t('common.startAll', '全部啟動')}
-                      </button>
-                    )}
-                    {canStop && (
-                      <button
-                        onClick={() => void stopAllLoadedAgents()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
-                      >
-                        <Pause size={8} />{t('common.stopAll', '全部停止')}
-                      </button>
-                    )}
-                    {canClear && (
-                      <button
-                        onClick={() => {
-                          const count = visible.filter(a => !a.running && !a.loaded).length;
-                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllStoppedAgents() });
-                        }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
-                      >
-                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
               {launchAgents.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
               ) : launchAgents
@@ -687,6 +699,48 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </div>
                 </div>
               ))}
+              {(() => {
+                const visible = launchAgents.filter(a => {
+                  if (agentFilter === 'running') return a.running || a.loaded;
+                  if (agentFilter === 'stopped') return !a.running && !a.loaded;
+                  return true;
+                });
+                const canStart = visible.some(a => !a.loaded);
+                const canStop  = visible.some(a => a.loaded);
+                const canClear = agentFilter === 'stopped' && visible.some(a => !a.running && !a.loaded);
+                if (!canStart && !canStop && !canClear) return null;
+                return (
+                  <div className="flex justify-end items-center gap-1.5 pt-1">
+                    {canStart && (
+                      <button
+                        onClick={() => void startAllUnloadedAgents()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+                      >
+                        <Play size={8} />{t('common.startAll', '全部啟動')}
+                      </button>
+                    )}
+                    {canStop && (
+                      <button
+                        onClick={() => void stopAllLoadedAgents()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
+                      >
+                        <Pause size={8} />{t('common.stopAll', '全部停止')}
+                      </button>
+                    )}
+                    {canClear && (
+                      <button
+                        onClick={() => {
+                          const count = visible.filter(a => !a.running && !a.loaded).length;
+                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllStoppedAgents() });
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                      >
+                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -726,48 +780,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
-              {(() => {
-                const visible = crontabEntries.filter(e => {
-                  if (ctFilter === 'enabled') return e.enabled !== false;
-                  if (ctFilter === 'disabled') return e.enabled === false;
-                  return true;
-                });
-                const canEnable  = visible.some(e => e.enabled === false);
-                const canDisable = visible.some(e => e.enabled !== false);
-                const canClear   = ctFilter === 'disabled' && canEnable;
-                if (!canEnable && !canDisable) return null;
-                return (
-                  <div className="flex justify-end items-center gap-1.5">
-                    {canEnable && (
-                      <button
-                        onClick={() => void enableAllDisabledCrontab()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
-                      >
-                        <Play size={8} />{t('common.enableAll', '全部啟用')}
-                      </button>
-                    )}
-                    {canDisable && (
-                      <button
-                        onClick={() => void disableAllEnabledCrontab()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
-                      >
-                        <Pause size={8} />{t('common.disableAll', '全部停用')}
-                      </button>
-                    )}
-                    {canClear && (
-                      <button
-                        onClick={() => {
-                          const count = visible.filter(e => e.enabled === false).length;
-                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停用', { count }), onConfirm: () => void deleteAllDisabledCrontab() });
-                        }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
-                      >
-                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
               {crontabEntries.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
               ) : crontabEntries
@@ -819,6 +831,48 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </div>
                 </div>
               ))}
+              {(() => {
+                const visible = crontabEntries.filter(e => {
+                  if (ctFilter === 'enabled') return e.enabled !== false;
+                  if (ctFilter === 'disabled') return e.enabled === false;
+                  return true;
+                });
+                const canEnable  = visible.some(e => e.enabled === false);
+                const canDisable = visible.some(e => e.enabled !== false);
+                const canClear   = ctFilter === 'disabled' && canEnable;
+                if (!canEnable && !canDisable) return null;
+                return (
+                  <div className="flex justify-end items-center gap-1.5 pt-1">
+                    {canEnable && (
+                      <button
+                        onClick={() => void enableAllDisabledCrontab()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+                      >
+                        <Play size={8} />{t('common.enableAll', '全部啟用')}
+                      </button>
+                    )}
+                    {canDisable && (
+                      <button
+                        onClick={() => void disableAllEnabledCrontab()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
+                      >
+                        <Pause size={8} />{t('common.disableAll', '全部停用')}
+                      </button>
+                    )}
+                    {canClear && (
+                      <button
+                        onClick={() => {
+                          const count = visible.filter(e => e.enabled === false).length;
+                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停用', { count }), onConfirm: () => void deleteAllDisabledCrontab() });
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                      >
+                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -861,49 +915,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
-              {(() => {
-                const visible = cronJobs.filter(j => {
-                  if (cjFilter === 'enabled') return j.enabled;
-                  if (cjFilter === 'disabled') return !j.enabled;
-                  return true;
-                });
-                const canEnable  = visible.some(j => !j.enabled);
-                const canDisable = visible.some(j => j.enabled);
-                const canClear   = cjFilter === 'disabled' && canEnable;
-                if (!canEnable && !canDisable) return null;
-                return (
-                  <div className="flex justify-end items-center gap-1.5">
-                    {canEnable && (
-                      <button
-                        onClick={() => void enableAllDisabledCronJobs()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
-                      >
-                        <Play size={8} />{t('common.enableAll', '全部啟用')}
-                      </button>
-                    )}
-                    {canDisable && (
-                      <button
-                        onClick={() => void disableAllEnabledCronJobs()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
-                      >
-                        <Pause size={8} />{t('common.disableAll', '全部停用')}
-                      </button>
-                    )}
-                    {canClear && (
-                      <button
-                        onClick={() => {
-                          const count = visible.filter(j => !j.enabled).length;
-                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllDisabledCronJobs() });
-                        }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
-                      >
-                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
-
               <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
                 {cronJobs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-slate-400">
@@ -990,6 +1001,48 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   );
                 })}
               </div>
+              {(() => {
+                const visible = cronJobs.filter(j => {
+                  if (cjFilter === 'enabled') return j.enabled;
+                  if (cjFilter === 'disabled') return !j.enabled;
+                  return true;
+                });
+                const canEnable  = visible.some(j => !j.enabled);
+                const canDisable = visible.some(j => j.enabled);
+                const canClear   = cjFilter === 'disabled' && canEnable;
+                if (!canEnable && !canDisable) return null;
+                return (
+                  <div className="flex justify-end items-center gap-1.5 pt-1">
+                    {canEnable && (
+                      <button
+                        onClick={() => void enableAllDisabledCronJobs()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+                      >
+                        <Play size={8} />{t('common.enableAll', '全部啟用')}
+                      </button>
+                    )}
+                    {canDisable && (
+                      <button
+                        onClick={() => void disableAllEnabledCronJobs()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
+                      >
+                        <Pause size={8} />{t('common.disableAll', '全部停用')}
+                      </button>
+                    )}
+                    {canClear && (
+                      <button
+                        onClick={() => {
+                          const count = visible.filter(j => !j.enabled).length;
+                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllDisabledCronJobs() });
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                      >
+                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
