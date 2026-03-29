@@ -47,6 +47,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
   const { t } = useTranslation();
   const { running, config, resolvedConfigDir, snapshot } = props;
   const [alertsFilter, setAlertsFilter] = useState<'all' | DashboardAlertLevel>('all');
+  const [chatSessionCount, setChatSessionCount] = useState(0);
   const [auditLog, setAuditLog] = useState<AuditLogSummary>({
     writes: 0,
     changedPaths: 0,
@@ -160,6 +161,28 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     };
   }, [running, config.configPath, config.corePath, config.workspacePath, resolvedConfigDir]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const fetchChatSessions = async () => {
+      if (!window.electronAPI?.listChatSessions) return;
+      try {
+        const res = await window.electronAPI.listChatSessions();
+        if (!cancelled && res.code === 0 && res.stdout) {
+          const parsed = JSON.parse(res.stdout);
+          if (Array.isArray(parsed)) setChatSessionCount(parsed.length);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    void fetchChatSessions();
+    const timer = setInterval(() => { void fetchChatSessions(); }, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
   const alerts = useMemo<DashboardAlertItem[]>(() => {
     const out: DashboardAlertItem[] = [];
     const sessions = snapshot?.sessions || [];
@@ -230,12 +253,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     const gatewayState = !config.corePath?.trim() ? 'not_configured' : running ? 'healthy' : 'degraded';
     const configState = configReadyCount >= 3 ? 'healthy' : configReadyCount > 0 ? 'degraded' : 'not_configured';
 
-    const sessions = snapshot?.sessions || [];
-    const activeSessions = (sessions as { status?: unknown }[]).filter((s) => {
-      const st = String(s?.status || '').toLowerCase();
-      return st === 'running' || st === 'active' || st === 'working';
-    });
-    const sessionsState = !running ? 'not_configured' : activeSessions.length > 0 ? 'healthy' : sessions.length > 0 ? 'degraded' : 'not_configured';
+    const chatState = chatSessionCount > 0 ? 'healthy' : 'not_configured';
 
     return {
       gateway: {
@@ -248,12 +266,12 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         state: configState,
         detail: t('monitor.decision.health.configState', { count: configReadyCount }),
       },
-      sessions: {
-        state: sessionsState,
-        detail: t('monitor.decision.health.sessionsState', { active: activeSessions.length, total: sessions.length }),
+      chat: {
+        state: chatState,
+        detail: t('monitor.decision.health.chatSessionsState', { count: chatSessionCount }),
       },
     };
-  }, [config.configPath, config.corePath, config.workspacePath, running, snapshot, t]);
+  }, [config.configPath, config.corePath, config.workspacePath, running, chatSessionCount, t]);
 
   return (
     <div className="space-y-6">
@@ -268,7 +286,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
             {[
               { key: 'config', label: 'Config', ...healthSummary.config },
               { key: 'gateway', label: 'Gateway', ...healthSummary.gateway },
-              { key: 'sessions', label: 'Sessions', ...healthSummary.sessions },
+              { key: 'chat', label: 'Chat Sessions', ...healthSummary.chat },
             ].map((item) => (
               <div key={item.key} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
                 <div className="flex items-center justify-between">

@@ -358,7 +358,7 @@
         "gatewayRunning": "Gateway 已連線且運行中。",
         "gatewayStopped": "Gateway 未連線或尚未啟動。",
         "configState": "已對位 {{count}} / 3 個核心路徑。",
-        "sessionsState": "{{active}} 個 Session 執行中（共 {{total}} 個）。"
+        "chatSessionsState": "共 {{count}} 個聊天 Session。"
       },
       "filters": {
         "all": "全部",

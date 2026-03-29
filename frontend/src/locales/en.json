@@ -358,7 +358,7 @@
         "gatewayRunning": "Gateway connected and running.",
         "gatewayStopped": "Gateway disconnected or not started.",
         "configState": "{{count}} / 3 core paths configured.",
-        "sessionsState": "{{active}} active session(s) of {{total}} total."
+        "chatSessionsState": "{{count}} chat session(s) on disk."
       },
       "filters": {
         "all": "All",
