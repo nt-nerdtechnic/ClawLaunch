@@ -385,20 +385,39 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     label: string,
     addLocalLog: (text: string, source?: string) => void,
     heartbeatMs: number = 3000,
+    timeoutMs: number = 30000,
   ) => {
     const startedAt = Date.now();
     let elapsedSeconds = 0;
+    let didTimeout = false;
     addLocalLog(`[${label}] started`, 'system');
     const timerId = window.setInterval(() => {
       elapsedSeconds += heartbeatMs / 1000;
       addLocalLog(`[${label}] running... ${elapsedSeconds}s`, 'system');
     }, heartbeatMs);
 
+    let timeoutId: number | undefined;
+
     try {
-      return await window.electronAPI.exec(command);
+      const runPromise = window.electronAPI.exec(command);
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        timeoutId = window.setTimeout(() => {
+          didTimeout = true;
+          const timeoutSeconds = (timeoutMs / 1000).toFixed(timeoutMs % 1000 === 0 ? 0 : 1);
+          reject(new Error(`[${label}] command timed out after ${timeoutSeconds}s. Please check service/network status and retry.`));
+        }, timeoutMs);
+      });
+
+      return await Promise.race([runPromise, timeoutPromise]);
     } finally {
       window.clearInterval(timerId);
+      if (typeof timeoutId === 'number') {
+        window.clearTimeout(timeoutId);
+      }
       const totalSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+      if (didTimeout) {
+        addLocalLog(`[${label}] timeout after ${totalSeconds}s`, 'stderr');
+      }
       addLocalLog(`[${label}] done in ${totalSeconds}s`, 'system');
     }
   };
@@ -411,6 +430,8 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`,
       'openclaw --version',
       addLocalLog,
+      3000,
+      15000,
     );
     logCommandSummary('openclaw --version', versionRes, addLocalLog);
     if (!isCommandSuccess(versionRes)) {
@@ -441,6 +462,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       'openclaw gateway status',
       addLocalLog,
       2500,
+      30000,
     );
     logCommandSummary('openclaw gateway status', gatewayRes, addLocalLog);
     if (!isCommandSuccess(gatewayRes)) {
@@ -646,9 +668,14 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               await verifyLaunchReadiness(corePath, envPrefix, execCmd, addLocalLog);
             } else {
               // When installDaemon=false, Gateway isn't started yet (manual start from dashboard); only verify CLI availability
-              const versionRes = await window.electronAPI.exec(
-                `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
+              const versionRes = await execWithHeartbeat(
+                `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`,
+                'openclaw --version',
+                addLocalLog,
+                3000,
+                15000,
               );
+              logCommandSummary('openclaw --version', versionRes, addLocalLog);
               if (!isCommandSuccess(versionRes)) {
                 throw new Error(versionRes.stderr || t('onboarding.errors.cliNotStarted'));
               }
@@ -958,9 +985,14 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
           // The final step doesn't install a daemon; Gateway is manually started from the dashboard.
           addLocalLog(t('onboarding.logs.daemonDisabled'), 'system');
-          const versionRes = await window.electronAPI.exec(
-            `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`
+          const versionRes = await execWithHeartbeat(
+            `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`,
+            'openclaw --version',
+            addLocalLog,
+            3000,
+            15000,
           );
+          logCommandSummary('openclaw --version', versionRes, addLocalLog);
           if (!isCommandSuccess(versionRes)) {
             throw new Error(versionRes.stderr || t('onboarding.errors.cliNotStarted'));
           }
