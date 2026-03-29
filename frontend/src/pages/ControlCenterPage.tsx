@@ -264,8 +264,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   // ── Cron actions ───────────────────────────────────────────────────────────
 
   const toggleCron = async (jobId: string) => {
-    await execCmd(`cron:toggle ${JSON.stringify({ jobId, stateDir })}`);
-    await loadCron();
+    try {
+      setError('');
+      await execCmd(`cron:toggle ${JSON.stringify({ jobId, stateDir })}`);
+      await loadCron();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Toggle cron job failed');
+    }
   };
 
   const deleteCron = async (jobId: string) => {
