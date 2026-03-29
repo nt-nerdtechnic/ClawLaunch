@@ -22,8 +22,12 @@ const SetupStepWelcome: React.FC<SetupStepWelcomeProps> = ({ onNext }) => {
     const current = useStore.getState().config;
     const next = { ...current, ...patch };
     try {
-      await window.electronAPI.exec(`config:write ${JSON.stringify(next)}`);
-    } catch {
+      const res = await window.electronAPI.exec(`config:write ${JSON.stringify(next)}`);
+      if (res.code !== 0) {
+        console.warn('[SetupStepWelcome] config:write failed:', res.stderr);
+      }
+    } catch (e) {
+      console.error('[SetupStepWelcome] persistConfig error:', e);
       // Ignore persistence failures here; onboarding can still continue in-memory.
     }
   };

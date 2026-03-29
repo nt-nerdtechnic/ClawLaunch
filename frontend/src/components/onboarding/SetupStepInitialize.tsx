@@ -254,7 +254,12 @@ const SetupStepInitialize = ({ onNext }: { onNext?: () => void }) => {
 
                    // Persist the resolved runtime paths immediately to avoid stale launcher config overriding user choice.
                    if (window.electronAPI) {
-                       await window.electronAPI.exec(`config:write ${JSON.stringify(nextConfig)}`);
+                       const persistRes = await window.electronAPI.exec(`config:write ${JSON.stringify(nextConfig)}`);
+                       if (persistRes.code !== 0) {
+                           addLog(`[WARNING] Config persist failed: ${persistRes.stderr || 'Unknown error'}`, 'stderr');
+                       } else {
+                           addLog(`[OK] Config persisted: corePath=${nextConfig.corePath}, configPath=${nextConfig.configPath}, workspacePath=${nextConfig.workspacePath}`, 'system');
+                       }
                    }
 
                    if (Array.isArray(result.createdItems)) {
@@ -263,7 +268,13 @@ const SetupStepInitialize = ({ onNext }: { onNext?: () => void }) => {
                    if (Array.isArray(result.existingItems)) {
                        setExistingItems(result.existingItems);
                    }
-                } catch { }
+                } catch (e) {
+                    const errorMsg = getErrorMessage(e, 'Failed to parse project:initialize response');
+                    addLog(`[ERROR] SetupStepInitialize try block failed: ${errorMsg}`, 'stderr');
+                    pushProgress(t('setupInitialize.error', { msg: errorMsg }));
+                    setInitializing(false);
+                    return;
+                }
                 
                 pushProgress('🎉 ' + t('setupInitialize.success'));
                 setInitializing(false); 

@@ -300,13 +300,20 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
     if (Object.keys(pathPatch).length > 0) {
       setConfig(pathPatch);
+      const mergedConfig = { ...config, ...pathPatch };
       try {
-        await window.electronAPI.exec(`config:write ${JSON.stringify({ ...config, ...pathPatch })}`);
-      } catch {
+        const persistRes = await window.electronAPI.exec(`config:write ${JSON.stringify(mergedConfig)}`);
+        addLocalLog(`[resolveRuntimePaths] Persisted recovered paths: corePath=${mergedConfig.corePath}, configPath=${mergedConfig.configPath}, workspacePath=${mergedConfig.workspacePath}`, 'system');
+        if (persistRes.code !== 0) {
+          addLocalLog(`[WARNING] config:write returned non-zero: ${persistRes.stderr || 'Unknown error'}`, 'stderr');
+        }
+      } catch (e) {
+        addLocalLog(`[ERROR] config:write failed: ${String(e)}`, 'stderr');
         // Runtime recovery should proceed even if persistence fails.
       }
     }
 
+    addLocalLog(`[resolveRuntimePaths] Final resolved: corePath=${runtimePaths.corePath}, configPath=${runtimePaths.configPath}, workspacePath=${runtimePaths.workspacePath}`, 'system');
     return runtimePaths;
   };
 

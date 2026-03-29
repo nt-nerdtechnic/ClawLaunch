@@ -498,14 +498,16 @@ function App() {
     }
     localStorage.removeItem(ONBOARDING_FINISHED_KEY);
     localStorage.setItem(ONBOARDING_FORCE_RESET_KEY, 'true');
+    // Clear all path-related config from the store
+    setConfig({ corePath: '', configPath: '', workspacePath: '' });
     setOnboardingFinished(false);
     setActiveTab('onboarding');
     setShowLogoutConfirm(false);
-    // Also clear the persisted flag in config.json so restart after logout shows onboarding
+    // Clear all paths in config.json and mark onboarding as not finished
     if (window.electronAPI) {
-      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = config;
+      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, corePath: _c, configPath: _cp, workspacePath: _w, ...launcherPayload } = config;
       window.electronAPI.exec(
-        `config:write ${JSON.stringify({ ...launcherPayload, onboardingFinished: false })}`
+        `config:write ${JSON.stringify({ ...launcherPayload, corePath: '', configPath: '', workspacePath: '', onboardingFinished: false })}`
       ).catch(() => {});
     }
   };
