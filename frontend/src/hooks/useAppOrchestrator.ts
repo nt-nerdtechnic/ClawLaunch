@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import type { Config } from '../store';
@@ -43,6 +43,13 @@ export function useAppOrchestrator() {
   } = useStore();
 
   const [viewMode, setViewMode] = useState<'mini' | 'expanded'>('expanded');
+
+  // Restore mini/expanded state after renderer reload (e.g. Cmd+R)
+  useEffect(() => {
+    window.electronAPI?.getWindowMode?.().then((mode) => {
+      setViewMode(mode);
+    });
+  }, []);
   const [activeTab, setActiveTab] = useState('monitor');
   const [onboardingFinished, setOnboardingFinished] = useState(() => {
     const forceReset = localStorage.getItem(ONBOARDING_FORCE_RESET_KEY) === 'true';

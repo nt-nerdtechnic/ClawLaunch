@@ -48,6 +48,7 @@ declare global {
       writeFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
       onLog: (callback: (payload: { data: string; source: 'stdout' | 'stderr' | 'system' }) => void) => () => void;
       resize: (mode: 'mini' | 'expanded') => void;
+      getWindowMode: () => Promise<'mini' | 'expanded'>;
       selectDirectory: () => Promise<string | null>;
       openPath: (targetPath: string) => Promise<{ success: boolean; error?: string }>;
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;

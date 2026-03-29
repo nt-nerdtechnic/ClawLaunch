@@ -22,6 +22,13 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
     }
   });
 
+  ipcMain.handle('window:get-mode', () => {
+    const win = ctx.getMainWindow();
+    if (!win) return 'expanded';
+    const [w] = win.getSize();
+    return w <= 400 ? 'mini' : 'expanded';
+  });
+
   ipcMain.handle('window:set-title', (_event, title: string) => {
     const win = ctx.getMainWindow();
     if (win && !win.isDestroyed()) {
