@@ -2,6 +2,21 @@ import { useEffect, useRef } from 'react';
 import type { i18n as I18nType } from 'i18next';
 import type { Config } from '../store';
 
+// Fields that are actually persisted to config.json via config:write.
+// Used as the dep array for the write effect so that volatile runtime fields
+// (model, botToken, apiKey, etc.) never trigger unnecessary disk I/O.
+type PersistedConfigFields = Pick<
+  Config,
+  | 'corePath'
+  | 'configPath'
+  | 'workspacePath'
+  | 'installDaemon'
+  | 'useExternalTerminal'
+  | 'autoRestartGateway'
+  | 'unrestrictedMode'
+  | 'appVersion'
+>;
+
 type UseAppLifecycleEffectsParams = {
   addLog: (text: string, source?: 'stdout' | 'stderr' | 'system') => void;
   config: Config;
@@ -34,23 +49,47 @@ export function useAppLifecycleEffects({
     };
   }, [addLog]);
 
+  // ── Theme DOM update (runs only when theme changes) ──────────────────────
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+  }, [theme]);
 
+  // ── Config write (runs only when launcher-persisted fields change) ────────
+  // Keep a render-synchronous ref so the effect body always reads the latest
+  // config snapshot without needing the full object in the dep array.
+  // This prevents volatile runtime fields (model, botToken, apiKey, etc.)
+  // from triggering disk I/O on every store update.
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  const {
+    corePath, configPath, workspacePath,
+    installDaemon, useExternalTerminal, autoRestartGateway,
+    unrestrictedMode, appVersion,
+  } = config as PersistedConfigFields & Partial<Config>;
+
+  useEffect(() => {
+    const cfg = configRef.current;
     // Only sync to config.json when config paths have been loaded.
     // Guards against overwriting valid persisted paths with default empty state
     // before loadConfig() has completed its async IPC call on startup.
-    const hasLoadedConfig = Boolean(config.corePath || config.configPath || config.workspacePath);
+    const hasLoadedConfig = Boolean(cfg.corePath || cfg.configPath || cfg.workspacePath);
     if (window.electronAPI && hasLoadedConfig) {
-      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = config;
+      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = cfg;
       const updated = { ...launcherPayload, theme, language };
       window.electronAPI.exec(`config:write ${JSON.stringify(updated)}`).catch(() => {});
     }
-  }, [theme, language, config]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    theme, language,
+    corePath, configPath, workspacePath,
+    installDaemon, useExternalTerminal, autoRestartGateway,
+    unrestrictedMode, appVersion,
+  ]);
 
   useEffect(() => {
     if (language && i18n.language !== language) {

@@ -217,7 +217,12 @@ class GatewayWSClient {
 let gwsClient: GatewayWSClient | null = null;
 const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean }>();
 
+// Concurrency lock: ensures only one connection attempt runs at a time.
+// Subsequent callers await the same Promise instead of spawning a new client.
+let connectingPromise: Promise<{ ok: boolean; error?: string }> | null = null;
+
 export function disconnectGatewayWs(): void {
+  connectingPromise = null;
   gwsClient?.disconnect();
   gwsClient = null;
 }
@@ -225,6 +230,10 @@ export function disconnectGatewayWs(): void {
 async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: boolean; error?: string }> {
   if (gwsClient?.isConnected) return { ok: true };
 
+  // Re-use an in-flight connection attempt rather than creating a parallel one.
+  if (connectingPromise) return connectingPromise;
+
+  // Tear down any dead (disconnected) client before starting fresh.
   gwsClient?.disconnect();
   gwsClient = null;
 
@@ -245,7 +254,7 @@ async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: 
   const wsUrl = `ws://127.0.0.1:${gatewayPort}`;
   ctx.emitShellStdout(`[gateway-ws] connecting to ${wsUrl}${gatewayToken ? ' (with token)' : ''}\n`, 'stdout');
 
-  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+  connectingPromise = new Promise<{ ok: boolean; error?: string }>((resolve) => {
     const client = new GatewayWSClient();
     client.setDeps(ctx.emitShellStdout, ctx.sendToRenderer);
     let settled = false;
@@ -253,6 +262,7 @@ async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: 
     const settle = (result: { ok: boolean; error?: string }) => {
       if (settled) return;
       settled = true;
+      connectingPromise = null;
       if (result.ok) {
         gwsClient = client;
         gwsClient.onDisconnected = () => {
@@ -284,6 +294,8 @@ async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: 
 
     client.connect(wsUrl, gatewayToken || undefined);
   });
+
+  return connectingPromise;
 }
 
 // ── IPC Handlers ─────────────────────────────────────────────────────────────
