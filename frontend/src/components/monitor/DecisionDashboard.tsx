@@ -6,12 +6,20 @@ import type { ReadModelSnapshot } from '../../store';
 type AppConfig = { corePath: string; configPath: string; workspacePath: string };
 type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
 
+type AuditLogEntry = {
+  ts: string;
+  cmd: string;
+  result: string;
+  suspicious: number;
+};
+
 type AuditLogSummary = {
   writes: number;
   changedPaths: number;
   suspicious: number;
   updatedAt: string;
   state: AuditLogState;
+  entries: AuditLogEntry[];
 };
 
 interface DecisionDashboardProps {
@@ -38,13 +46,14 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     suspicious: 0,
     updatedAt: '',
     state: 'loading',
+    entries: [],
   });
 
   useEffect(() => {
     let cancelled = false;
 
     if (!running) {
-      setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable' });
+      setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable', entries: [] });
       return () => {
         cancelled = true;
       };
@@ -53,7 +62,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     const loadAuditLogSummary = async () => {
       if (!window.electronAPI?.exec) {
         if (!cancelled) {
-          setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable' });
+          setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable', entries: [] });
         }
         return;
       }
@@ -72,7 +81,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
 
       if (candidates.length === 0) {
         if (!cancelled) {
-          setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable' });
+          setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'unavailable', entries: [] });
         }
         return;
       }
@@ -84,7 +93,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           "if (!file || !fs.existsSync(file)) { process.stdout.write(JSON.stringify({ ok: false, reason: 'missing' })); process.exit(0); }",
           "const raw = fs.readFileSync(file, 'utf8');",
           "const lines = raw.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);",
-          "let writes = 0; let changedPaths = 0; let suspicious = 0; let lastTs = 0;",
+          "let writes = 0; let changedPaths = 0; let suspicious = 0; let lastTs = 0; const entries = [];",
           "const filterMode = process.env.FILTER_MODE || 'today';",
           "const today = new Date();",
           "const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');",
@@ -102,9 +111,13 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           "  writes += 1;",
           "  const changedPathValue = Number(item?.changedPathCount ?? 0);",
           "  changedPaths += Number.isFinite(changedPathValue) ? changedPathValue : 0;",
-          "  suspicious += Array.isArray(item?.suspicious) ? item.suspicious.length : 0;",
+          "  const suspCount = Array.isArray(item?.suspicious) ? item.suspicious.length : 0;",
+          "  suspicious += suspCount;",
+          "  const argv = Array.isArray(item?.argv) ? item.argv.slice(2).join(' ') : '';",
+          "  entries.push({ ts: ts, cmd: argv, result: item?.result || '', suspicious: suspCount });",
           "}",
-          "process.stdout.write(JSON.stringify({ ok: true, writes, changedPaths, suspicious, updatedAt: lastTs ? new Date(lastTs).toISOString() : '' }));",
+          "entries.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());",
+          "process.stdout.write(JSON.stringify({ ok: true, writes, changedPaths, suspicious, updatedAt: lastTs ? new Date(lastTs).toISOString() : '', entries: entries.slice(0, 50) }));",
         ].join(' ');
         const cmd = `AUDIT_LOG=${shellQuote(auditLogPath)} FILTER_MODE=${auditFilter} node -e ${shellQuote(parserScript)}`;
 
@@ -122,6 +135,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
               suspicious: Number(parsed.suspicious || 0),
               updatedAt: String(parsed.updatedAt || ''),
               state: 'connected',
+              entries: Array.isArray(parsed.entries) ? parsed.entries : [],
             });
           }
           return;
@@ -131,7 +145,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       }
 
       if (!cancelled) {
-        setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'degraded' });
+        setAuditLog({ writes: 0, changedPaths: 0, suspicious: 0, updatedAt: '', state: 'degraded', entries: [] });
       }
     };
 
@@ -286,6 +300,45 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
             </span>
             <span>{auditLog.updatedAt ? new Date(auditLog.updatedAt).toLocaleString() : '-'}</span>
           </div>
+
+          {auditLog.entries.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60">
+                    <th className="px-3 py-2 text-left font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400 w-36">{t('monitor.decision.auditColTime')}</th>
+                    <th className="px-3 py-2 text-left font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{t('monitor.decision.auditColCmd')}</th>
+                    <th className="px-3 py-2 text-right font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400 w-20">{t('monitor.decision.auditColResult')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLog.entries.map((entry, i) => (
+                    <tr
+                      key={`${entry.ts}-${i}`}
+                      className="border-b border-slate-100 dark:border-slate-800 last:border-0 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <td className="px-3 py-2 text-slate-400 dark:text-slate-500 whitespace-nowrap font-mono text-[11px]">
+                        {new Date(entry.ts).toLocaleString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700 dark:text-slate-300 font-mono text-[11px] max-w-0 truncate">
+                        <span title={entry.cmd}>{entry.cmd || '—'}</span>
+                        {entry.suspicious > 0 && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold">
+                            ⚠ {entry.suspicious}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                          {entry.result}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
       </section>
 
     </div>
