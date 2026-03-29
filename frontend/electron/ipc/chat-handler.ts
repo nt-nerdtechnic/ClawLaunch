@@ -85,6 +85,7 @@ class GatewayWSClient {
     });
 
     ws.addEventListener('error', (err) => {
+      if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
       this._emit(`[gateway-ws] socket error: ${String((err as ErrorEvent)?.message || err)}\n`, 'stderr');
     });
   }

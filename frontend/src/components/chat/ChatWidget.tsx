@@ -153,7 +153,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [agentDraft, setAgentDraft] = useState(chat.activeAgentId);
   const [sessionHistory, setSessionHistory] = useState<string[]>(() => loadRecentList('chat_recent_sessions', [chat.activeSessionKey]));
   const [agentHistory, setAgentHistory] = useState<string[]>(() => loadRecentList('chat_recent_agents', [chat.activeAgentId]));
-  const [requestMap, setRequestMap] = useState<Record<string, string>>({});
+  // requestMap: requestId → assistantMessageId
+  // Stored in a ref so the onChatChunk listener never needs to re-register
+  // when a new request is added (avoids mid-stream listener teardown).
+  const requestMapRef = useRef<Record<string, string>>({});
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
   const [ocSessions, setOcSessions] = useState<OpenClawSessionEntry[]>([]);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -169,10 +172,18 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     [chat.messages, chat.activeSessionKey, chat.activeAgentId]
   );
 
+  // Stable refs so the listener closure never goes stale without re-registering.
+  const chatActiveSessionKeyRef = useRef(chat.activeSessionKey);
+  const chatActiveAgentIdRef = useRef(chat.activeAgentId);
+  const chatIsOpenRef = useRef(chat.isOpen);
+  chatActiveSessionKeyRef.current = chat.activeSessionKey;
+  chatActiveAgentIdRef.current = chat.activeAgentId;
+  chatIsOpenRef.current = chat.isOpen;
+
   useEffect(() => {
     if (!window.electronAPI?.onChatChunk) return;
     const off = window.electronAPI.onChatChunk((chunk) => {
-      const messageId = requestMap[chunk.requestId] || chunk.messageId;
+      const messageId = requestMapRef.current[chunk.requestId] || chunk.messageId;
       if (!messageId) return;
 
       if (chunk.mode) {
@@ -181,18 +192,20 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
 
       if (chunk.error) {
         markChatMessageError(messageId, chunk.error);
+        delete requestMapRef.current[chunk.requestId];
         return;
       }
 
       if (chunk.delta) {
-        appendChatChunk(messageId, chunk.delta, chat.activeSessionKey, chat.activeAgentId);
+        appendChatChunk(messageId, chunk.delta, chatActiveSessionKeyRef.current, chatActiveAgentIdRef.current);
       }
 
       const isDone = chunk.done || (chunk.state && chunk.state !== 'delta');
       if (isDone) {
         completeChatMessage(messageId);
+        delete requestMapRef.current[chunk.requestId];
         // Desktop notification when window is not focused
-        if ((document.hidden || !chat.isOpen) && 'Notification' in window && Notification.permission === 'granted') {
+        if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
           const preview = (chunk.delta || '').slice(0, 100).trim();
           if (preview) {
             const n = new Notification('OpenClaw Core', { body: preview, silent: false });
@@ -203,7 +216,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     });
 
     return () => off();
-  }, [appendChatChunk, chat.activeAgentId, chat.activeSessionKey, chat.isOpen, completeChatMessage, markChatMessageError, requestMap, setChatRuntimeMode]);
+  // Stable store actions are safe deps; refs handle the rest without re-registering.
+  }, [appendChatChunk, completeChatMessage, markChatMessageError, setChatRuntimeMode]);
 
   useEffect(() => {
     if (!window.electronAPI?.onGatewayStatus) return;
@@ -439,7 +453,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       status: 'streaming',
     });
 
-    setRequestMap((prev) => ({ ...prev, [requestId]: assistantMessageId }));
+    requestMapRef.current[requestId] = assistantMessageId;
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     if (!window.electronAPI?.invokeChat) {
@@ -474,13 +488,13 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
 
   const handleAbort = useCallback(async () => {
-    // Allow /stop typed in textarea to also abort
     if (!window.electronAPI?.abortChat) return;
-    const pendingRequestIds = Object.keys(requestMap);
+    const pendingRequestIds = Object.keys(requestMapRef.current);
     if (pendingRequestIds.length === 0) return;
+    // Abort the most recently started pending request.
     const latest = pendingRequestIds[pendingRequestIds.length - 1];
     await window.electronAPI.abortChat(latest);
-  }, [requestMap]);
+  }, []);
 
   const panelBase = compact
     ? 'w-[calc(100vw-1rem)] h-[calc(100vh-6.75rem)]'
