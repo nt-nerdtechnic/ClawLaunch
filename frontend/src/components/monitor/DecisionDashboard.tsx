@@ -38,13 +38,11 @@ const normalizeConfigDir = (rawPath: string) => {
   if (!trimmed) return '';
   return trimmed.replace(/[\\/]openclaw\.json$/i, '');
 };
-
 function levelClasses(level: DashboardAlertLevel): string {
   if (level === 'action-required') return 'bg-red-500/10 text-red-500 border-red-500/30';
   if (level === 'warn') return 'bg-amber-500/10 text-amber-500 border-amber-500/30';
   return 'bg-blue-500/10 text-blue-500 border-blue-500/30';
 }
-
 export function DecisionDashboard(props: DecisionDashboardProps) {
   const { t } = useTranslation();
   const { running, config, resolvedConfigDir, snapshot } = props;
@@ -164,105 +162,47 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
 
   const alerts = useMemo<DashboardAlertItem[]>(() => {
     const out: DashboardAlertItem[] = [];
-
     const sessions = snapshot?.sessions || [];
     const statuses = snapshot?.statuses || [];
     const tasks = snapshot?.tasks || [];
     const approvals = snapshot?.approvals || [];
     const budgetEvaluations = snapshot?.budgetSummary?.evaluations || [];
-
-    const blockedCount = statuses.filter((s) => String(s?.state || '').toLowerCase() === 'blocked').length;
-    const errorCount = statuses.filter((s) => String(s?.state || '').toLowerCase() === 'error').length;
-    const blockedTasks = tasks.filter((task) => String(task?.status || '').toLowerCase() === 'blocked').length;
-    const pendingApprovals = approvals.filter((a) => {
+    const blockedCount = (statuses as { state?: unknown }[]).filter((s) => String(s?.state || '').toLowerCase() === 'blocked').length;
+    const errorCount = (statuses as { state?: unknown }[]).filter((s) => String(s?.state || '').toLowerCase() === 'error').length;
+    const blockedTasks = (tasks as { status?: unknown }[]).filter((task) => String(task?.status || '').toLowerCase() === 'blocked').length;
+    const pendingApprovals = (approvals as { status?: unknown }[]).filter((a) => {
       const value = String(a?.status || '').toLowerCase();
       return value === '' || value === 'pending' || value === 'requested';
     }).length;
-    const overBudget = budgetEvaluations.filter((b) => String(b?.status || '').toLowerCase() === 'over').length;
-    const warnBudget = budgetEvaluations.filter((b) => String(b?.status || '').toLowerCase() === 'warn').length;
+    const overBudget = (budgetEvaluations as { status?: unknown }[]).filter((b) => String(b?.status || '').toLowerCase() === 'over').length;
+    const warnBudget = (budgetEvaluations as { status?: unknown }[]).filter((b) => String(b?.status || '').toLowerCase() === 'warn').length;
 
     if (!snapshot) {
-      out.push({
-        id: 'snapshot-waiting',
-        level: 'info',
-        title: t('monitor.decision.alerts.snapshotWaiting'),
-        detail: t('monitor.decision.alerts.snapshotWaitingDesc'),
-        targetId: 'monitor-live-stream',
-        targetLabel: t('monitor.decision.targets.liveStream'),
-      });
+      out.push({ id: 'snapshot-waiting', level: 'info', title: t('monitor.decision.alerts.snapshotWaiting'), detail: t('monitor.decision.alerts.snapshotWaitingDesc'), targetId: 'monitor-live-stream', targetLabel: t('monitor.decision.targets.liveStream') });
     }
-
     if (sessions.length === 0) {
-      out.push({
-        id: 'sessions-empty',
-        level: 'warn',
-        title: t('monitor.decision.alerts.noActiveSessions'),
-        detail: t('monitor.decision.alerts.noActiveSessionsDesc'),
-        targetId: 'monitor-staff-grid',
-        targetLabel: t('monitor.decision.targets.staffGrid'),
-      });
+      out.push({ id: 'sessions-empty', level: 'warn', title: t('monitor.decision.alerts.noActiveSessions'), detail: t('monitor.decision.alerts.noActiveSessionsDesc'), targetId: 'monitor-staff-grid', targetLabel: t('monitor.decision.targets.staffGrid') });
     }
-
     if (pendingApprovals > 0) {
-      out.push({
-        id: 'approvals-pending',
-        level: 'action-required',
-        title: t('monitor.decision.alerts.pendingApprovals'),
-        detail: t('monitor.decision.alerts.pendingApprovalsDesc', { count: pendingApprovals }),
-        targetId: 'monitor-action-center',
-        targetLabel: t('monitor.decision.targets.actionCenter'),
-      });
+      out.push({ id: 'approvals-pending', level: 'action-required', title: t('monitor.decision.alerts.pendingApprovals'), detail: t('monitor.decision.alerts.pendingApprovalsDesc', { count: pendingApprovals }), targetId: 'monitor-action-center', targetLabel: t('monitor.decision.targets.actionCenter') });
     }
-
     if (blockedCount > 0 || errorCount > 0) {
-      out.push({
-        id: 'runtime-issues',
-        level: 'action-required',
-        title: t('monitor.decision.alerts.runtimeIssues'),
-        detail: t('monitor.decision.alerts.runtimeIssuesDesc', { blocked: blockedCount, error: errorCount }),
-        targetId: 'monitor-live-stream',
-        targetLabel: t('monitor.decision.targets.liveStream'),
-      });
+      out.push({ id: 'runtime-issues', level: 'action-required', title: t('monitor.decision.alerts.runtimeIssues'), detail: t('monitor.decision.alerts.runtimeIssuesDesc', { blocked: blockedCount, error: errorCount }), targetId: 'monitor-live-stream', targetLabel: t('monitor.decision.targets.liveStream') });
     }
-
     if (blockedTasks > 0) {
-      out.push({
-        id: 'task-blocked-by-heartbeat',
-        level: 'action-required',
-        title: t('monitor.decision.alerts.taskBlockedByHeartbeat'),
-        detail: t('monitor.decision.alerts.taskBlockedByHeartbeatDesc', { count: blockedTasks }),
-        targetId: 'monitor-live-stream',
-        targetLabel: t('monitor.decision.targets.liveStream'),
-      });
+      out.push({ id: 'task-blocked-by-heartbeat', level: 'action-required', title: t('monitor.decision.alerts.taskBlockedByHeartbeat'), detail: t('monitor.decision.alerts.taskBlockedByHeartbeatDesc', { count: blockedTasks }), targetId: 'monitor-live-stream', targetLabel: t('monitor.decision.targets.liveStream') });
     }
-
     if (overBudget > 0 || warnBudget > 0) {
-      out.push({
-        id: 'budget-risk',
-        level: overBudget > 0 ? 'action-required' : 'warn',
-        title: t('monitor.decision.alerts.budgetRisk'),
-        detail: t('monitor.decision.alerts.budgetRiskDesc', { over: overBudget, warn: warnBudget }),
-        targetId: 'monitor-connection-health',
-        targetLabel: t('monitor.decision.targets.connectionHealth'),
-      });
+      out.push({ id: 'budget-risk', level: overBudget > 0 ? 'action-required' : 'warn', title: t('monitor.decision.alerts.budgetRisk'), detail: t('monitor.decision.alerts.budgetRiskDesc', { over: overBudget, warn: warnBudget }), targetId: 'monitor-connection-health', targetLabel: t('monitor.decision.targets.connectionHealth') });
     }
-
     if (out.length === 0) {
-      out.push({
-        id: 'all-clear',
-        level: 'info',
-        title: t('monitor.decision.alerts.allClear'),
-        detail: t('monitor.decision.alerts.allClearDesc'),
-        targetId: 'monitor-health-summary',
-        targetLabel: t('monitor.decision.targets.healthSummary'),
-      });
+      out.push({ id: 'all-clear', level: 'info', title: t('monitor.decision.alerts.allClear'), detail: t('monitor.decision.alerts.allClearDesc'), targetId: 'monitor-health-summary', targetLabel: t('monitor.decision.targets.healthSummary') });
     }
-
     return out;
   }, [snapshot, t]);
 
   const alertCounters = useMemo(() => {
-    const counts = { info: 0, warn: 0, 'action-required': 0 };
+    const counts: Record<DashboardAlertLevel, number> = { info: 0, warn: 0, 'action-required': 0 };
     for (const alert of alerts) {
       counts[alert.level] += 1;
     }
@@ -276,26 +216,10 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
 
   const alertFilterChips = useMemo(
     () => [
-      {
-        key: 'all' as const,
-        label: t('monitor.decision.filters.all'),
-        count: alerts.length,
-      },
-      {
-        key: 'info' as const,
-        label: t('monitor.decision.filters.info'),
-        count: alertCounters.info,
-      },
-      {
-        key: 'warn' as const,
-        label: t('monitor.decision.filters.warn'),
-        count: alertCounters.warn,
-      },
-      {
-        key: 'action-required' as const,
-        label: t('monitor.decision.filters.actionRequired'),
-        count: alertCounters['action-required'],
-      },
+      { key: 'all' as const, label: t('monitor.decision.filters.all'), count: alerts.length },
+      { key: 'info' as const, label: t('monitor.decision.filters.info'), count: alertCounters.info },
+      { key: 'warn' as const, label: t('monitor.decision.filters.warn'), count: alertCounters.warn },
+      { key: 'action-required' as const, label: t('monitor.decision.filters.actionRequired'), count: alertCounters['action-required'] },
     ],
     [alertCounters, alerts.length, t],
   );
@@ -307,7 +231,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     const configState = configReadyCount >= 3 ? 'healthy' : configReadyCount > 0 ? 'degraded' : 'not_configured';
 
     const sessions = snapshot?.sessions || [];
-    const activeSessions = sessions.filter((s) => {
+    const activeSessions = (sessions as { status?: unknown }[]).filter((s) => {
       const st = String(s?.status || '').toLowerCase();
       return st === 'running' || st === 'active' || st === 'working';
     });
@@ -333,8 +257,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
               {t('monitor.decision.healthSummary')}
@@ -343,8 +266,8 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { key: 'gateway', label: 'Gateway', ...healthSummary.gateway },
               { key: 'config', label: 'Config', ...healthSummary.config },
+              { key: 'gateway', label: 'Gateway', ...healthSummary.gateway },
               { key: 'sessions', label: 'Sessions', ...healthSummary.sessions },
             ].map((item) => (
               <div key={item.key} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
@@ -374,71 +297,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
               </div>
             ))}
           </div>
-        </section>
-
-        <section id="monitor-health-summary" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              {t('monitor.decision.alertsQueue')}
-            </h3>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide">
-              <span className="px-2 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-500">{t('monitor.decision.filters.info')} {alertCounters.info}</span>
-              <span className="px-2 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500">{t('monitor.decision.filters.warn')} {alertCounters.warn}</span>
-              <span className="px-2 py-1 rounded-full border border-red-500/30 bg-red-500/10 text-red-500">{t('monitor.decision.filters.actionRequired')} {alertCounters['action-required']}</span>
-            </div>
-          </div>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {alertFilterChips.map((chip) => {
-              const active = alertsFilter === chip.key;
-              return (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => setAlertsFilter(chip.key)}
-                  className={`rounded-full border px-3 py-1 text-[11px] font-bold transition-colors ${
-                    active
-                      ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900'
-                      : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {chip.label} ({chip.count})
-                </button>
-              );
-            })}
-          </div>
-          <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
-            {filteredAlerts.map((alert) => (
-              <div key={alert.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="font-bold text-sm text-slate-800 dark:text-slate-100">{alert.title}</div>
-                  <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${levelClasses(alert.level)}`}>
-                    {alert.level}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{alert.detail}</p>
-                {alert.targetId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const element = document.getElementById(alert.targetId!);
-                      if (!element) return;
-                      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                    className="mt-3 text-xs font-bold text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
-                  >
-                    {t('monitor.decision.jumpTo', { target: alert.targetLabel || t('monitor.decision.targets.liveStream') })}
-                  </button>
-                )}
-              </div>
-            ))}
-            {filteredAlerts.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-xs text-slate-500 dark:text-slate-400">
-                {t('monitor.decision.filters.empty')}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
+      </section>
 
       <section id="monitor-config-audit" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -473,11 +332,53 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           </div>
       </section>
 
-      <div className="hidden">
-        <Activity />
-        <AlertTriangle />
-        <PlugZap />
-      </div>
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            {t('monitor.decision.alerts.title')}
+          </h3>
+          <Activity size={18} className="text-blue-500" />
+        </div>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {alertFilterChips.map((chip) => (
+            <button
+              key={chip.key}
+              onClick={() => setAlertsFilter(chip.key)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                alertsFilter === chip.key
+                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100'
+                  : 'bg-white dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+              }`}
+            >
+              {chip.label}
+              <span className="opacity-60">{chip.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="space-y-2">
+          {filteredAlerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`flex items-start gap-3 rounded-2xl border px-4 py-3 ${levelClasses(alert.level)}`}
+            >
+              <div className="mt-0.5 shrink-0">
+                {alert.level === 'action-required' ? (
+                  <AlertTriangle size={14} />
+                ) : alert.level === 'warn' ? (
+                  <PlugZap size={14} />
+                ) : (
+                  <Activity size={14} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-black">{alert.title}</div>
+                <div className="text-[11px] opacity-80 mt-0.5 leading-relaxed">{alert.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
     </div>
   );
 }

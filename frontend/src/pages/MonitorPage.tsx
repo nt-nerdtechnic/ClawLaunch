@@ -34,6 +34,7 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
 }) => {
   const { t } = useTranslation();
   const addLog = useStore((s) => s.addLog);
+  const setRunning = useStore((s) => s.setRunning);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
   const [forceReleasing, setForceReleasing] = React.useState(false);
 
@@ -45,6 +46,7 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
       const res = await window.electronAPI.exec('process:force-release');
       if (res.code === 0) {
         const result = JSON.parse(res.stdout || '{}');
+        setRunning(false);
         addLog(t('monitor.forceReleased', { remaining: result.remaining ?? '?' }), 'system');
       } else {
         addLog(`[force-release] failed: ${res.stderr || 'unknown'}`, 'stderr');

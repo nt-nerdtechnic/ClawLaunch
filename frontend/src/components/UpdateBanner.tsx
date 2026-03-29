@@ -55,9 +55,26 @@ const UpdateBanner = () => {
     setLocalLogs([{ text: t('updateBanner.logs.start'), source: 'system', time: new Date().toLocaleTimeString() }]);
     
     try {
-      // Execute update in the project root directory
-      const res = await window.electronAPI.exec('git pull && pnpm install --no-frozen-lockfile || npm install');
-      
+      const res = await window.electronAPI.exec(
+        'git pull && (pnpm install --no-frozen-lockfile || npm install) && pnpm build:electron'
+      );
+
+      // 將 exec 輸出塞進 Terminal log 供使用者檢視
+      if (res.stdout) {
+        const lines = res.stdout.split('\n').filter(Boolean);
+        setLocalLogs(prev => [
+          ...prev,
+          ...lines.map(line => ({ text: line, source: 'stdout' as const, time: new Date().toLocaleTimeString() })),
+        ]);
+      }
+      if (res.stderr) {
+        const lines = res.stderr.split('\n').filter(Boolean);
+        setLocalLogs(prev => [
+          ...prev,
+          ...lines.map(line => ({ text: line, source: 'stderr' as const, time: new Date().toLocaleTimeString() })),
+        ]);
+      }
+
       if (res.code === 0) {
           localStorage.setItem('update_dismissed_version', String(versions.remote));
           setComplete(true);

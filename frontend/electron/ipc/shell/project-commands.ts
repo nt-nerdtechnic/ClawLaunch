@@ -135,8 +135,8 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
         }
 
         ctx.activeProcesses.add(childProcess);
-        childProcess.stdout.on('data', (data: Buffer) => { ctx.emitShellStdout(data.toString(), 'stdout'); });
-        childProcess.stderr.on('data', (data: Buffer) => { ctx.emitShellStdout(data.toString(), 'stderr'); });
+        childProcess.stdout?.on('data', (data: Buffer) => { ctx.emitShellStdout(data.toString(), 'stdout'); });
+        childProcess.stderr?.on('data', (data: Buffer) => { ctx.emitShellStdout(data.toString(), 'stderr'); });
         childProcess.on('error', (err) => {
           ctx.activeProcesses.delete(childProcess);
           resolve({ code: 1, stderr: `Spawn error: ${err.message}`, exitCode: 1 });
