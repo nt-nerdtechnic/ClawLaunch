@@ -1,9 +1,38 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
+import { Key, Loader2, ShieldCheck, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useStore } from '../store';
-import { AuthManagementPanel } from '../components/AuthManagementPanel';
-import { TelegramPairingSection } from '../components/TelegramPairingSection';
+import { getProviderGroups } from '../constants/providers';
+import type { Config } from '../store';
+import type { TelegramAuthorizedUser } from '../hooks/useTelegramPairing';
+
+interface AuthProfileRow {
+  profileId: string;
+  provider: string;
+  mode: string;
+  globalPresent: boolean;
+  agentPresent: boolean;
+  agentCount: number;
+  credentialHealthy: boolean;
+  diagnostics?: string[];
+  severity?: 'ok' | 'warn' | 'critical';
+  repairGuides?: string[];
+}
+
+interface TelegramPairingRequest {
+  id: string;
+  code: string;
+  createdAt?: string;
+  lastSeenAt?: string;
+  meta?: {
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+    accountId?: string;
+  };
+}
+
+
+// Local defs removed and replaced by central ones
 
 interface ChannelOption {
   id: string;
@@ -15,7 +44,13 @@ interface ChannelOption {
   reqKey?: false;
 }
 
+// Channel option interface moved to top level
+// Instances moved inside component to support t()
+
 interface RuntimeSettingsPageProps {
+  config: Config;
+  setConfig: (config: Partial<Config>) => void;
+  runtimeProfile: Record<string, unknown> | null;
   runtimeDraftModel: string;
   setRuntimeDraftModel: (model: string) => void;
   runtimeDraftBotToken: string;
@@ -29,15 +64,58 @@ interface RuntimeSettingsPageProps {
   getProviderDisplayLabel: (provider: string, fallback?: string) => string;
   authorizedProviderBadges: string[];
   modelOptionGroups: Array<{ provider: string; group: string; models: string[] }>;
+  effectiveAuthorizedProviders: string[];
+  isModelAuthorizedByProvider: (model: string) => boolean;
+
+  // Auth Profiles
+  authProfiles: AuthProfileRow[];
+  authProfileSummary: { total: number; healthy: number; warn: number; critical: number } | null;
+  authProfilesLoading: boolean;
+  authProfilesError: string;
+  authRemovingId: string;
+  onHandleRemoveAuthProfile: (profileId: string) => Promise<void>;
+
+  // Auth Add
+  authAdding: boolean;
+  authAddProvider: string;
+  setAuthAddProvider: (provider: string) => void;
+  authAddChoice: string;
+  setAuthAddChoice: (choice: string) => void;
+  authAddSecret: string;
+  setAuthAddSecret: (secret: string) => void;
+  authAddError: string;
+  authAddTokenCommand: string;
+  setAuthAddTokenCommand: (cmd: string) => void;
+  authAddTokenRunning: boolean;
+  authAddTokenError: string;
+  onHandleAddAuthProfile: () => Promise<void>;
+  onHandleRunAuthTokenCommand: () => Promise<void>;
   onHandleOpenClawDoctor: () => Promise<void>;
   onHandleSecurityCheck: () => Promise<void>;
   runtimeProfileError?: string;
+
+  // Telegram
+  telegramPairingRequests: TelegramPairingRequest[];
+  telegramAuthorizedUsers: TelegramAuthorizedUser[];
+  telegramPairingLoading: boolean;
+  telegramPairingApprovingCode: string;
+  telegramPairingRejectingCode: string;
+  telegramPairingClearing: boolean;
+  telegramPairingError: string;
+  onHandleApproveTelegramPairing: (request: TelegramPairingRequest) => Promise<void>;
+  onHandleRejectTelegramPairing: (request: TelegramPairingRequest) => Promise<void>;
+  onHandleClearTelegramPairingRequests: () => Promise<void>;
   onSaveChannelToken: (channelId: string, token: string) => Promise<void>;
+
+  // Handlers
   onSave: () => Promise<void>;
   saveState?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
+  config,
+  setConfig: _setConfig,
+  runtimeProfile,
   runtimeDraftModel,
   setRuntimeDraftModel,
   runtimeDraftBotToken,
@@ -51,17 +129,46 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   getProviderDisplayLabel,
   authorizedProviderBadges,
   modelOptionGroups,
+  effectiveAuthorizedProviders: _effectiveAuthorizedProviders,
+  isModelAuthorizedByProvider: _isModelAuthorizedByProvider,
+  authProfiles,
+  authProfileSummary: _authProfileSummary,
+  authProfilesLoading,
+  authProfilesError,
+  authRemovingId,
+  onHandleRemoveAuthProfile,
+  authAdding,
+  authAddProvider,
+  setAuthAddProvider,
+  authAddChoice,
+  setAuthAddChoice,
+  authAddSecret,
+  setAuthAddSecret,
+  authAddError,
+  authAddTokenCommand,
+  setAuthAddTokenCommand,
+  authAddTokenRunning,
+  authAddTokenError,
+  onHandleAddAuthProfile,
+  onHandleRunAuthTokenCommand,
   onHandleOpenClawDoctor,
   onHandleSecurityCheck,
   runtimeProfileError,
+  telegramPairingRequests,
+  telegramAuthorizedUsers,
+  telegramPairingLoading,
+  telegramPairingApprovingCode,
+  telegramPairingRejectingCode,
+  telegramPairingClearing,
+  telegramPairingError,
+  onHandleApproveTelegramPairing,
+  onHandleRejectTelegramPairing,
+  onHandleClearTelegramPairingRequests,
   onSaveChannelToken,
   onSave,
   saveState = 'idle',
 }) => {
   const { t } = useTranslation();
-  // 從 Zustand 直接讀取，無須從外部傳入
-  const config = useStore((s) => s.config);
-  const runtimeProfile = useStore((s) => s.runtimeProfile);
 
   const CHANNEL_OPTIONS = useMemo<ChannelOption[]>(() => [
     { id: 'telegram',   name: 'Telegram',    icon: <MessageSquare size={14} />, desc: t('runtime.providers.telegram.desc'),           placeholder: t('runtime.providers.telegram.placeholder'),              keyLabel: 'Bot Token' },
@@ -75,6 +182,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     { id: 'line',       name: 'LINE',        icon: <Waves size={14} />,         desc: t('runtime.providers.line.desc'),        placeholder: t('runtime.providers.line.placeholder'),       keyLabel: 'Channel Access Token' },
   ], [t]);
 
+  const AUTH_PROVIDER_GROUPS = getProviderGroups(t);
   const dynamicModelSource = dynamicModelOptions.length > 0 ? t('common.labels.dynamic') : t('common.labels.static');
 
   // Model list expanded/collapsed state
@@ -129,6 +237,19 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
 
   const getSavedChannelToken = (chId: string) =>
     chId === 'telegram' ? runtimeDraftBotToken : (localChannelTokens[chId] || '');
+
+  // Definitions for authorization providers and verification methods (matches onboarding SetupStepModel)
+// AUTH_PROVIDER_GROUPS instances removed from top level and moved inside component
+
+  // Sync to the first choice of the provider when it is selected
+  const handleAuthProviderSelect = (pid: string) => {
+    setAuthAddProvider(pid);
+    const group = AUTH_PROVIDER_GROUPS.find((g) => g.id === pid);
+    if (group) setAuthAddChoice(group.choices[0].id);
+  };
+
+  const currentAuthProviderGroup = AUTH_PROVIDER_GROUPS.find((g) => g.id === authAddProvider) ?? AUTH_PROVIDER_GROUPS[0];
+  const currentAuthChoice = currentAuthProviderGroup.choices.find((c) => c.id === authAddChoice) ?? currentAuthProviderGroup.choices[0];
 
   const saveButtonLabel =
     saveState === 'saving'
@@ -212,8 +333,248 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             </div>
           )}
 
-          {/* Auth management panel（自包含） */}
-          <AuthManagementPanel />
+          <div className="mb-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 space-y-4">
+            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+              {t('runtime.auth.management')}
+            </div>
+
+            {authProfilesLoading && (
+              <div className="flex items-center gap-2 text-slate-500">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-sm">{t('runtime.auth.loadingProfiles')}</span>
+              </div>
+            )}
+
+            {authProfilesError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
+                {authProfilesError}
+              </div>
+            )}
+
+            {!authProfilesLoading && authProfiles.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-xs text-slate-600 dark:text-slate-300">
+                  {t('runtime.auth.profileStats', { total: authProfiles.length, healthy: authProfiles.filter((p) => p.credentialHealthy).length })}
+                </div>
+                <div className="grid gap-3">
+                  {authProfiles.map((profile) => (
+                    <div
+                      key={profile.profileId}
+                      className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-4 flex items-center justify-between"
+                    >
+                      <div className="flex-1">
+                        <div className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                          {profile.profileId}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-slate-600 dark:text-slate-400">
+                          <span className="px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
+                            {profile.provider}
+                          </span>
+                          {profile.credentialHealthy && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                              {t('app.online')}
+                            </span>
+                          )}
+                          {!profile.credentialHealthy && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                              <AlertCircle size={11} />
+                              {t('runtime.auth.repairNeeded')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onHandleRemoveAuthProfile(profile.profileId)}
+                        disabled={authRemovingId === profile.profileId}
+                        className="ml-4 p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
+                        title={t('settings.auth.removeTitle')}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-4">{t('runtime.auth.addAuth')}</div>
+              {authAddError && (
+                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
+                  {authAddError}
+                </div>
+              )}
+              <div className="space-y-4">
+
+                {/* Step 1: Select Provider */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px]">1</span>
+                    {t('runtime.auth.selectProvider')}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 xl:grid-cols-5">
+                    {AUTH_PROVIDER_GROUPS.map((pg) => (
+                      <button
+                        key={pg.id}
+                        type="button"
+                        onClick={() => handleAuthProviderSelect(pg.id)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 text-center transition-all disabled:opacity-50 ${
+                          authAddProvider === pg.id
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-500'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                      >
+                        <span className={authAddProvider === pg.id ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}>
+                          {pg.icon}
+                        </span>
+                        <span className={`text-[9px] font-black truncate w-full ${authAddProvider === pg.id ? 'text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                          {pg.label}
+                        </span>
+                        <span className={`text-[8px] truncate w-full leading-none ${authAddProvider === pg.id ? 'text-blue-400 dark:text-blue-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                          {pg.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Step 2: Select verification method (shown only if multiple options exist for the provider) */}
+                {currentAuthProviderGroup.choices.length > 1 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px]">2</span>
+                      {t('runtime.auth.verifyMethod')}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {currentAuthProviderGroup.choices.map((choice) => (
+                        <div
+                          key={choice.id}
+                          onClick={() => setAuthAddChoice(choice.id)}
+                          className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                            authAddChoice === choice.id
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-500'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 hover:border-slate-300 dark:hover:border-slate-600'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{choice.name}</span>
+                              {choice.oauthFlow && (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-emerald-500 text-white">OAUTH</span>
+                              )}
+                              {choice.isTokenFlow && (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-500 text-white">CLI TOKEN</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{choice.desc}</p>
+                          </div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 transition-colors ${authAddChoice === choice.id ? 'border-blue-500 bg-blue-500' : 'border-slate-300 dark:border-slate-600'}`} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Credentials input / OAuth guide / No key required */}
+                {currentAuthChoice.oauthFlow ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-700/60 dark:bg-emerald-950/20 px-4 py-3 space-y-1">
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{t('settings.auth.oauthFlow')}</p>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t('settings.auth.oauthGuide')}</p>
+                  </div>
+                ) : !currentAuthChoice.reqKey ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40 px-4 py-3 space-y-1">
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{t('settings.auth.noKeyRequired')}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{t('settings.auth.localServiceGuide')}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px]">
+                        {currentAuthProviderGroup.choices.length > 1 ? '3' : '2'}
+                      </span>
+                      {t('runtime.auth.credentials')}
+                    </div>
+                    <div className="flex items-center justify-between mb-1">
+                      {currentAuthChoice.link ? (
+                        <a
+                          href={currentAuthChoice.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 font-black uppercase tracking-tighter ml-auto"
+                        >
+                          {t('runtime.auth.getApiKey')}
+                        </a>
+                      ) : <span />}
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <Key size={14} />
+                      </div>
+                      <input
+                        type="password"
+                        value={authAddSecret}
+                        onChange={(e) => setAuthAddSecret(e.target.value)}
+                        placeholder={currentAuthChoice.placeholder || t('runtime.auth.inputKey')}
+                        className="w-full pl-9 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-black/40 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors disabled:opacity-50"
+                      />
+                    </div>
+                    {currentAuthChoice.helpText && (
+                      <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50/50 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/60">
+                        <div className="mt-0.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] text-white font-bold">i</span>
+                        </div>
+                        <p className="text-[11px] font-medium text-blue-700 dark:text-blue-300 leading-relaxed">{currentAuthChoice.helpText}</p>
+                      </div>
+                    )}
+
+                    {/* Token CLI command executor (shown only during isTokenFlow) */}
+                    {currentAuthChoice.isTokenFlow && (
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('runtime.auth.tokenCmdLabel')}</div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={authAddTokenCommand}
+                            onChange={(e) => setAuthAddTokenCommand(e.target.value)}
+                            placeholder="claude setup-token"
+                            disabled={authAddTokenRunning}
+                            className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-black/40 px-3 py-2 text-xs font-mono text-slate-700 dark:text-slate-300 outline-none focus:border-blue-400 transition-colors disabled:opacity-50"
+                          />
+                          <button
+                            type="button"
+                            onClick={onHandleRunAuthTokenCommand}
+                            disabled={authAddTokenRunning}
+                            className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 transition-all flex items-center gap-1.5"
+                          >
+                            {authAddTokenRunning ? (
+                              <><Loader2 size={11} className="animate-spin" /> {t('common.labels.executing')}</>
+                            ) : t('common.labels.execute')}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                          {t('runtime.auth.tokenCmdHelp')}
+                        </p>
+                        {authAddTokenError && (
+                          <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">{authAddTokenError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  onClick={onHandleAddAuthProfile}
+                  disabled={authAdding}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-colors disabled:opacity-60"
+                >
+                  <Plus size={16} />
+                  {authAdding ? t('common.labels.executing') : t('runtime.auth.addAuth')}
+                </button>
+
+
+              </div>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 gap-5">
             {/* Model Selection */}
@@ -494,8 +855,108 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           )}
         </div>
 
-        {/* Telegram pairing management（自包含） */}
-        <TelegramPairingSection />
+        {/* Telegram pairing management: always displayed, independent of channel selection */}
+        <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  {t('runtime.telegram.management')}
+                </div>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  {t('runtime.telegram.pairingLabel')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={onHandleClearTelegramPairingRequests}
+                disabled={telegramPairingClearing || telegramPairingLoading || telegramPairingRequests.length === 0}
+                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {telegramPairingClearing ? t('common.labels.executing') : t('runtime.telegram.clearPairing')}
+              </button>
+            </div>
+
+            {telegramPairingError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/60 dark:bg-red-950/30 dark:text-red-300">
+                {telegramPairingError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('monitor.telegramPairing.title')}</div>
+                {telegramPairingLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <Loader2 size={14} className="animate-spin" />
+                    {t('runtime.telegram.pairingLoading')}
+                  </div>
+                ) : telegramPairingRequests.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    {t('runtime.telegram.noPairing')}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {telegramPairingRequests.map((request) => (
+                      <div
+                        key={request.id || request.code}
+                        className="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-700 dark:bg-slate-900/50"
+                      >
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{request.id || 'unknown-id'}</div>
+                        <div className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">Code: {request.code || '-'}</div>
+                        {request.meta?.accountId && (
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">User ID: {request.meta.accountId}</div>
+                        )}
+                        {(request.meta?.username || request.meta?.firstName) && (
+                          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                            {[request.meta.firstName, request.meta.lastName].filter(Boolean).join(' ')}
+                            {request.meta.username && ` (@${request.meta.username})`}
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onHandleApproveTelegramPairing(request)}
+                            disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-60"
+                          >
+                            {telegramPairingApprovingCode === request.code ? t('runtime.telegram.approving') : t('controlCenter.actions.approve')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onHandleRejectTelegramPairing(request)}
+                            disabled={telegramPairingApprovingCode === request.code || telegramPairingRejectingCode === request.code}
+                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-rose-500 disabled:opacity-60"
+                          >
+                            {telegramPairingRejectingCode === request.code ? t('runtime.telegram.rejecting') : t('controlCenter.actions.reject')}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('runtime.telegram.authorizedUsers')}</div>
+                {telegramAuthorizedUsers.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    {t('runtime.telegram.noAuthorizedUsers')}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {telegramAuthorizedUsers.map((user: TelegramAuthorizedUser) => (
+                      <span
+                        key={String(user?.id || '')}
+                        className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+                      >
+                        {String(user?.id || '')}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
       </div>
 
       {/* Save Button */}

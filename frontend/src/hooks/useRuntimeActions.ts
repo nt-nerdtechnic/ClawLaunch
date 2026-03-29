@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { execInTerminal } from '../utils/terminal';
-import type { TelegramPairingRequest } from './useTelegramPairing';
 import type { Config } from '../store';
 
 type LogSource = 'system' | 'stderr' | 'stdout';
 
 type TFn = (key: string, params?: Record<string, unknown>) => string;
-
-type ProviderChoice = { id: string; reqKey: boolean; oauthFlow?: boolean };
-type ProviderGroup = { id: string; choices: ProviderChoice[] };
 
 interface UseRuntimeActionsParams {
   config: Config;
@@ -19,27 +15,10 @@ interface UseRuntimeActionsParams {
   effectiveRuntimeModel: string;
   effectiveRuntimeBotToken: string;
   effectiveRuntimeGatewayPort: string;
-  authAddProvider: string;
-  authAddChoice: string;
-  authAddSecret: string;
-  authAddTokenCommand: string;
-  SETTINGS_PROVIDER_GROUPS: ProviderGroup[];
   shellQuote: (value: string) => string;
   buildOpenClawEnvPrefix: (cfg?: Partial<Config>) => string;
   isModelAuthorizedByProvider: (modelRef: string) => boolean;
-  loadAuthProfiles: () => Promise<void>;
-  loadTelegramPairingRequests: () => Promise<void>;
   setRuntimeProfile: (profile: Record<string, unknown> | null) => void;
-  setAuthRemovingId: (id: string) => void;
-  setAuthAddError: (msg: string) => void;
-  setAuthAdding: (v: boolean) => void;
-  setAuthAddSecret: (s: string) => void;
-  setAuthAddTokenError: (msg: string) => void;
-  setAuthAddTokenRunning: (v: boolean) => void;
-  setTelegramPairingApprovingCode: (code: string) => void;
-  setTelegramPairingRejectingCode: (code: string) => void;
-  setTelegramPairingClearing: (v: boolean) => void;
-  setTelegramPairingError: (msg: string) => void;
   addLog: (msg: string, source?: LogSource) => void;
   t: TFn;
 }
@@ -54,27 +33,10 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     effectiveRuntimeModel,
     effectiveRuntimeBotToken,
     effectiveRuntimeGatewayPort,
-    authAddProvider,
-    authAddChoice,
-    authAddSecret,
-    authAddTokenCommand,
-    SETTINGS_PROVIDER_GROUPS,
     shellQuote,
     buildOpenClawEnvPrefix,
     isModelAuthorizedByProvider,
-    loadAuthProfiles,
-    loadTelegramPairingRequests,
     setRuntimeProfile,
-    setAuthRemovingId,
-    setAuthAddError,
-    setAuthAdding,
-    setAuthAddSecret,
-    setAuthAddTokenError,
-    setAuthAddTokenRunning,
-    setTelegramPairingApprovingCode,
-    setTelegramPairingRejectingCode,
-    setTelegramPairingClearing,
-    setTelegramPairingError,
     addLog,
     t,
   } = params;
@@ -243,33 +205,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     }
   };
 
-  const handleLaunchFullOnboarding = async () => {
-    if (!config.corePath?.trim()) {
-      setAuthAddError(t('auth.errors.missingCorePath'));
-      return;
-    }
-    if (!resolvedConfigDir) {
-      setAuthAddError(t('auth.errors.missingConfigPath'));
-      return;
-    }
-
-    try {
-      const envPrefix = buildOpenClawEnvPrefix();
-      const cmd = `${envPrefix}pnpm openclaw onboard`;
-      await execInTerminal(cmd, {
-        title: t('runtime.actions.onboardTitle'),
-        holdOpen: true,
-        cwd: config.corePath,
-      });
-      addLog(t('auth.onboardLaunched'), 'system');
-      await loadAuthProfiles();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : t('auth.errors.onboardFailed');
-      setAuthAddError(msg);
-      addLog(msg, 'stderr');
-    }
-  };
-
   const handleOpenClawDoctor = async () => {
     if (!config.corePath?.trim()) {
       addLog(t('runtime.actions.doctorMissingCore'), 'stderr');
@@ -308,197 +243,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     }
   };
 
-  const handleRemoveAuthProfile = async (profileId: string) => {
-    if (!window.electronAPI || !resolvedConfigDir || !profileId) return;
-    setAuthRemovingId(profileId);
-    setAuthAddError('');
-    try {
-      const res = await window.electronAPI.exec(`auth:remove-profile ${JSON.stringify({ configPath: resolvedConfigDir, profileId })}`);
-      if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || t('auth.errors.removeFailed'));
-      }
-      addLog(t('runtime.actions.authRemoved', { id: profileId }), 'system');
-      await loadAuthProfiles();
-      const probeRes = await window.electronAPI.exec(`config:probe ${shellQuote(resolvedConfigDir)}`);
-      if (probeRes.code === 0 && probeRes.stdout) {
-        setRuntimeProfile(JSON.parse(probeRes.stdout));
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : t('auth.errors.removeFailed');
-      setAuthAddError(msg);
-      addLog(msg, 'stderr');
-    } finally {
-      setAuthRemovingId('');
-    }
-  };
-
-  const handleAddAuthProfile = async () => {
-    if (!window.electronAPI) return;
-    setAuthAddError('');
-
-    if (!resolvedConfigDir) {
-      setAuthAddError(t('auth.errors.addAuthMissingConfig'));
-      return;
-    }
-    if (!config.corePath?.trim()) {
-      setAuthAddError(t('auth.errors.addAuthMissingCore'));
-      return;
-    }
-
-    const curGroup = SETTINGS_PROVIDER_GROUPS.find((g) => g.id === authAddProvider);
-    const curChoice = curGroup?.choices.find((c) => c.id === authAddChoice);
-    if (curChoice?.oauthFlow) {
-      await handleLaunchFullOnboarding();
-      return;
-    }
-
-    const requiresSecret = curChoice?.reqKey ?? !['ollama', 'vllm'].includes(authAddChoice);
-    if (requiresSecret && !authAddSecret.trim()) {
-      setAuthAddError(t('auth.errors.credentialRequired'));
-      return;
-    }
-
-    setAuthAdding(true);
-    try {
-      const payload = {
-        corePath: config.corePath,
-        configPath: resolvedConfigDir,
-        workspacePath: config.workspacePath,
-        authChoice: authAddChoice,
-        secret: authAddSecret,
-      };
-      const res = await window.electronAPI.exec(`auth:add-profile ${JSON.stringify(payload)}`);
-      if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || t('auth.errors.addFailed'));
-      }
-      addLog(t('runtime.actions.authAdded', { choice: authAddChoice }), 'system');
-      setAuthAddSecret('');
-      await loadAuthProfiles();
-      const probeRes = await window.electronAPI.exec(`config:probe ${shellQuote(resolvedConfigDir)}`);
-      if (probeRes.code === 0 && probeRes.stdout) {
-        setRuntimeProfile(JSON.parse(probeRes.stdout));
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : t('auth.errors.addFailed');
-      setAuthAddError(msg);
-      addLog(msg, 'stderr');
-    } finally {
-      setAuthAdding(false);
-    }
-  };
-
-  const handleRunAuthTokenCommand = async () => {
-    const command = (authAddTokenCommand || '').trim();
-    if (!command) {
-      setAuthAddTokenError(t('auth.errors.emptyCommand'));
-      return;
-    }
-    setAuthAddTokenRunning(true);
-    setAuthAddTokenError('');
-    try {
-      const res = await execInTerminal(command, {
-        title: t('runtime.actions.tokenAuthTitle'),
-        holdOpen: true,
-        cwd: config.corePath || undefined,
-      });
-      const code = res.code;
-      if (typeof code === 'number' && code !== 0) {
-        throw new Error(res.stderr || t('auth.errors.commandExecError'));
-      }
-    } catch (err: unknown) {
-      setAuthAddTokenError(err instanceof Error ? err.message : t('auth.errors.commandExecError'));
-    } finally {
-      setAuthAddTokenRunning(false);
-    }
-  };
-
-  const approveTelegramPairing = async (request: TelegramPairingRequest) => {
-    if (!window.electronAPI) {
-      addLog(t('logs.commFailed', { msg: 'Electron API not available' }), 'stderr');
-      return;
-    }
-    const corePath = String(config.corePath || '').trim();
-    if (!corePath) {
-      setTelegramPairingError(t('monitor.telegramPairing.missingCorePath'));
-      return;
-    }
-
-    setTelegramPairingApprovingCode(request.code);
-    setTelegramPairingError('');
-    try {
-      const envPrefix = buildOpenClawEnvPrefix();
-      const cmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw pairing approve telegram ${shellQuote(request.code)}`;
-      const res = await window.electronAPI.exec(cmd);
-      const code = res.code ?? res.exitCode;
-      if (code !== 0) {
-        throw new Error(res.stderr || res.stdout || `exit ${code}`);
-      }
-      addLog(t('monitor.telegramPairing.approvedLog', { id: request.id }), 'system');
-      await loadTelegramPairingRequests();
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : t('monitor.telegramPairing.approveFailed');
-      setTelegramPairingError(message);
-      addLog(message, 'stderr');
-    } finally {
-      setTelegramPairingApprovingCode('');
-    }
-  };
-
-  const rejectTelegramPairing = async (request: TelegramPairingRequest) => {
-
-    if (!window.electronAPI || !resolvedConfigDir) {
-      setTelegramPairingError(t('monitor.telegramPairing.missingConfig'));
-      return;
-    }
-
-    setTelegramPairingRejectingCode(request.code);
-    setTelegramPairingError('');
-    try {
-      const pairingFile = `${resolvedConfigDir}/credentials/telegram-pairing.json`;
-      const cmd = `PAIRING_FILE=${shellQuote(pairingFile)} TARGET_CODE=${shellQuote(request.code)} node - <<'NODE'\nconst fs = require('fs');\nconst file = process.env.PAIRING_FILE;\nconst targetCode = process.env.TARGET_CODE;\nlet data = { version: 1, requests: [] };\nif (fs.existsSync(file)) {\n  data = JSON.parse(fs.readFileSync(file, 'utf8'));\n}\nconst requests = Array.isArray(data.requests) ? data.requests : [];\ndata.requests = requests.filter((entry) => String(entry?.code || '') !== String(targetCode || ''));\nfs.writeFileSync(file, JSON.stringify(data, null, 2) + '\\n', 'utf8');\nNODE`;
-      const res = await window.electronAPI.exec(cmd);
-      const code = res.code ?? res.exitCode;
-      if (code !== 0) {
-        throw new Error(res.stderr || res.stdout || `exit ${code}`);
-      }
-      addLog(t('monitor.telegramPairing.rejectedLog', { id: request.id }), 'system');
-      await loadTelegramPairingRequests();
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : t('monitor.telegramPairing.rejectFailed');
-      setTelegramPairingError(message);
-      addLog(message, 'stderr');
-    } finally {
-      setTelegramPairingRejectingCode('');
-    }
-  };
-
-  const clearTelegramPairingRequests = async () => {
-    if (!window.electronAPI || !resolvedConfigDir) {
-      setTelegramPairingError(t('monitor.telegramPairing.missingConfig'));
-      return;
-    }
-
-    setTelegramPairingClearing(true);
-    setTelegramPairingError('');
-    try {
-      const pairingFile = `${resolvedConfigDir}/credentials/telegram-pairing.json`;
-      const cmd = `PAIRING_FILE=${shellQuote(pairingFile)} node - <<'NODE'\nconst fs = require('fs');\nconst file = process.env.PAIRING_FILE;\nlet data = { version: 1, requests: [] };\nif (fs.existsSync(file)) {\n  data = JSON.parse(fs.readFileSync(file, 'utf8'));\n}\ndata.requests = [];\nfs.writeFileSync(file, JSON.stringify(data, null, 2) + '\\n', 'utf8');\nNODE`;
-      const res = await window.electronAPI.exec(cmd);
-      const code = res.code ?? res.exitCode;
-      if (code !== 0) {
-        throw new Error(res.stderr || res.stdout || `exit ${code}`);
-      }
-      addLog(t('monitor.telegramPairing.clearedLog'), 'system');
-      await loadTelegramPairingRequests();
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : t('monitor.telegramPairing.clearFailed');
-      setTelegramPairingError(message);
-      addLog(message, 'stderr');
-    } finally {
-      setTelegramPairingClearing(false);
-    }
-  };
-
   const handleSaveChannelToken = async (channelId: string, token: string) => {
     if (!window.electronAPI) return;
     const corePath = String(config.corePath || '').trim();
@@ -533,15 +277,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     handleSaveConfig,
     launcherSaveState,
     runtimeSaveState,
-    handleRemoveAuthProfile,
-    handleAddAuthProfile,
-    handleLaunchFullOnboarding,
-    handleRunAuthTokenCommand,
     handleOpenClawDoctor,
     handleSecurityCheck,
-    approveTelegramPairing,
-    rejectTelegramPairing,
-    clearTelegramPairingRequests,
     handleSaveChannelToken,
   };
 }

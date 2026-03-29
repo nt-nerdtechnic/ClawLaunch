@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useStore } from '../store';
 import type { DetectedConfig } from '../store';
 
 /**
@@ -14,7 +15,8 @@ export function useRuntimeConfig(
   fallbackWorkspacePath?: string
 ) {
   const { t } = useTranslation();
-  const [runtimeProfile, setRuntimeProfile] = useState<Record<string, unknown> | null>(null);
+  const runtimeProfile = useStore((s) => s.runtimeProfile);
+  const setRuntimeProfile = useStore((s) => s.setRuntimeProfile);
   const [runtimeProfileError, setRuntimeProfileError] = useState('');
   const [runtimeDraftModel, setRuntimeDraftModel] = useState('');
   const [runtimeDraftBotToken, setRuntimeDraftBotToken] = useState('');

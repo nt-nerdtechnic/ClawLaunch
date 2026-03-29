@@ -195,12 +195,15 @@ interface AppState {
   workspaceSkills: SkillItem[];
   detectingPaths: boolean;
   pathsConfirmed: boolean;
+  runtimeProfile: Record<string, unknown> | null;
+  setRuntimeProfile: (profile: Record<string, unknown> | null) => void;
   setConfig: (patch: Partial<Config>) => void;
   setDetectedConfig: (config: DetectedConfig | null) => void;
   setCoreSkills: (skills: SkillItem[]) => void;
   setWorkspaceSkills: (skills: SkillItem[]) => void;
   setDetectingPaths: (status: boolean) => void;
   setPathsConfirmed: (status: boolean) => void;
+  setRuntimeProfile: (profile: Record<string, unknown> | null) => void;
   toggleSkill: (skillId: string) => void;
   usage: RuntimeUsageUpdate;
   setUsage: (data: RuntimeUsageUpdate) => void;
@@ -287,6 +290,8 @@ export const useStore = create<AppState>((set) => ({
   setDetectedConfig: (config) => set({ detectedConfig: config }),
   setDetectingPaths: (status) => set({ detectingPaths: status }),
   setPathsConfirmed: (status) => set({ pathsConfirmed: status }),
+  runtimeProfile: null,
+  setRuntimeProfile: (profile) => set({ runtimeProfile: profile }),
   toggleSkill: (skillId) => {
     // Skills are now handled by filesystem actions, not by this config toggle.
     console.log(`Toggle skill requested for ${skillId}, but enabledSkills has been removed from config.`);

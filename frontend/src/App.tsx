@@ -11,10 +11,9 @@ import UpdateBanner from './components/UpdateBanner';
 import { useStore } from './store';
 import type { Config } from './store';
 import { ConfigService, ModelService } from './services/configService';
-import { PROVIDER_ALIAS_MAP as PROVIDER_ALIAS_MAP_CENTRAL, getProviderGroups } from './constants/providers';
+import { PROVIDER_ALIAS_MAP as PROVIDER_ALIAS_MAP_CENTRAL } from './constants/providers';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
 import { useAuthProfiles } from './hooks/useAuthProfiles';
-import { useTelegramPairing } from './hooks/useTelegramPairing';
 import { useGatewayControl } from './hooks/useGatewayControl';
 import { useGatewayActions } from './hooks/useGatewayActions';
 import { useRuntimeActions } from './hooks/useRuntimeActions';
@@ -134,45 +133,7 @@ function App() {
   const effectiveRuntimeModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
   const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
   const effectiveRuntimeGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
-  const {
-    authProfiles,
-    authProfileSummary,
-    authProfilesLoading,
-    authProfilesError,
-    authRemovingId,
-    setAuthRemovingId,
-    authAdding,
-    setAuthAdding,
-    authAddProvider,
-    setAuthAddProvider,
-    authAddChoice,
-    setAuthAddChoice,
-    authAddSecret,
-    setAuthAddSecret,
-    authAddError,
-    setAuthAddError,
-    authAddTokenCommand,
-    setAuthAddTokenCommand,
-    authAddTokenRunning,
-    setAuthAddTokenRunning,
-    authAddTokenError,
-    setAuthAddTokenError,
-    loadAuthProfiles,
-  } = useAuthProfiles(resolvedConfigDir, activeTab);
-  const {
-    telegramPairingRequests,
-    telegramAuthorizedUsers,
-    telegramPairingLoading,
-    telegramPairingApprovingCode,
-    setTelegramPairingApprovingCode,
-    telegramPairingRejectingCode,
-    setTelegramPairingRejectingCode,
-    telegramPairingClearing,
-    setTelegramPairingClearing,
-    telegramPairingError,
-    setTelegramPairingError,
-    loadTelegramPairingRequests,
-  } = useTelegramPairing(resolvedConfigDir, activeTab, config, addLog);
+  const { authProfiles } = useAuthProfiles(resolvedConfigDir, activeTab);
 
   const PROVIDER_MODEL_CATALOGUE: Record<string, { label: string; models: string[] }> = {
     anthropic: { label: 'Anthropic (Claude)', models: ['claude-3-7-sonnet-latest', 'anthropic/claude-opus-4', 'anthropic/claude-sonnet-4-5', 'anthropic/claude-3-5-haiku-latest'] },
@@ -187,7 +148,6 @@ function App() {
   };
 
   const PROVIDER_ALIAS_MAP = PROVIDER_ALIAS_MAP_CENTRAL;
-  const SETTINGS_PROVIDER_GROUPS = getProviderGroups(t);
 
   const getProviderDisplayLabel = (providerRef: string, fallbackLabel?: string) => {
     const normalized = String(providerRef || '').trim().toLowerCase();
@@ -357,14 +317,8 @@ function App() {
     handleSaveConfig,
     launcherSaveState,
     runtimeSaveState,
-    handleRemoveAuthProfile,
-    handleAddAuthProfile,
-    handleRunAuthTokenCommand,
     handleOpenClawDoctor,
     handleSecurityCheck,
-    approveTelegramPairing,
-    rejectTelegramPairing,
-    clearTelegramPairingRequests,
     handleSaveChannelToken,
   } = useRuntimeActions({
     config,
@@ -375,27 +329,10 @@ function App() {
     effectiveRuntimeModel,
     effectiveRuntimeBotToken,
     effectiveRuntimeGatewayPort,
-    authAddProvider,
-    authAddChoice,
-    authAddSecret,
-    authAddTokenCommand,
-    SETTINGS_PROVIDER_GROUPS,
     shellQuote,
     buildOpenClawEnvPrefix,
     isModelAuthorizedByProvider,
-    loadAuthProfiles,
-    loadTelegramPairingRequests,
     setRuntimeProfile,
-    setAuthRemovingId,
-    setAuthAddError,
-    setAuthAdding,
-    setAuthAddSecret,
-    setAuthAddTokenError,
-    setAuthAddTokenRunning,
-    setTelegramPairingApprovingCode,
-    setTelegramPairingRejectingCode,
-    setTelegramPairingClearing,
-    setTelegramPairingError,
     addLog,
     t,
   });
@@ -864,9 +801,6 @@ function App() {
 
           {activeTab === 'runtimeSettings' && (
             <RuntimeSettingsPage
-              config={config}
-              setConfig={setConfig}
-              runtimeProfile={runtimeProfile}
               runtimeDraftModel={runtimeDraftModel}
               setRuntimeDraftModel={setRuntimeDraftModel}
               runtimeDraftBotToken={runtimeDraftBotToken}
@@ -880,41 +814,9 @@ function App() {
               getProviderDisplayLabel={getProviderDisplayLabel}
               authorizedProviderBadges={authorizedProviderBadges}
               modelOptionGroups={modelOptionGroups}
-              effectiveAuthorizedProviders={effectiveAuthorizedProviders}
-              isModelAuthorizedByProvider={isModelAuthorizedByProvider}
-              authProfiles={authProfiles}
-              authProfileSummary={authProfileSummary}
-              authProfilesLoading={authProfilesLoading}
-              authProfilesError={authProfilesError}
-              authRemovingId={authRemovingId}
-              onHandleRemoveAuthProfile={handleRemoveAuthProfile}
-              authAdding={authAdding}
-              authAddProvider={authAddProvider}
-              setAuthAddProvider={setAuthAddProvider}
-              authAddChoice={authAddChoice}
-              setAuthAddChoice={setAuthAddChoice}
-              authAddSecret={authAddSecret}
-              setAuthAddSecret={setAuthAddSecret}
-              authAddError={authAddError}
-              authAddTokenCommand={authAddTokenCommand}
-              setAuthAddTokenCommand={setAuthAddTokenCommand}
-              authAddTokenRunning={authAddTokenRunning}
-              authAddTokenError={authAddTokenError}
-              onHandleAddAuthProfile={handleAddAuthProfile}
-              onHandleRunAuthTokenCommand={handleRunAuthTokenCommand}
               onHandleOpenClawDoctor={handleOpenClawDoctor}
               onHandleSecurityCheck={handleSecurityCheck}
               runtimeProfileError={runtimeProfileError}
-              telegramPairingRequests={telegramPairingRequests}
-              telegramAuthorizedUsers={telegramAuthorizedUsers}
-              telegramPairingLoading={telegramPairingLoading}
-              telegramPairingApprovingCode={telegramPairingApprovingCode}
-              telegramPairingRejectingCode={telegramPairingRejectingCode}
-              telegramPairingClearing={telegramPairingClearing}
-              telegramPairingError={telegramPairingError}
-              onHandleApproveTelegramPairing={approveTelegramPairing}
-              onHandleRejectTelegramPairing={rejectTelegramPairing}
-              onHandleClearTelegramPairingRequests={clearTelegramPairingRequests}
               onSaveChannelToken={handleSaveChannelToken}
               onSave={handleSaveConfig}
               saveState={runtimeSaveState}
