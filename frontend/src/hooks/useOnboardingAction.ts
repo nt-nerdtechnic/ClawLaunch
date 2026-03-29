@@ -246,18 +246,29 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   };
 
   const resolveRuntimePaths = async () => {
+    addLocalLog(
+      `[resolveRuntimePaths] START userType="${userType}" config.corePath="${config.corePath}" config.configPath="${config.configPath}" config.workspacePath="${config.workspacePath}"`,
+      'system',
+    );
     const runtimePaths = {
       corePath: (config.corePath || '').trim(),
       configPath: (config.configPath || '').trim(),
       workspacePath: (config.workspacePath || '').trim(),
     };
     const hasAnyInlinePath = Boolean(runtimePaths.corePath || runtimePaths.configPath || runtimePaths.workspacePath);
-    const allowPersistedRecovery = userType === 'existing' || !hasAnyInlinePath;
+    // For 'new' installations, Zustand (populated by SetupStepInitialize) is the sole
+    // source of truth. Allowing file fallback here would silently restore paths from a
+    // previous installation and override whatever the user just selected in step 3.
+    const allowPersistedRecovery = userType === 'existing';
+    addLocalLog(
+      `[resolveRuntimePaths] hasAnyInlinePath=${hasAnyInlinePath} allowPersistedRecovery=${allowPersistedRecovery} (userType=${userType})`,
+      'system',
+    );
 
-    const fillMissing = (incoming: { corePath?: string; configPath?: string; workspacePath?: string }) => {
-      if (!runtimePaths.corePath && incoming.corePath) runtimePaths.corePath = String(incoming.corePath).trim();
-      if (!runtimePaths.configPath && incoming.configPath) runtimePaths.configPath = String(incoming.configPath).trim();
-      if (!runtimePaths.workspacePath && incoming.workspacePath) runtimePaths.workspacePath = String(incoming.workspacePath).trim();
+    const fillMissing = (incoming: { corePath?: string; configPath?: string; workspacePath?: string }, src: string) => {
+      if (!runtimePaths.corePath && incoming.corePath) { runtimePaths.corePath = String(incoming.corePath).trim(); addLocalLog(`[resolveRuntimePaths] corePath filled from ${src}: "${runtimePaths.corePath}"`, 'system'); }
+      if (!runtimePaths.configPath && incoming.configPath) { runtimePaths.configPath = String(incoming.configPath).trim(); addLocalLog(`[resolveRuntimePaths] configPath filled from ${src}: "${runtimePaths.configPath}"`, 'system'); }
+      if (!runtimePaths.workspacePath && incoming.workspacePath) { runtimePaths.workspacePath = String(incoming.workspacePath).trim(); addLocalLog(`[resolveRuntimePaths] workspacePath filled from ${src}: "${runtimePaths.workspacePath}"`, 'system'); }
     };
 
     if (allowPersistedRecovery && (!runtimePaths.corePath || !runtimePaths.configPath || !runtimePaths.workspacePath)) {
@@ -265,7 +276,8 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       if (isCommandSuccess(readRes) && readRes.stdout) {
         try {
           const saved = JSON.parse(readRes.stdout);
-          fillMissing(saved || {});
+          addLocalLog(`[resolveRuntimePaths] config:read returned corePath="${saved.corePath}" workspacePath="${saved.workspacePath}"`, 'system');
+          fillMissing(saved || {}, 'config:read');
         } catch {
           // Ignore malformed saved config.
         }
@@ -286,7 +298,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
             corePath: detected.corePath,
             configPath: detected.configPath,
             workspacePath: detected.workspacePath,
-          });
+          }, 'detect:paths');
         } catch {
           // Ignore malformed detect output.
         }
@@ -476,6 +488,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       const configPath = runtimePaths.configPath;
       const workspacePath = runtimePaths.workspacePath;
       if (!corePath) throw new Error(t('onboarding.errors.corePathMissing'));
+      if (userType === 'new' && (!configPath || !workspacePath)) {
+        throw new Error(
+          `Paths not initialized — configPath="${configPath}", workspacePath="${workspacePath}". Please go back to the Initialize step and complete it first.`,
+        );
+      }
 
       const selectedAuthChoice = String(config.authChoice || '').trim();
       if (step === 'model' && userType !== 'existing' && !SUPPORTED_AUTH_CHOICES.has(selectedAuthChoice)) {

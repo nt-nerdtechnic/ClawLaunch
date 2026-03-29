@@ -84,7 +84,7 @@ function App() {
   const ONBOARDING_FINISHED_KEY = 'onboarding_finished';
   const ONBOARDING_FORCE_RESET_KEY = 'onboarding_force_reset';
 
-  const { running, setRunning, logs, addLog, envStatus, config, setConfig, detectedConfig, snapshot, auditTimeline, dailyDigest, setSnapshot, setSnapshotHistory, setEventQueue, setAckedEvents, setAuditTimeline, setDailyDigest, setRawSnapshot, setSnapshotSourcePath, theme, language } = useStore();
+  const { running, setRunning, logs, addLog, envStatus, config, setConfig, setDetectedConfig, detectedConfig, snapshot, auditTimeline, dailyDigest, setSnapshot, setSnapshotHistory, setEventQueue, setAckedEvents, setAuditTimeline, setDailyDigest, setRawSnapshot, setSnapshotSourcePath, theme, language } = useStore();
   const [viewMode, setViewMode] = useState<'mini' | 'expanded'>('expanded');
   const [activeTab, setActiveTab] = useState('monitor'); // Default to monitor if onboarding finished
   const [onboardingFinished, setOnboardingFinished] = useState(
@@ -498,17 +498,15 @@ function App() {
     }
     localStorage.removeItem(ONBOARDING_FINISHED_KEY);
     localStorage.setItem(ONBOARDING_FORCE_RESET_KEY, 'true');
-    // Clear all path-related config from the store
+    // Clear all path-related config and detected paths from the store
     setConfig({ corePath: '', configPath: '', workspacePath: '' });
+    setDetectedConfig(null);
     setOnboardingFinished(false);
     setActiveTab('onboarding');
     setShowLogoutConfirm(false);
-    // Clear all paths in config.json and mark onboarding as not finished
+    // Delete clawlaunch.json so the app starts completely fresh on next launch
     if (window.electronAPI) {
-      const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, corePath: _c, configPath: _cp, workspacePath: _w, ...launcherPayload } = config;
-      window.electronAPI.exec(
-        `config:write ${JSON.stringify({ ...launcherPayload, corePath: '', configPath: '', workspacePath: '', onboardingFinished: false })}`
-      ).catch(() => {});
+      window.electronAPI.exec('config:reset').catch(() => {});
     }
   };
 

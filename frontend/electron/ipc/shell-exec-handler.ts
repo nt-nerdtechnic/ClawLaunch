@@ -951,6 +951,16 @@ export function registerShellExecHandler(ctx: ShellExecContext): void {
     }
   }
 
+  if (fullCommand === 'config:reset') {
+    try {
+      const configFilePath = path.join(app.getPath('home'), '.clawlaunch', 'clawlaunch.json');
+      await fs.unlink(configFilePath).catch(() => {});
+      return { code: 0, stdout: 'Config file deleted', stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: e.message, exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('config:migrate-openclaw')) {
     try {
       const payloadStr = fullCommand.replace('config:migrate-openclaw ', '').trim();
