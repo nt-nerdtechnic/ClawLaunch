@@ -483,13 +483,13 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   }, [requestMap]);
 
   const panelBase = compact
-    ? 'w-[min(calc(100vw-0.75rem),320px)] h-[min(78vh,520px)] sm:w-[320px]'
+    ? 'w-[calc(100vw-1rem)] h-[calc(100vh-6.75rem)]'
     : 'w-[min(calc(100vw-1rem),430px)] h-[min(82vh,640px)] sm:w-[390px] md:w-[420px]';
 
-  const panelHeight = compact ? 'h-[min(78vh,520px)]' : 'h-[min(82vh,640px)]';
+  const panelHeight = compact ? 'h-[calc(100vh-6.75rem)]' : 'h-[min(82vh,640px)]';
 
   return (
-    <div className={`fixed z-[90] flex items-end gap-2 ${compact ? 'bottom-2 right-2 sm:bottom-3 sm:right-3' : 'bottom-3 right-3 sm:bottom-5 sm:right-5'}`}>
+    <div className={`fixed z-[90] flex items-end gap-2 ${compact ? 'bottom-[3.25rem] right-2 sm:bottom-[3.5rem] sm:right-3' : 'bottom-3 right-3 sm:bottom-5 sm:right-5'}`}>
 
       {/* ── Session history drawer — slides out to the LEFT ── */}
       {chat.isOpen && (

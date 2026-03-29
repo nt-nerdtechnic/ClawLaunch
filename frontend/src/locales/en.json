@@ -3,7 +3,8 @@
     "latticeStatus": "Lattice Status",
     "tokenBudget": "Tokens Used",
     "trend7d": "7D Trend",
-    "taskBoard": "Task Board",
+    "home": "Home",
+    "taskBoard": "Tasks",
     "monitor": "Monitor",
     "expand": "Expand"
   },

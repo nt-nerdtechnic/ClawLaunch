@@ -31,7 +31,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
     <div
       className={`fixed z-[88] flex flex-col items-end gap-2 ${
         compact
-          ? 'bottom-[3.5rem] right-2 sm:bottom-[4rem] sm:right-3'
+          ? 'bottom-[6.25rem] right-2 sm:bottom-[6.75rem] sm:right-3'
           : 'bottom-[4.5rem] right-3 sm:bottom-[5.5rem] sm:right-5'
       }`}
     >
@@ -39,7 +39,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
       {isOpen && (
         <div
           className={`mb-2 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur-sm transition-all duration-300 ease-out dark:border-slate-700 dark:bg-slate-950/95 ${
-            compact ? 'w-[390px] h-[300px]' : 'w-[600px] h-[440px]'
+            compact ? 'w-[calc(100vw-1rem)] h-[calc(100vh-9.75rem)]' : 'w-[600px] h-[440px]'
           }`}
         >
           {/* Header */}

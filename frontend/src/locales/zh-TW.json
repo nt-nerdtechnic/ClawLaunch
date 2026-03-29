@@ -3,8 +3,9 @@
     "latticeStatus": "Lattice 狀態",
     "tokenBudget": "Token 用量",
     "trend7d": "7日趨勢",
-    "taskBoard": "任務看板",
-    "monitor": "進程監控",
+    "home": "首頁",
+    "taskBoard": "任務",
+    "monitor": "監控",
     "expand": "展開"
   },
   "common": {
