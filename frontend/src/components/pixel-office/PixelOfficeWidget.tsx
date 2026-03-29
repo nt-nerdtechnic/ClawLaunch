@@ -31,7 +31,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
     <div
       className={`fixed z-[88] flex flex-col items-end gap-2 ${
         compact
-          ? 'bottom-[6.25rem] right-2 sm:bottom-[6.75rem] sm:right-3'
+          ? 'bottom-[6.75rem] right-2 sm:bottom-[7.25rem] sm:right-3'
           : 'bottom-[4.5rem] right-3 sm:bottom-[5.5rem] sm:right-5'
       }`}
     >
@@ -82,11 +82,11 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
           isOpen
             ? 'border-indigo-400 text-indigo-600 shadow-indigo-500/20 dark:border-indigo-600 dark:text-indigo-300'
             : 'border-indigo-300/70 text-indigo-500 shadow-indigo-500/10 dark:border-indigo-700 dark:text-indigo-400'
-        } ${compact ? 'h-10 w-10' : 'h-12 w-12 sm:h-14 sm:w-14'}`}
+        } ${compact ? 'h-12 w-12' : 'h-12 w-12 sm:h-14 sm:w-14'}`}
         title={isOpen ? t('pixelOffice.close') : t('pixelOffice.open')}
         aria-label={isOpen ? t('pixelOffice.close') : t('pixelOffice.open')}
       >
-        <Building2 size={compact ? 18 : 22} />
+        <Building2 size={22} />
         {/* Active agent badge */}
         {activeCount > 0 && !isOpen && (
           <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-green-500 px-0.5 text-[8px] font-black text-white">
