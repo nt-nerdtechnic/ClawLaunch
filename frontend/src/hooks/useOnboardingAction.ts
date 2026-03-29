@@ -350,11 +350,69 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     return message || t('onboarding.errors.gatewayStatusCheckFailed');
   };
 
+  const compactCommandOutput = (raw: string, maxLines: number = 5) => {
+    const lines = String(raw || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return '';
+    return shortenText(lines.slice(-maxLines).join(' | '), 500);
+  };
+
+  const logCommandSummary = (
+    label: string,
+    res: { stdout?: string; stderr?: string; code?: number; exitCode?: number },
+    addLocalLog: (text: string, source?: string) => void,
+  ) => {
+    const code = typeof res?.exitCode === 'number' ? res.exitCode : res?.code;
+    const stdoutSummary = compactCommandOutput(res?.stdout || '');
+    const stderrSummary = compactCommandOutput(res?.stderr || '');
+
+    addLocalLog(`[${label}] finished (code=${String(code ?? 'unknown')})`, 'system');
+    if (stdoutSummary) {
+      addLocalLog(`[${label}] stdout: ${stdoutSummary}`, 'system');
+    }
+    if (stderrSummary) {
+      addLocalLog(`[${label}] stderr: ${stderrSummary}`, 'stderr');
+    }
+    if (!stdoutSummary && !stderrSummary) {
+      addLocalLog(`[${label}] no output`, 'system');
+    }
+  };
+
+  const execWithHeartbeat = async (
+    command: string,
+    label: string,
+    addLocalLog: (text: string, source?: string) => void,
+    heartbeatMs: number = 3000,
+  ) => {
+    const startedAt = Date.now();
+    let elapsedSeconds = 0;
+    addLocalLog(`[${label}] started`, 'system');
+    const timerId = window.setInterval(() => {
+      elapsedSeconds += heartbeatMs / 1000;
+      addLocalLog(`[${label}] running... ${elapsedSeconds}s`, 'system');
+    }, heartbeatMs);
+
+    try {
+      return await window.electronAPI.exec(command);
+    } finally {
+      window.clearInterval(timerId);
+      const totalSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+      addLocalLog(`[${label}] done in ${totalSeconds}s`, 'system');
+    }
+  };
+
   const verifyLaunchReadiness = async (corePath: string, envPrefix: string, execCmd: string, addLocalLog: (text: string, source?: string) => void) => {
     addLocalLog(t('onboarding.logs.securityModeEnabled'), 'system');
 
     addLocalLog(t('onboarding.logs.checkingCli'), 'system');
-    const versionRes = await window.electronAPI.exec(`cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`);
+    const versionRes = await execWithHeartbeat(
+      `cd ${shellQuote(corePath)} && ${envPrefix}${execCmd} openclaw --version`,
+      'openclaw --version',
+      addLocalLog,
+    );
+    logCommandSummary('openclaw --version', versionRes, addLocalLog);
     if (!isCommandSuccess(versionRes)) {
       throw new Error(versionRes.stderr || t('onboarding.errors.cliNotStarted'));
     }
@@ -378,7 +436,13 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       }
     }
 
-    const gatewayRes = await window.electronAPI.exec(gatewayStatusCmd);
+    const gatewayRes = await execWithHeartbeat(
+      gatewayStatusCmd,
+      'openclaw gateway status',
+      addLocalLog,
+      2500,
+    );
+    logCommandSummary('openclaw gateway status', gatewayRes, addLocalLog);
     if (!isCommandSuccess(gatewayRes)) {
       const gatewayErr = gatewayRes.stderr || gatewayRes.stdout || '';
       if (/device signature invalid|signature invalid|1008/i.test(gatewayErr)) {
