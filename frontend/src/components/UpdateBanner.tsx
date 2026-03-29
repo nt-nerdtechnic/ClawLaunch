@@ -38,6 +38,11 @@ const UpdateBanner = () => {
         }
         const data = JSON.parse(res.stdout);
         setVersions({ local: data.current, remote: data.latest });
+        // 若使用者已對此版本執行過升級，本次重載後不再重複提示
+        const dismissedVersion = localStorage.getItem('update_dismissed_version');
+        if (!data.upToDate && dismissedVersion === String(data.latest)) {
+          return;
+        }
         setHasUpdate(!data.upToDate);
       } catch (e) {
         console.error("Failed to check version", e);
@@ -54,6 +59,7 @@ const UpdateBanner = () => {
       const res = await window.electronAPI.exec('git pull && pnpm install --no-frozen-lockfile || npm install');
       
       if (res.code === 0) {
+          localStorage.setItem('update_dismissed_version', String(versions.remote));
           setComplete(true);
       } else {
           alert(t('updateBanner.alerts.updateFailed'));
@@ -65,72 +71,76 @@ const UpdateBanner = () => {
     }
   };
 
-  if (complete) {
-    return (
-      <div className="mx-6 mt-4 p-8 bg-emerald-50 dark:bg-emerald-950/20 border-2 border-emerald-200 dark:border-emerald-800 rounded-3xl flex flex-col gap-6 animate-in slide-in-from-top duration-500 shadow-xl shadow-emerald-500/10">
-        <div className="flex items-center justify-between">
+  if (!hasUpdate && !complete) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="relative w-full max-w-lg mx-4 animate-in zoom-in-95 duration-300">
+
+        {/* Success state */}
+        {complete && (
+          <div className="p-8 bg-emerald-50 dark:bg-emerald-950 border-2 border-emerald-200 dark:border-emerald-800 rounded-3xl flex flex-col gap-6 shadow-2xl">
             <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 shadow-inner">
-                    <CheckCircle size={24} />
-                </div>
-                <div>
-                  <h4 className="text-lg font-black text-emerald-900 dark:text-emerald-100">{t('updateBanner.success.title')}</h4>
-                  <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">{t('updateBanner.success.desc', { version: String(versions.remote || '') })}</p>
-                </div>
+              <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-inner">
+                <CheckCircle size={24} />
+              </div>
+              <div>
+                <h4 className="text-lg font-black text-emerald-900 dark:text-emerald-100">{t('updateBanner.success.title')}</h4>
+                <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">{t('updateBanner.success.desc', { version: String(versions.remote || '') })}</p>
+              </div>
             </div>
-            <button 
-                onClick={() => window.location.reload()}
-                className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black rounded-xl transition-all shadow-lg active:scale-95"
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black rounded-xl transition-all shadow-lg active:scale-95"
             >
               {t('updateBanner.success.restartNow')}
             </button>
-        </div>
-      </div>
-    );
-  }
+          </div>
+        )}
 
-  if (!hasUpdate) return null;
-
-  return (
-    <div 
-      className="mx-6 mt-4 p-6 bg-blue-50 dark:bg-blue-950/20 border-2 border-blue-100 dark:border-blue-900 rounded-[32px] flex flex-col gap-6 animate-in slide-in-from-top duration-600 shadow-xl shadow-blue-500/5"
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900/50 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-inner group overflow-hidden">
-                <ArrowUpCircle size={28} className="group-hover:scale-110 transition-transform" />
-            </div>
-            <div>
-              <h4 className="font-black text-blue-900 dark:text-blue-50 text-lg tracking-tight">{t('updateBanner.title', { version: String(versions.remote || '') })}</h4>
+        {/* Update available state */}
+        {!complete && hasUpdate && (
+          <div className="p-6 bg-white dark:bg-gray-900 border-2 border-blue-100 dark:border-blue-900 rounded-3xl flex flex-col gap-6 shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 shrink-0 bg-blue-100 dark:bg-blue-900/50 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-inner">
+                <ArrowUpCircle size={28} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-black text-blue-900 dark:text-blue-50 text-lg tracking-tight">{t('updateBanner.title', { version: String(versions.remote || '') })}</h4>
                 <p className="text-xs text-blue-700 dark:text-blue-400 font-medium flex items-center gap-1.5 mt-1">
-                <RefreshCcw size={12} /> {t('updateBanner.subtitle', { version: String(versions.local || '') })}
+                  <RefreshCcw size={12} /> {t('updateBanner.subtitle', { version: String(versions.local || '') })}
                 </p>
+              </div>
             </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-            {!updating && (
-                <button onClick={() => setHasUpdate(false)} className="px-4 py-2 text-blue-400 hover:text-blue-600 font-black text-xs uppercase tracking-widest transition-colors">
-              {t('updateBanner.actions.later')}
-                </button>
+            {/* Log area */}
+            {(updating || localLogs.length > 0) && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+                <TerminalLog logs={localLogs} height="h-44" title={t('updateBanner.logs.title')} />
+              </div>
             )}
-            <button 
+
+            <div className="flex items-center justify-end gap-3">
+              {!updating && (
+                <button
+                  onClick={() => setHasUpdate(false)}
+                  className="px-4 py-2 text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 font-black text-xs uppercase tracking-widest transition-colors"
+                >
+                  {t('updateBanner.actions.later')}
+                </button>
+              )}
+              <button
                 disabled={updating}
                 onClick={handleUpdate}
-                className="px-8 py-4 bg-gray-900 hover:bg-black text-white text-xs font-black rounded-2xl transition-all shadow-xl shadow-blue-200/50 flex items-center gap-2 active:scale-95 disabled:bg-gray-400"
-            >
+                className="px-8 py-3 bg-gray-900 hover:bg-black text-white text-xs font-black rounded-2xl transition-all shadow-xl flex items-center gap-2 active:scale-95 disabled:bg-gray-400"
+              >
                 {updating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
-              {updating ? t('updateBanner.actions.updating') : t('updateBanner.actions.updateNow')}
-            </button>
-        </div>
-      </div>
-
-      {/* Expanded log area */}
-      {(updating || localLogs.length > 0) && !complete && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <TerminalLog logs={localLogs} height="h-44" title={t('updateBanner.logs.title')} />
+                {updating ? t('updateBanner.actions.updating') : t('updateBanner.actions.updateNow')}
+              </button>
+            </div>
           </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

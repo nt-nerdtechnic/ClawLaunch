@@ -56,6 +56,28 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
     return { code: 0, stdout: 'All tracked subprocesses killed', exitCode: 0 };
   }
 
+  if (fullCommand === 'process:force-release') {
+    // Kill all orphan openclaw-related processes except openclaw-gateway
+    const killCmd = [
+      `ps -eo pid,command`,
+      `grep -E 'openclaw|models.list'`,
+      `grep -v 'openclaw-gateway'`,
+      `grep -v grep`,
+      `awk '{print $1}'`,
+      `xargs kill -9 2>/dev/null || true`,
+    ].join(' | ');
+    const res = await ctx.runShellCommand(`${killCmd}; echo done`);
+    const countCmd = `pgrep -c openclaw 2>/dev/null || echo 0`;
+    const countRes = await ctx.runShellCommand(countCmd);
+    const remaining = parseInt(String(countRes.stdout || '0').trim(), 10);
+    return {
+      code: 0,
+      stdout: JSON.stringify({ ok: true, remaining }),
+      exitCode: 0,
+      stderr: res.stderr || '',
+    };
+  }
+
   if (fullCommand.startsWith('project:initialize')) {
     try {
       const payloadStr = fullCommand.replace('project:initialize ', '').trim();

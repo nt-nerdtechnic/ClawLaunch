@@ -19,12 +19,12 @@ import { BootstrappingScreen } from './components/layout/BootstrappingScreen';
 import { LogoutConfirmDialog } from './components/dialogs/LogoutConfirmDialog';
 import { GatewayConflictDialog } from './components/dialogs/GatewayConflictDialog';
 import { StopServiceDialog } from './components/dialogs/StopServiceDialog';
+import UpdateBanner from './components/UpdateBanner';
 
 function App() {
   const {
     running,
     logs,
-    envStatus,
     config,
     snapshot,
     auditTimeline,
@@ -140,6 +140,8 @@ function App() {
           t={t}
         />
 
+        {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
+
         <AppContentArea
           activeTab={activeTab}
           onboardingFinished={onboardingFinished}
@@ -171,7 +173,6 @@ function App() {
               config={config}
               resolvedConfigDir={resolvedConfigDir}
               snapshot={snapshot}
-              envStatus={envStatus}
               logs={logs}
               auditTimeline={auditTimeline}
               dailyDigest={dailyDigest}

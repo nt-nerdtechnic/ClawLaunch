@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
-import UpdateBanner from '../UpdateBanner';
 import { WorkspaceStatusBanner } from './WorkspaceStatusBanner';
 
 type AppContentAreaProps = {
@@ -46,7 +45,6 @@ export function AppContentArea({
 }: AppContentAreaProps) {
   return (
     <div className="flex-1 p-10 overflow-y-auto relative">
-      {activeTab !== 'onboarding' && onboardingFinished && <UpdateBanner />}
       <WorkspaceStatusBanner
         activeTab={activeTab}
         onboardingFinished={onboardingFinished}

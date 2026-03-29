@@ -3,10 +3,8 @@ import { Activity, AlertTriangle, HeartPulse, PlugZap, ShieldCheck } from 'lucid
 import { useTranslation } from 'react-i18next';
 import type { ReadModelSnapshot } from '../../store';
 
-type EnvStatus = { node: string; git: string; pnpm: string };
 type AppConfig = { corePath: string; configPath: string; workspacePath: string };
 type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
-type ConnectionStatus = 'connected' | 'degraded' | 'not_configured' | 'loading';
 
 type AuditLogSummary = {
   writes: number;
@@ -29,7 +27,6 @@ type DashboardAlertItem = {
 
 interface DecisionDashboardProps {
   running: boolean;
-  envStatus: EnvStatus;
   config: AppConfig;
   resolvedConfigDir: string;
   snapshot: ReadModelSnapshot | null;
@@ -50,7 +47,7 @@ function levelClasses(level: DashboardAlertLevel): string {
 
 export function DecisionDashboard(props: DecisionDashboardProps) {
   const { t } = useTranslation();
-  const { running, envStatus, config, resolvedConfigDir, snapshot } = props;
+  const { running, config, resolvedConfigDir, snapshot } = props;
   const [alertsFilter, setAlertsFilter] = useState<'all' | DashboardAlertLevel>('all');
   const [auditLog, setAuditLog] = useState<AuditLogSummary>({
     writes: 0,
@@ -303,22 +300,18 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     [alertCounters, alerts.length, t],
   );
 
-  const snapshotAgeMs = useMemo(() => {
-    if (!snapshot?.generatedAt) return Number.POSITIVE_INFINITY;
-    const ts = new Date(snapshot.generatedAt).getTime();
-    if (Number.isNaN(ts)) return Number.POSITIVE_INFINITY;
-    return Date.now() - ts;
-  }, [snapshot]);
-
   const healthSummary = useMemo(() => {
     const configReadyCount = [config.corePath, config.configPath, config.workspacePath].filter((item) => String(item || '').trim() !== '').length;
-    const allPathsEmpty = configReadyCount === 0;
 
     const gatewayState = !config.corePath?.trim() ? 'not_configured' : running ? 'healthy' : 'degraded';
     const configState = configReadyCount >= 3 ? 'healthy' : configReadyCount > 0 ? 'degraded' : 'not_configured';
-    const runtimeState = Number.isFinite(snapshotAgeMs)
-      ? (snapshotAgeMs <= 90_000 ? 'healthy' : 'degraded')
-      : allPathsEmpty ? 'not_configured' : 'down';
+
+    const sessions = snapshot?.sessions || [];
+    const activeSessions = sessions.filter((s) => {
+      const st = String(s?.status || '').toLowerCase();
+      return st === 'running' || st === 'active' || st === 'working';
+    });
+    const sessionsState = !running ? 'not_configured' : activeSessions.length > 0 ? 'healthy' : sessions.length > 0 ? 'degraded' : 'not_configured';
 
     return {
       gateway: {
@@ -331,94 +324,12 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         state: configState,
         detail: t('monitor.decision.health.configState', { count: configReadyCount }),
       },
-      runtime: {
-        state: runtimeState,
-        detail: Number.isFinite(snapshotAgeMs)
-          ? t('monitor.decision.health.runtimeFreshness', { sec: Math.max(0, Math.floor(snapshotAgeMs / 1000)) })
-          : t('monitor.decision.health.runtimeMissing'),
+      sessions: {
+        state: sessionsState,
+        detail: t('monitor.decision.health.sessionsState', { active: activeSessions.length, total: sessions.length }),
       },
     };
-  }, [config.configPath, config.corePath, config.workspacePath, running, snapshotAgeMs, t]);
-
-  const connectionRows = useMemo(() => {
-    const sessions = snapshot?.sessions || [];
-    const approvals = snapshot?.approvals || [];
-    const hasTaskStore = (snapshot?.tasks?.length || 0) > 0;
-    const hasBudget = Boolean(snapshot?.budgetSummary);
-
-    const mapEnvConnectionStatus = (status: string): ConnectionStatus => {
-      if (status === 'ok') return 'connected';
-      if (status === 'loading') return 'loading';
-      return 'degraded';
-    };
-
-    return [
-      {
-        key: 'node',
-        group: 'env',
-        name: t('monitor.decision.connection.node', 'Node.js Runtime'),
-        status: mapEnvConnectionStatus(envStatus.node),
-      },
-      {
-        key: 'pnpm',
-        group: 'env',
-        name: t('monitor.decision.connection.pnpm', 'pnpm Toolchain'),
-        status: mapEnvConnectionStatus(envStatus.pnpm),
-      },
-      {
-        key: 'core-path',
-        group: 'paths',
-        name: t('monitor.decision.connection.corePath', 'Core Path'),
-        status: String(config.corePath || '').trim() ? 'connected' : 'not_configured',
-      },
-      {
-        key: 'config-path',
-        group: 'paths',
-        name: t('monitor.decision.connection.configPath', 'Config Path'),
-        status: String(config.configPath || '').trim() ? 'connected' : 'not_configured',
-      },
-      {
-        key: 'workspace-path',
-        group: 'paths',
-        name: t('monitor.decision.connection.workspacePath', 'Workspace Path'),
-        status: String(config.workspacePath || '').trim() ? 'connected' : 'not_configured',
-      },
-      {
-        key: 'sessions',
-        group: 'services',
-        name: t('monitor.decision.connection.sessions', 'Session Feed'),
-        status: !running ? 'not_configured' : sessions.length > 0 ? 'connected' : 'degraded',
-      },
-      {
-        key: 'approvals',
-        group: 'services',
-        name: t('monitor.decision.connection.approvals', 'Approvals Feed'),
-        status: !running ? 'not_configured' : snapshot ? 'connected' : 'degraded',
-        meta: snapshot ? t('monitor.decision.connection.approvalsCount', { count: approvals.length }) : undefined,
-      },
-      {
-        key: 'task-store',
-        group: 'services',
-        name: t('monitor.decision.connection.taskStore', 'Task Store'),
-        status: !running ? 'not_configured' : hasTaskStore ? 'connected' : 'degraded',
-      },
-      {
-        key: 'budget',
-        group: 'services',
-        name: t('monitor.decision.connection.budget', 'Budget Summary'),
-        status: !running ? 'not_configured' : hasBudget ? 'connected' : 'degraded',
-      },
-      {
-        key: 'heartbeat',
-        group: 'services',
-        name: t('monitor.decision.connection.heartbeat', 'Config Audit Log'),
-        status: !running ? 'not_configured' : auditLog.state === 'connected' ? 'connected' : 'degraded',
-      },
-    ];
-  }, [auditLog.state, config.configPath, config.corePath, config.workspacePath, envStatus.node, envStatus.pnpm, running, snapshot, t]);
-
-  const connectedCount = connectionRows.filter((row) => row.status === 'connected').length;
-  const configuredRowsCount = connectionRows.filter((row) => row.status !== 'not_configured' && row.status !== 'loading').length;
+  }, [config.configPath, config.corePath, config.workspacePath, running, snapshot, t]);
 
   return (
     <div className="space-y-6">
@@ -434,7 +345,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
             {[
               { key: 'gateway', label: 'Gateway', ...healthSummary.gateway },
               { key: 'config', label: 'Config', ...healthSummary.config },
-              { key: 'runtime', label: 'Runtime', ...healthSummary.runtime },
+              { key: 'sessions', label: 'Sessions', ...healthSummary.sessions },
             ].map((item) => (
               <div key={item.key} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 p-4">
                 <div className="flex items-center justify-between">
@@ -529,8 +440,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         </section>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section id="monitor-config-audit" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
+      <section id="monitor-config-audit" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
               {t('monitor.decision.taskHeartbeat')}
@@ -561,61 +471,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
             </span>
             <span>{auditLog.updatedAt ? new Date(auditLog.updatedAt).toLocaleString() : '-'}</span>
           </div>
-        </section>
-
-        <section id="monitor-connection-health" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              {t('monitor.decision.connectionHealth')}
-            </h3>
-            <div className="inline-flex items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-sky-500">
-            {t('monitor.decision.connectedRatio', { connected: connectedCount, total: configuredRowsCount })}
-            </div>
-          </div>
-          <div className="space-y-4">
-            {(['env', 'paths', 'services'] as const).map((group) => {
-              const rows = connectionRows.filter((r) => r.group === group);
-              const groupKey = `monitor.decision.connection.group${group.charAt(0).toUpperCase()}${group.slice(1)}`;
-              return (
-                <div key={group}>
-                  <div className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                    {t(groupKey)}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {rows.map((row) => (
-                      <div key={row.key} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 px-3 py-2.5 flex items-center justify-between">
-                        <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                          {row.name}
-                          {row.meta ? <span className="ml-1 text-[11px] text-slate-400">({row.meta})</span> : null}
-                        </div>
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
-                            row.status === 'connected'
-                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                              : row.status === 'loading'
-                                ? 'bg-sky-500/10 text-sky-600 border-sky-500/30 dark:text-sky-400 dark:border-sky-400/40'
-                              : row.status === 'not_configured'
-                                ? 'bg-slate-100 text-slate-400 border-slate-300 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-600'
-                                : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-                          }`}
-                        >
-                          {row.status === 'connected'
-                            ? t('monitor.decision.status.connected')
-                            : row.status === 'loading'
-                              ? t('monitor.decision.status.loading')
-                            : row.status === 'not_configured'
-                              ? t('monitor.decision.status.notConfigured')
-                              : t('monitor.decision.status.degraded')}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
+      </section>
 
       <div className="hidden">
         <Activity />

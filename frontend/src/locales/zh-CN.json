@@ -269,6 +269,9 @@
     "openFolderFailed": "无法打开 {{zone}}：{{msg}}",
     "disconnect": "断开连接",
     "startService": "启动服务",
+    "forceRelease": "强制释放进程",
+    "forceReleasing": "释放中...",
+    "forceReleased": "已释放（剩余 {{remaining}} 个进程）",
     "activeStaff": "活跃团队成员",
     "actionQueue": "任务操作中心",
     "processing": "处理中...",
@@ -347,8 +350,7 @@
         "gatewayRunning": "Gateway 已连接且运行中。",
         "gatewayStopped": "Gateway 未连接或尚未启动。",
         "configState": "已对位 {{count}} / 3 个核心路径。",
-        "runtimeFreshness": "快照更新于 {{sec}} 秒前。",
-        "runtimeMissing": "尚未取得 runtime 快照。"
+        "sessionsState": "{{active}} 个 Session 运行中（共 {{total}} 个）。"
       },
       "filters": {
         "all": "全部",

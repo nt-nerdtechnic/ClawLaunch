@@ -277,6 +277,9 @@
     "openFolderFailed": "Failed to open {{zone}}: {{msg}}",
     "disconnect": "Disconnect",
     "startService": "Start Service",
+    "forceRelease": "Force Release Processes",
+    "forceReleasing": "Releasing...",
+    "forceReleased": "Released ({{remaining}} processes remaining)",
     "activeStaff": "Active Staff",
     "actionQueue": "Action Queue",
     "processing": "Processing...",
@@ -355,8 +358,7 @@
         "gatewayRunning": "Gateway connected and running.",
         "gatewayStopped": "Gateway disconnected or not started.",
         "configState": "{{count}} / 3 core paths configured.",
-        "runtimeFreshness": "Snapshot updated {{sec}}s ago.",
-        "runtimeMissing": "No runtime snapshot yet."
+        "sessionsState": "{{active}} active session(s) of {{total}} total."
       },
       "filters": {
         "all": "All",

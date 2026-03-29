@@ -277,6 +277,9 @@
     "openFolderFailed": "無法開啟 {{zone}}：{{msg}}",
     "disconnect": "中斷連線",
     "startService": "啟動服務",
+    "forceRelease": "強制釋放程序",
+    "forceReleasing": "釋放中...",
+    "forceReleased": "已釋放（剩餘 {{remaining}} 個程序）",
     "activeStaff": "活躍團隊成員",
     "actionQueue": "任務操作中心",
     "processing": "處理中...",
@@ -355,8 +358,7 @@
         "gatewayRunning": "Gateway 已連線且運行中。",
         "gatewayStopped": "Gateway 未連線或尚未啟動。",
         "configState": "已對位 {{count}} / 3 個核心路徑。",
-        "runtimeFreshness": "快照更新於 {{sec}} 秒前。",
-        "runtimeMissing": "尚未取得 runtime 快照。"
+        "sessionsState": "{{active}} 個 Session 執行中（共 {{total}} 個）。"
       },
       "filters": {
         "all": "全部",

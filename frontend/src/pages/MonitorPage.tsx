@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderOpen, Settings } from 'lucide-react';
+import { FolderOpen, Settings, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DecisionDashboard } from '../components/monitor/DecisionDashboard';
 import TerminalLog from '../components/common/TerminalLog';
@@ -14,11 +14,6 @@ interface MonitorPageProps {
   config: Config;
   resolvedConfigDir: string;
   snapshot: ReadModelSnapshot | null;
-  envStatus: {
-    node: 'loading' | 'ok' | 'error';
-    git: 'loading' | 'ok' | 'error';
-    pnpm: 'loading' | 'ok' | 'error';
-  };
   logs: LogEntry[];
   auditTimeline: AuditTimelineItem[];
   dailyDigest: string;
@@ -33,7 +28,6 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
   config,
   resolvedConfigDir,
   snapshot,
-  envStatus,
   logs,
   auditTimeline,
   dailyDigest,
@@ -41,6 +35,26 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
   const { t } = useTranslation();
   const addLog = useStore((s) => s.addLog);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
+  const [forceReleasing, setForceReleasing] = React.useState(false);
+
+  const handleForceRelease = async () => {
+    if (!window.electronAPI) return;
+    setForceReleasing(true);
+    addLog(t('monitor.forceReleasing'), 'system');
+    try {
+      const res = await window.electronAPI.exec('process:force-release');
+      if (res.code === 0) {
+        const result = JSON.parse(res.stdout || '{}');
+        addLog(t('monitor.forceReleased', { remaining: result.remaining ?? '?' }), 'system');
+      } else {
+        addLog(`[force-release] failed: ${res.stderr || 'unknown'}`, 'stderr');
+      }
+    } catch (e) {
+      addLog(`[force-release] error: ${e instanceof Error ? e.message : String(e)}`, 'stderr');
+    } finally {
+      setForceReleasing(false);
+    }
+  };
   const { gatewayRuntimeZones } = useMonitorComputedValues({
     corePath: config.corePath,
     workspacePath: config.workspacePath,
@@ -178,13 +192,21 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
           >
             {running ? t('monitor.disconnect') : t('monitor.startService')}
           </button>
+          <button
+            type="button"
+            onClick={() => void handleForceRelease()}
+            disabled={forceReleasing}
+            className="mt-2 w-full flex items-center justify-center gap-1 rounded-lg px-2 py-1 text-[10px] text-slate-400 dark:text-slate-600 hover:text-amber-600 dark:hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Zap size={9} />
+            {forceReleasing ? t('monitor.forceReleasing') : t('monitor.forceRelease')}
+          </button>
         </div>
       </div>
 
       {/* Decision Dashboard */}
       <DecisionDashboard
         running={running}
-        envStatus={envStatus}
         config={config}
         resolvedConfigDir={resolvedConfigDir}
         snapshot={snapshot}

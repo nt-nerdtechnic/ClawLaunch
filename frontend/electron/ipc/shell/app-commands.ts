@@ -37,7 +37,14 @@ export async function handleAppCommands(fullCommand: string): Promise<CommandRes
       const htmlUrl = String(rel0.html_url || '');
       const changelog = String(rel0.body || '');
       const publishedAt = String(rel0.published_at || '');
-      const isNewer = !!latest && latest !== current;
+      const parseSemver = (v: string) => v.split('.').map((n) => parseInt(n, 10) || 0);
+      const [lMaj, lMin, lPat] = parseSemver(latest);
+      const [cMaj, cMin, cPat] = parseSemver(current);
+      const isNewer = !!latest && (
+        lMaj > cMaj ||
+        (lMaj === cMaj && lMin > cMin) ||
+        (lMaj === cMaj && lMin === cMin && lPat > cPat)
+      );
       return { code: 0, stdout: JSON.stringify({ current, latest, htmlUrl, changelog, publishedAt, upToDate: !isNewer }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'update check failed', exitCode: 1 };
