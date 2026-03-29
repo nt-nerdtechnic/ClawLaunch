@@ -1,6 +1,11 @@
 {
   "miniView": {
-    "latticeStatus": "Lattice 状态"
+    "latticeStatus": "Lattice 状态",
+    "tokenBudget": "Token 用量",
+    "trend7d": "7日趋势",
+    "taskBoard": "任务看板",
+    "monitor": "进程监控",
+    "expand": "展开"
   },
   "common": {
     "toggleTheme": "切换主题"

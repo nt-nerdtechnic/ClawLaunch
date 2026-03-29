@@ -1,6 +1,11 @@
 {
   "miniView": {
-    "latticeStatus": "Lattice Status"
+    "latticeStatus": "Lattice Status",
+    "tokenBudget": "Tokens Used",
+    "trend7d": "7D Trend",
+    "taskBoard": "Task Board",
+    "monitor": "Monitor",
+    "expand": "Expand"
   },
   "common": {
     "toggleTheme": "Toggle theme"
