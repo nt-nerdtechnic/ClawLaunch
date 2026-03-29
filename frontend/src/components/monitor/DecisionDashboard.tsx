@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle, HeartPulse, PlugZap, ShieldCheck } from 'lucide-react';
+import { HeartPulse, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ReadModelSnapshot } from '../../store';
 
@@ -12,17 +12,6 @@ type AuditLogSummary = {
   suspicious: number;
   updatedAt: string;
   state: AuditLogState;
-};
-
-type DashboardAlertLevel = 'info' | 'warn' | 'action-required';
-
-type DashboardAlertItem = {
-  id: string;
-  level: DashboardAlertLevel;
-  title: string;
-  detail: string;
-  targetId?: string;
-  targetLabel?: string;
 };
 
 interface DecisionDashboardProps {
@@ -38,15 +27,9 @@ const normalizeConfigDir = (rawPath: string) => {
   if (!trimmed) return '';
   return trimmed.replace(/[\\/]openclaw\.json$/i, '');
 };
-function levelClasses(level: DashboardAlertLevel): string {
-  if (level === 'action-required') return 'bg-red-500/10 text-red-500 border-red-500/30';
-  if (level === 'warn') return 'bg-amber-500/10 text-amber-500 border-amber-500/30';
-  return 'bg-blue-500/10 text-blue-500 border-blue-500/30';
-}
 export function DecisionDashboard(props: DecisionDashboardProps) {
   const { t } = useTranslation();
-  const { running, config, resolvedConfigDir, snapshot } = props;
-  const [alertsFilter, setAlertsFilter] = useState<'all' | DashboardAlertLevel>('all');
+  const { running, config, resolvedConfigDir } = props;
   const [chatSessionCount, setChatSessionCount] = useState(0);
   const [auditLog, setAuditLog] = useState<AuditLogSummary>({
     writes: 0,
@@ -183,70 +166,6 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     };
   }, []);
 
-  const alerts = useMemo<DashboardAlertItem[]>(() => {
-    const out: DashboardAlertItem[] = [];
-    const sessions = snapshot?.sessions || [];
-    const statuses = snapshot?.statuses || [];
-    const tasks = snapshot?.tasks || [];
-    const approvals = snapshot?.approvals || [];
-    const budgetEvaluations = snapshot?.budgetSummary?.evaluations || [];
-    const blockedCount = (statuses as { state?: unknown }[]).filter((s) => String(s?.state || '').toLowerCase() === 'blocked').length;
-    const errorCount = (statuses as { state?: unknown }[]).filter((s) => String(s?.state || '').toLowerCase() === 'error').length;
-    const blockedTasks = (tasks as { status?: unknown }[]).filter((task) => String(task?.status || '').toLowerCase() === 'blocked').length;
-    const pendingApprovals = (approvals as { status?: unknown }[]).filter((a) => {
-      const value = String(a?.status || '').toLowerCase();
-      return value === '' || value === 'pending' || value === 'requested';
-    }).length;
-    const overBudget = (budgetEvaluations as { status?: unknown }[]).filter((b) => String(b?.status || '').toLowerCase() === 'over').length;
-    const warnBudget = (budgetEvaluations as { status?: unknown }[]).filter((b) => String(b?.status || '').toLowerCase() === 'warn').length;
-
-    if (!snapshot) {
-      out.push({ id: 'snapshot-waiting', level: 'info', title: t('monitor.decision.alerts.snapshotWaiting'), detail: t('monitor.decision.alerts.snapshotWaitingDesc'), targetId: 'monitor-live-stream', targetLabel: t('monitor.decision.targets.liveStream') });
-    }
-    if (sessions.length === 0) {
-      out.push({ id: 'sessions-empty', level: 'warn', title: t('monitor.decision.alerts.noActiveSessions'), detail: t('monitor.decision.alerts.noActiveSessionsDesc'), targetId: 'monitor-staff-grid', targetLabel: t('monitor.decision.targets.staffGrid') });
-    }
-    if (pendingApprovals > 0) {
-      out.push({ id: 'approvals-pending', level: 'action-required', title: t('monitor.decision.alerts.pendingApprovals'), detail: t('monitor.decision.alerts.pendingApprovalsDesc', { count: pendingApprovals }), targetId: 'monitor-action-center', targetLabel: t('monitor.decision.targets.actionCenter') });
-    }
-    if (blockedCount > 0 || errorCount > 0) {
-      out.push({ id: 'runtime-issues', level: 'action-required', title: t('monitor.decision.alerts.runtimeIssues'), detail: t('monitor.decision.alerts.runtimeIssuesDesc', { blocked: blockedCount, error: errorCount }), targetId: 'monitor-live-stream', targetLabel: t('monitor.decision.targets.liveStream') });
-    }
-    if (blockedTasks > 0) {
-      out.push({ id: 'task-blocked-by-heartbeat', level: 'action-required', title: t('monitor.decision.alerts.taskBlockedByHeartbeat'), detail: t('monitor.decision.alerts.taskBlockedByHeartbeatDesc', { count: blockedTasks }), targetId: 'monitor-live-stream', targetLabel: t('monitor.decision.targets.liveStream') });
-    }
-    if (overBudget > 0 || warnBudget > 0) {
-      out.push({ id: 'budget-risk', level: overBudget > 0 ? 'action-required' : 'warn', title: t('monitor.decision.alerts.budgetRisk'), detail: t('monitor.decision.alerts.budgetRiskDesc', { over: overBudget, warn: warnBudget }), targetId: 'monitor-connection-health', targetLabel: t('monitor.decision.targets.connectionHealth') });
-    }
-    if (out.length === 0) {
-      out.push({ id: 'all-clear', level: 'info', title: t('monitor.decision.alerts.allClear'), detail: t('monitor.decision.alerts.allClearDesc'), targetId: 'monitor-health-summary', targetLabel: t('monitor.decision.targets.healthSummary') });
-    }
-    return out;
-  }, [snapshot, t]);
-
-  const alertCounters = useMemo(() => {
-    const counts: Record<DashboardAlertLevel, number> = { info: 0, warn: 0, 'action-required': 0 };
-    for (const alert of alerts) {
-      counts[alert.level] += 1;
-    }
-    return counts;
-  }, [alerts]);
-
-  const filteredAlerts = useMemo(() => {
-    if (alertsFilter === 'all') return alerts;
-    return alerts.filter((alert) => alert.level === alertsFilter);
-  }, [alerts, alertsFilter]);
-
-  const alertFilterChips = useMemo(
-    () => [
-      { key: 'all' as const, label: t('monitor.decision.filters.all'), count: alerts.length },
-      { key: 'info' as const, label: t('monitor.decision.filters.info'), count: alertCounters.info },
-      { key: 'warn' as const, label: t('monitor.decision.filters.warn'), count: alertCounters.warn },
-      { key: 'action-required' as const, label: t('monitor.decision.filters.actionRequired'), count: alertCounters['action-required'] },
-    ],
-    [alertCounters, alerts.length, t],
-  );
-
   const healthSummary = useMemo(() => {
     const configReadyCount = [config.corePath, config.configPath, config.workspacePath].filter((item) => String(item || '').trim() !== '').length;
 
@@ -348,53 +267,6 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
             </span>
             <span>{auditLog.updatedAt ? new Date(auditLog.updatedAt).toLocaleString() : '-'}</span>
           </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            {t('monitor.decision.alerts.title')}
-          </h3>
-          <Activity size={18} className="text-blue-500" />
-        </div>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {alertFilterChips.map((chip) => (
-            <button
-              key={chip.key}
-              onClick={() => setAlertsFilter(chip.key)}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                alertsFilter === chip.key
-                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100'
-                  : 'bg-white dark:bg-slate-900/60 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-400'
-              }`}
-            >
-              {chip.label}
-              <span className="opacity-60">{chip.count}</span>
-            </button>
-          ))}
-        </div>
-        <div className="space-y-2">
-          {filteredAlerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`flex items-start gap-3 rounded-2xl border px-4 py-3 ${levelClasses(alert.level)}`}
-            >
-              <div className="mt-0.5 shrink-0">
-                {alert.level === 'action-required' ? (
-                  <AlertTriangle size={14} />
-                ) : alert.level === 'warn' ? (
-                  <PlugZap size={14} />
-                ) : (
-                  <Activity size={14} />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-black">{alert.title}</div>
-                <div className="text-[11px] opacity-80 mt-0.5 leading-relaxed">{alert.detail}</div>
-              </div>
-            </div>
-          ))}
-        </div>
       </section>
 
     </div>

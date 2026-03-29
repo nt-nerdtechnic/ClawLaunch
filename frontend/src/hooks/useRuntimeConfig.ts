@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import type { DetectedConfig } from '../store';
@@ -24,6 +24,7 @@ export function useRuntimeConfig(
   const [dynamicModelOptions, setDynamicModelOptions] = useState<Array<{ provider: string; group: string; models: string[] }>>([]);
   const [dynamicModelSource, setDynamicModelSource] = useState('');
   const [dynamicModelLoading, setDynamicModelLoading] = useState(false);
+  const isLoadingModelOptionsRef = useRef(false);
 
   const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
@@ -85,12 +86,14 @@ export function useRuntimeConfig(
     corePath: string,
     effectiveAuthorizedProviders: string[]
   ) => {
+    if (isLoadingModelOptionsRef.current) return;
     if (!window.electronAPI || !resolvedConfigDir) {
       setDynamicModelOptions([]);
       setDynamicModelSource('');
       return;
     }
 
+    isLoadingModelOptionsRef.current = true;
     setDynamicModelLoading(true);
     try {
       const payload = {
@@ -119,6 +122,7 @@ export function useRuntimeConfig(
       setDynamicModelSource('');
     } finally {
       setDynamicModelLoading(false);
+      isLoadingModelOptionsRef.current = false;
     }
   };
 
