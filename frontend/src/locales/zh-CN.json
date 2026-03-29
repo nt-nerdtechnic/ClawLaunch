@@ -177,7 +177,9 @@
       "count": "OpenClaw · {{count}} 个",
       "empty": "没有计划任务",
       "pause": "暂停",
-      "start": "启动"
+      "start": "启动",
+      "filterEnabled": "运作中",
+      "filterDisabled": "已停止"
     }
   },
   "pixelOffice": {

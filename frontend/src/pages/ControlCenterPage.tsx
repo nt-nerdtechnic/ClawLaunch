@@ -164,7 +164,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [view, setView]               = useState<'all' | 'cron' | 'task' | 'obs'>('all');
   const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'loaded'>('all');
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('all');
-  const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled' | 'error'>('all');
+  const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('all');
   const { i18n } = useTranslation();
 
   // Update TASK_STATUS_CFG to use t after useTranslation is available
@@ -841,13 +841,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   <span className="text-[9px] text-slate-400">{t('controlCenter.cronJobs.count', { count: cronJobs.length })}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {(['all', 'enabled', 'disabled', 'error'] as const).map(f => {
+                  {(['all', 'enabled', 'disabled'] as const).map(f => {
                     const isActive = cjFilter === f;
-                    const Icon = f === 'all' ? Activity : f === 'enabled' ? CheckCircle : f === 'disabled' ? Clock : AlertTriangle;
+                    const Icon = f === 'all' ? Activity : f === 'enabled' ? Play : Pause;
                     const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
-                                : f === 'enabled' ? t('common.status.success') 
-                                : f === 'disabled' ? t('common.status.todo') 
-                                : t('common.status.failure');
+                                : f === 'enabled' ? t('controlCenter.cronJobs.filterEnabled') 
+                                : t('controlCenter.cronJobs.filterDisabled');
                     return (
                       <button 
                         key={f} 
@@ -881,7 +880,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   .filter(j => {
                     if (cjFilter === 'enabled') return j.enabled;
                     if (cjFilter === 'disabled') return !j.enabled;
-                    if (cjFilter === 'error') return (j.state?.consecutiveErrors ?? 0) > 0;
                     return true;
                   })
                   .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {

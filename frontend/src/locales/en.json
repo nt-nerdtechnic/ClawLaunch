@@ -185,7 +185,9 @@
       "count": "OpenClaw · {{count}} jobs",
       "empty": "No scheduled jobs",
       "pause": "Pause",
-      "start": "Start"
+      "start": "Start",
+      "filterEnabled": "Running",
+      "filterDisabled": "Stopped"
     }
   },
   "pixelOffice": {

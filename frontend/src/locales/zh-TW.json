@@ -185,7 +185,9 @@
       "count": "OpenClaw · {{count}} 個",
       "empty": "沒有排程任務",
       "pause": "暫停",
-      "start": "啟動"
+      "start": "啟動",
+      "filterEnabled": "運作中",
+      "filterDisabled": "已停止"
     }
   },
   "pixelOffice": {
