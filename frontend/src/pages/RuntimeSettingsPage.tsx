@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
+import { ConfigService } from '../services/configService';
+import { useAuthProfiles } from '../hooks/useAuthProfiles';
+import { useAppComputedValues } from '../hooks/useAppComputedValues';
+import { useRuntimeActions } from '../hooks/useRuntimeActions';
 import { AuthManagementPanel } from '../components/AuthManagementPanel';
 import { TelegramPairingSection } from '../components/TelegramPairingSection';
 
@@ -24,17 +28,8 @@ interface RuntimeSettingsPageProps {
   setRuntimeDraftGatewayPort: (port: string) => void;
   dynamicModelOptions: Array<{ provider: string; group: string; models: string[] }>;
   dynamicModelLoading: boolean;
-  selectedModelProvider: string;
-  selectedModelAuthorized: boolean;
-  getProviderDisplayLabel: (provider: string, fallback?: string) => string;
-  authorizedProviderBadges: string[];
-  modelOptionGroups: Array<{ provider: string; group: string; models: string[] }>;
-  onHandleOpenClawDoctor: () => Promise<void>;
-  onHandleSecurityCheck: () => Promise<void>;
+  loadDynamicModelOptions: (corePath: string, effectiveAuthorizedProviders: string[]) => Promise<void>;
   runtimeProfileError?: string;
-  onSaveChannelToken: (channelId: string, token: string) => Promise<void>;
-  onSave: () => Promise<void>;
-  saveState?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
@@ -46,22 +41,69 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   setRuntimeDraftGatewayPort,
   dynamicModelOptions,
   dynamicModelLoading,
-  selectedModelProvider,
-  selectedModelAuthorized,
-  getProviderDisplayLabel,
-  authorizedProviderBadges,
-  modelOptionGroups,
-  onHandleOpenClawDoctor,
-  onHandleSecurityCheck,
+  loadDynamicModelOptions,
   runtimeProfileError,
-  onSaveChannelToken,
-  onSave,
-  saveState = 'idle',
 }) => {
   const { t } = useTranslation();
   // 從 Zustand 直接讀取，無須從外部傳入
   const config = useStore((s) => s.config);
   const runtimeProfile = useStore((s) => s.runtimeProfile);
+  const setRuntimeProfile = useStore((s) => s.setRuntimeProfile);
+  const addLog = useStore((s) => s.addLog);
+  const resolvedConfigDir = ConfigService.normalizeConfigDir(config.configPath);
+  const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
+  const { authProfiles } = useAuthProfiles(resolvedConfigDir, 'runtimeSettings');
+  const {
+    effectiveAuthorizedProviders,
+    modelOptionGroups,
+    selectedModelProvider,
+    selectedModelAuthorized,
+    authorizedProviderBadges,
+    getProviderDisplayLabel,
+    isModelAuthorizedByProvider,
+  } = useAppComputedValues({
+    runtimeProfile,
+    authProfiles,
+    dynamicModelOptions,
+    runtimeDraftModel,
+    corePath: config.corePath,
+    workspacePath: config.workspacePath,
+    resolvedConfigDir,
+    resolvedConfigFilePath,
+    t,
+  });
+  const shellQuote = ConfigService.shellQuote;
+  const buildOpenClawEnvPrefix = (cfg?: Partial<typeof config>) =>
+    ConfigService.buildOpenClawEnvPrefix(cfg?.configPath ?? config.configPath);
+  const effectiveRuntimeModel = String(runtimeProfile?.model || '').trim();
+  const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || '').trim();
+  const effectiveRuntimeGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
+  const {
+    handleSaveConfig,
+    runtimeSaveState,
+    handleOpenClawDoctor,
+    handleSecurityCheck,
+    handleSaveChannelToken,
+  } = useRuntimeActions({
+    config,
+    resolvedConfigDir,
+    runtimeDraftModel,
+    runtimeDraftBotToken,
+    runtimeDraftGatewayPort,
+    effectiveRuntimeModel,
+    effectiveRuntimeBotToken,
+    effectiveRuntimeGatewayPort,
+    shellQuote,
+    buildOpenClawEnvPrefix,
+    isModelAuthorizedByProvider,
+    setRuntimeProfile,
+    addLog,
+    t,
+  });
+
+  useEffect(() => {
+    void loadDynamicModelOptions(config.corePath, effectiveAuthorizedProviders);
+  }, [config.corePath, effectiveAuthorizedProviders, loadDynamicModelOptions]);
 
   const CHANNEL_OPTIONS = useMemo<ChannelOption[]>(() => [
     { id: 'telegram',   name: 'Telegram',    icon: <MessageSquare size={14} />, desc: t('runtime.providers.telegram.desc'),           placeholder: t('runtime.providers.telegram.placeholder'),              keyLabel: 'Bot Token' },
@@ -121,7 +163,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const handleApplyChannelToken = async () => {
     setChannelSaving(selectedChannelId);
     setChannelSaved('');
-    await onSaveChannelToken(selectedChannelId, currentChannelToken);
+    await handleSaveChannelToken(selectedChannelId, currentChannelToken);
     setChannelSaving('');
     setChannelSaved(selectedChannelId);
     setTimeout(() => setChannelSaved(''), 2200);
@@ -131,11 +173,11 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     chId === 'telegram' ? runtimeDraftBotToken : (localChannelTokens[chId] || '');
 
   const saveButtonLabel =
-    saveState === 'saving'
+    runtimeSaveState === 'saving'
       ? t('settings.savingConfigButton')
-      : saveState === 'saved'
+      : runtimeSaveState === 'saved'
         ? t('settings.configSavedButton')
-        : saveState === 'error'
+        : runtimeSaveState === 'error'
           ? t('settings.saveConfigFailedButton')
           : t('settings.saveConfig');
 
@@ -152,7 +194,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
-            onClick={onHandleOpenClawDoctor}
+            onClick={handleOpenClawDoctor}
             disabled={!config?.corePath?.trim()}
             className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-sky-700 dark:bg-sky-950/30 dark:hover:bg-sky-950/50 dark:text-sky-300"
           >
@@ -161,7 +203,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           </button>
           <button
             type="button"
-            onClick={onHandleSecurityCheck}
+            onClick={handleSecurityCheck}
             disabled={!config?.corePath?.trim()}
             className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-violet-700 dark:bg-violet-950/30 dark:hover:bg-violet-950/50 dark:text-violet-300"
           >
@@ -500,12 +542,12 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
 
       {/* Save Button */}
       <button
-        onClick={onSave}
-        disabled={saveState === 'saving'}
+        onClick={handleSaveConfig}
+        disabled={runtimeSaveState === 'saving'}
         className={`w-full py-4 rounded-2xl font-black text-white shadow-xl transition-all ${
-          saveState === 'saved'
+          runtimeSaveState === 'saved'
             ? 'bg-emerald-600 shadow-emerald-600/20'
-            : saveState === 'error'
+            : runtimeSaveState === 'error'
               ? 'bg-rose-600 shadow-rose-600/20'
               : 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-500 active:scale-[0.98]'
         } disabled:cursor-wait disabled:opacity-80`}

@@ -47,14 +47,17 @@ export function MiniView({ running, onToggle, onExpand }: MiniViewProps) {
       {/* Mini Trend Sparkline */}
       <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/50 p-3 rounded-2xl">
         <div className="text-[8px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest mb-2">{t('miniView.trend7d')}</div>
-        <div className="h-12 flex items-end space-x-1">
-          {usage.history.map((h, i) => (
+        <div className="h-12 flex items-end space-x-1 overflow-hidden">
+          {usage.history.map((h, i) => {
+            const maxTokens = Math.max(...usage.history.map(x => x.tokens), 1);
+            return (
             <div 
               key={i} 
-              style={{ height: `${(h.tokens / 40000) * 100}%` }} 
+              style={{ height: `${Math.min(100, (h.tokens / maxTokens) * 100)}%` }} 
               className={`flex-1 rounded-sm ${i === usage.history.length - 1 ? 'bg-blue-500' : 'bg-slate-200 dark:bg-slate-800'}`}
             ></div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

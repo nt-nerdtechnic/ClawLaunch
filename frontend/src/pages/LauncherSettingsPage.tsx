@@ -1,16 +1,9 @@
 import React, { useState } from 'react';
 import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useStore } from '../store';
 import type { Config } from '../store';
-
-interface LauncherSettingsPageProps {
-  config: Config;
-  setConfig: (patch: Partial<Config>) => void;
-  onSave: () => void;
-  saveState?: 'idle' | 'saving' | 'saved' | 'error';
-  onAddLog: (msg: string, source: 'system' | 'stderr' | 'stdout') => void;
-  onBrowsePath: (key: 'corePath' | 'configPath' | 'workspacePath') => void;
-}
+import { useLauncherSettingsActions } from '../hooks/useLauncherSettingsActions';
 
 type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
 
@@ -24,15 +17,21 @@ interface UpdateInfo {
   noReleases?: boolean;
 }
 
-export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
-  config,
-  setConfig,
-  onSave,
-  saveState = 'idle',
-  onAddLog: _onAddLog,
-  onBrowsePath,
-}) => {
+export const LauncherSettingsPage: React.FC = () => {
   const { t } = useTranslation();
+  const config = useStore((s) => s.config);
+  const setConfig = useStore((s) => s.setConfig);
+  const addLog = useStore((s) => s.addLog);
+  const {
+    launcherSaveState,
+    handleSaveLauncherConfig,
+    handleBrowsePath,
+  } = useLauncherSettingsActions({
+    config,
+    setConfig,
+    addLog,
+    t,
+  });
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(() => {
     if (config.appVersion) {
@@ -48,11 +47,11 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
   const [updateError, setUpdateError] = useState<string>('');
 
   const saveButtonLabel =
-    saveState === 'saving'
+    launcherSaveState === 'saving'
       ? t('settings.savingConfigButton')
-      : saveState === 'saved'
+      : launcherSaveState === 'saved'
         ? t('settings.configSavedButton')
-        : saveState === 'error'
+        : launcherSaveState === 'error'
           ? t('settings.saveConfigFailedButton')
           : t('settings.saveConfig');
 
@@ -98,7 +97,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                   className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
                 />
                 <button
-                  onClick={() => onBrowsePath('corePath')}
+                  onClick={() => handleBrowsePath('corePath')}
                   title={t('settings.browseFolder', 'Browse folder')}
                   className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
                 >
@@ -121,7 +120,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                   className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
                 />
                 <button
-                  onClick={() => onBrowsePath('configPath')}
+                  onClick={() => handleBrowsePath('configPath')}
                   title={t('settings.browseFolder', 'Browse folder')}
                   className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
                 >
@@ -144,7 +143,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
                   className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
                 />
                 <button
-                  onClick={() => onBrowsePath('workspacePath')}
+                  onClick={() => handleBrowsePath('workspacePath')}
                   title={t('settings.browseFolder', 'Browse folder')}
                   className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
                 >
@@ -347,12 +346,12 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({
 
       {/* Save Button */}
       <button
-        onClick={onSave}
-        disabled={saveState === 'saving'}
+        onClick={handleSaveLauncherConfig}
+        disabled={launcherSaveState === 'saving'}
         className={`w-full py-4 rounded-2xl font-black text-white shadow-xl transition-all ${
-          saveState === 'saved'
+          launcherSaveState === 'saved'
             ? 'bg-emerald-600 shadow-emerald-600/20'
-            : saveState === 'error'
+            : launcherSaveState === 'error'
               ? 'bg-rose-600 shadow-rose-600/20'
               : 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-500 active:scale-[0.98]'
         } disabled:cursor-wait disabled:opacity-80`}

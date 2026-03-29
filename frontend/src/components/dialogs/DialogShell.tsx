@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 
 type DialogShellProps = {
   zIndexClass: string;
@@ -8,6 +8,18 @@ type DialogShellProps = {
 };
 
 export function DialogShell({ zIndexClass, maxWidthClass, onClose, children }: DialogShellProps) {
+  useEffect(() => {
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, [onClose]);
+
   return (
     <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-6 animate-in fade-in duration-300`}>
       <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose}></div>

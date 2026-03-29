@@ -5,6 +5,8 @@ import { DecisionDashboard } from '../components/monitor/DecisionDashboard';
 import { ActionCenter } from '../components/ActionCenter';
 import { StaffGrid } from '../components/StaffGrid';
 import TerminalLog from '../components/common/TerminalLog';
+import { useStore } from '../store';
+import { useMonitorComputedValues } from '../hooks/useMonitorComputedValues';
 import type { Config, LogEntry, AuditTimelineItem, ReadModelSnapshot } from '../store';
 
 interface MonitorPageProps {
@@ -22,15 +24,6 @@ interface MonitorPageProps {
   logs: LogEntry[];
   auditTimeline: AuditTimelineItem[];
   dailyDigest: string;
-  gatewayRuntimeZones: Array<{
-    key: string;
-    label: string;
-    value: string;
-    folderPath?: string;
-    accent: string;
-    border: string;
-  }>;
-  onOpenZoneFolder: (zoneLabel: string, folderPath?: string) => void;
 }
 
 // Status Card Component
@@ -66,10 +59,33 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
   logs,
   auditTimeline,
   dailyDigest,
-  gatewayRuntimeZones,
-  onOpenZoneFolder,
 }) => {
   const { t } = useTranslation();
+  const addLog = useStore((s) => s.addLog);
+  const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
+  const { gatewayRuntimeZones } = useMonitorComputedValues({
+    corePath: config.corePath,
+    workspacePath: config.workspacePath,
+    resolvedConfigDir,
+    resolvedConfigFilePath,
+    t,
+  });
+
+  const openZoneFolder = async (zoneLabel: string, folderPath?: string) => {
+    const target = (folderPath || '').trim();
+    if (!target) {
+      addLog(`${zoneLabel}: ${t('monitor.pathUnset')}`, 'system');
+      return;
+    }
+    if (!window.electronAPI?.openPath) {
+      addLog(t('monitor.openFolderUnavailable'), 'stderr');
+      return;
+    }
+    const result = await window.electronAPI.openPath(target);
+    if (!result?.success) {
+      addLog(t('monitor.openFolderFailed', { zone: zoneLabel, msg: result?.error || 'unknown error' }), 'stderr');
+    }
+  };
 
   const accessIssue = React.useMemo(() => {
     const recentLogs = [...logs].slice(-120).reverse();
@@ -147,7 +163,7 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => onOpenZoneFolder(zone.label, zone.folderPath)}
+                      onClick={() => openZoneFolder(zone.label, zone.folderPath)}
                       className="inline-flex items-center rounded-md border border-slate-300/90 bg-white/70 px-2 py-1 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
                     >
                       <FolderOpen size={12} className="mr-1" />
