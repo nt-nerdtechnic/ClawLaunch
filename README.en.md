@@ -1,67 +1,94 @@
 # NT-ClawLaunch
 
-**NT-ClawLaunch** is an autonomous collaboration and management platform designed to accelerate the launch of international open-source projects. It is not just a launcher, but a complete ecosystem integrating a modern front-end interface and desktop automation controls.
+NT-ClawLaunch is a desktop control plane for managing [OpenClaw](https://openclaw.ai) AI gateway instances. It wraps the OpenClaw CLI in an Electron shell and provides a full-featured UI for onboarding, monitoring, agent observability, and runtime configuration.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](CONTRIBUTING.en.md)
 
-> **Platform:** macOS only. Support for Linux and Windows may be considered in future releases.
+> Platform: macOS only. Support for Linux and Windows may be considered in future releases.
 >
-> **Web UI:** The management interface is only available via the Electron desktop app. Direct browser access is not supported due to system-level security considerations.
+> Web UI: The management interface is available only through the Electron desktop app. Direct browser access (for example `http://localhost:5173`) is intentionally blocked.
 
-## 🚀 Core Features
+## Features
 
-*   **Setup Wizard:** An intuitive guided process to help developers quickly configure models, messaging pairings, and skill matrices.
-*   **Environment Automation:** Integrated Electron IPC for one-click `git clone` and `pnpm install` implementation logic.
-*   **Real-time Monitoring Dashboard:** Sophisticated visualization for tracking project status and data in real-time.
-*   **One-Click Update:** Automatically compares local versions with remote ones and executes updates elegantly.
+- Setup Wizard (6 steps): welcome, initialize, model auth, messaging, skills, launch
+- Monitoring Dashboard: sessions, task activity, pending approvals, and runtime state
+- Activity Observation Engine: filesystem watcher + JSONL session scanner + cron monitor
+- Analytics: usage breakdown by agent/project/model/provider with charts
+- Control Center: queue actions, audit timeline, and operational details
+- Skills Management: scan/import/delete workspace and core skills
+- Runtime Settings: model/auth/messaging/theme/language controls
 
-## 📂 Project Structure
+## Project Structure
 
-*   `frontend/`: Modern UI interface based on React and Electron.
-*   `docs/`: Comprehensive development and user documentation.
-*   `vault/`: Runtime logs and local data snapshots.
+```text
+NT-ClawLaunch/
+├── frontend/
+│   ├── electron/      # Electron main process, IPC services, utilities
+│   ├── src/           # React app (pages, components, hooks, stores)
+│   ├── test/          # Vitest tests
+│   ├── scripts/       # Development helper scripts
+│   └── package.json
+├── docs/              # Planning and architecture documents
+├── package.json       # Workspace scripts (pnpm --filter frontend ...)
+├── README.md
+├── README.en.md
+└── DEVELOPMENT.md
+```
 
-## 🧩 One-Click Update Spec Summary
+## Tech Stack
 
-The following content has been consolidated from the removed `shared/` specification files:
+- Electron 41
+- React 19 + TypeScript 5
+- Vite 7
+- Tailwind CSS 4
+- Zustand 5
+- Recharts 3
+- i18next
 
-*   **Version Check**: Compare local and remote versions on startup and notify when an update is available.
-*   **Update Execution**: Run `git pull` and dependency installation through desktop IPC.
-*   **Progress Visibility**: Show update logs and status during execution.
-*   **Restart Prompt**: Ask users to restart after a successful update.
-
-Current IPC capability (concept):
-
-*   `check_version`: returns `local`, `remote`, `hasUpdate`.
-*   `execute_update`: returns `success` and `logs`.
-
-## 🛠 Quick Start
+## Quick Start
 
 ### Prerequisites
-*   Node.js (v18+)
-*   pnpm
-*   [OpenClaw CLI](https://openclaw.ai) installed and on `$PATH`
 
-### Installation Steps
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/nt-nerdtechnic/NT-ClawLaunch.git
-    cd NT-ClawLaunch
-    ```
-2.  **Install Dependencies**
-    ```bash
-    pnpm install
-    ```
-3.  **Start Development Environment**
-    ```bash
-    npm run dev
-    ```
+- Node.js 18+
+- npm or pnpm
+- [OpenClaw CLI](https://openclaw.ai) installed and available on `$PATH`
 
-## 🤝 Contributing
+### Environment Variables
 
-We welcome all forms of contribution! Before getting started, please be sure to read [CONTRIBUTING.en.md](CONTRIBUTING.en.md) to understand our development process and code standards.
+There is currently no required `.env` / `.env.example` file in this repository. Runtime settings are persisted by the desktop app in `~/Library/Application Support/NT-ClawLaunch/config.json`.
 
-## 📄 License
+### Run from Workspace Root
+
+```bash
+npm install
+npm run dev
+```
+
+### Run from Frontend Package
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Production Build
+
+```bash
+cd frontend
+npm run build
+npm run dist
+```
+
+## Development Notes
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for troubleshooting details (ESM in Electron, `ELECTRON_RUN_AS_NODE`, and build/runtime caveats).
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.en.md](CONTRIBUTING.en.md) before opening a pull request.
+
+## License
 
 This project is licensed under the [MIT License](LICENSE).

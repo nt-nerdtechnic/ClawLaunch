@@ -68,19 +68,20 @@ Two settings pages:
 ```
 NT-ClawLaunch/
 ├── frontend/
-│   ├── electron/
-│   │   ├── main.ts          # Electron main process: IPC handlers, activity engine, config I/O
-│   │   └── preload.js       # contextBridge — safe renderer ↔ main boundary
-│   └── src/
-│       ├── App.tsx           # Root: tab router, bootstrap hooks, chat widget
-│       ├── store.ts          # Zustand global state (config, snapshot, events, usage)
-│       ├── pages/            # MonitorPage, AnalyticsPage, ControlCenterPage, SkillsPage,
-│       │                     # LauncherSettingsPage, RuntimeSettingsPage
-│       ├── components/       # ActionCenter, StaffGrid, Analytics, MiniView, UpdateBanner, …
-│       ├── hooks/            # useGatewayActions, useSnapshotSync, useRuntimeUsageSync, …
-│       └── components/onboarding/  # SetupWizard + 6 step components
-├── docs/
-│   └── LAUNCH_PAD_OPTIMIZATION_PLAN.md
+│   ├── electron/             # Electron main/preload + backend-like services
+│   │   ├── main.ts
+│   │   ├── preload.js
+│   │   ├── services/
+│   │   └── utils/
+│   ├── src/                  # React application (pages, components, hooks, stores)
+│   ├── test/                 # Vitest tests
+│   ├── scripts/              # Dev helper scripts (e.g. cleanup ports)
+│   ├── docs/                 # Frontend-specific docs (E2E scenarios)
+│   └── package.json
+├── docs/                     # Product/design/refactor planning docs
+├── package.json              # Workspace scripts (pnpm --filter frontend ...)
+├── README.md
+├── README.en.md
 └── DEVELOPMENT.md
 ```
 
@@ -122,6 +123,17 @@ Multi-instance isolation is achieved by calling `app.setPath('userData', ...-${p
 - Node.js 18+
 - npm or pnpm
 - [OpenClaw CLI](https://openclaw.ai) installed and on `$PATH`
+
+### Environment Variables
+
+There is currently no required `.env` / `.env.example` file in this repository. Runtime settings are persisted by the desktop app in `~/Library/Application Support/NT-ClawLaunch/config.json`.
+
+### Run from Workspace Root
+
+```bash
+npm install
+npm run dev      # delegates to frontend via pnpm --filter frontend dev
+```
 
 ### Development
 
@@ -242,17 +254,20 @@ Pull requests are welcome. Please open an issue first for significant changes. S
 ```
 NT-ClawLaunch/
 ├── frontend/
-│   ├── electron/
-│   │   ├── main.ts          # Electron 主程序：IPC 處理器、活動引擎、設定 I/O
-│   │   └── preload.js       # contextBridge — 安全的 renderer ↔ main 邊界層
-│   └── src/
-│       ├── App.tsx           # 根元件：分頁路由、啟動 Hooks、聊天元件
-│       ├── store.ts          # Zustand 全域狀態（config、snapshot、events、usage）
-│       ├── pages/            # MonitorPage、AnalyticsPage、ControlCenterPage 等
-│       ├── components/       # ActionCenter、StaffGrid、Analytics、MiniView 等
-│       ├── hooks/            # useGatewayActions、useSnapshotSync 等
-│       └── components/onboarding/  # SetupWizard + 6 個步驟元件
-├── docs/
+│   ├── electron/             # Electron main/preload + 類後端服務
+│   │   ├── main.ts
+│   │   ├── preload.js
+│   │   ├── services/
+│   │   └── utils/
+│   ├── src/                  # React 應用（pages/components/hooks/store）
+│   ├── test/                 # Vitest 測試
+│   ├── scripts/              # 開發輔助腳本（例如清理連接埠）
+│   ├── docs/                 # 前端專屬文件（如 E2E 情境）
+│   └── package.json
+├── docs/                     # 產品/設計/重構規劃文件
+├── package.json              # 工作區腳本（pnpm --filter frontend ...）
+├── README.md
+├── README.en.md
 └── DEVELOPMENT.md
 ```
 
@@ -265,6 +280,17 @@ NT-ClawLaunch/
 - Node.js 18+
 - npm 或 pnpm
 - 已安裝 [OpenClaw CLI](https://openclaw.ai) 且在 `$PATH` 中
+
+### 環境變數
+
+目前此專案沒有必填的 `.env` / `.env.example` 檔案。執行期設定由桌面應用程式寫入 `~/Library/Application Support/NT-ClawLaunch/config.json`。
+
+### 由工作區根目錄啟動
+
+```bash
+npm install
+npm run dev      # 透過 pnpm --filter frontend dev 轉呼叫 frontend
+```
 
 ### 開發模式
 
