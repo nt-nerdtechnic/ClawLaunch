@@ -165,12 +165,17 @@
 
     "services": {
       "title": "系统服务",
-      "empty": "未侦测到系统服务"
+      "empty": "未侦测到系统服务",
+      "filterRunning": "运行中",
+      "filterLoaded": "已加载",
+      "filterStopped": "已停止"
     },
     "crontab": {
       "title": "系统计划",
       "count": "crontab · {{count}} 项",
-      "empty": "无 crontab 项目"
+      "empty": "无 crontab 项目",
+      "filterEnabled": "启用中",
+      "filterDisabled": "已停用"
     },
     "cronJobs": {
       "title": "应用计划",

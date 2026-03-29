@@ -31,6 +31,14 @@ interface CrontabEntry {
   enabled?: boolean;
 }
 
+interface CalendarInterval {
+  Hour?: number;
+  Minute?: number;
+  Weekday?: number;
+  Day?: number;
+  Month?: number;
+}
+
 interface LaunchAgent {
   label: string;
   name: string;
@@ -41,6 +49,8 @@ interface LaunchAgent {
   running: boolean;
   pid: number | null;
   exitCode: number | null;
+  scheduleInterval?: number;
+  scheduleCalendar?: CalendarInterval[];
 }
 
 interface CronSchedule {
@@ -141,6 +151,58 @@ function nextTime(ms: number | undefined, t: TFunction): string {
   return t('common.time.later', { val: `${Math.floor(d / 86400000)}d` });
 }
 
+function nextCalendarRun(calendars: CalendarInterval[]): number | undefined {
+  const now = new Date();
+  for (let off = 1; off <= 7 * 24 * 60; off++) {
+    const c = new Date(now.getTime() + off * 60_000);
+    for (const cal of calendars) {
+      if (
+        (cal.Month   === undefined || cal.Month   === c.getMonth() + 1) &&
+        (cal.Day     === undefined || cal.Day     === c.getDate()) &&
+        (cal.Weekday === undefined || cal.Weekday === c.getDay()) &&
+        (cal.Hour    === undefined || cal.Hour    === c.getHours()) &&
+        (cal.Minute  === undefined || cal.Minute  === c.getMinutes())
+      ) return c.getTime();
+    }
+  }
+  return undefined;
+}
+
+function formatLaunchAgentSchedule(
+  agent: LaunchAgent,
+  t: TFunction,
+  lang: string,
+): { main: string; next?: string } | null {
+  if (agent.scheduleInterval !== undefined) {
+    const sec = agent.scheduleInterval;
+    const m = sec / 60;
+    const val = m < 1 ? `${sec}s` : m < 60 ? `${Math.round(m)}m` : `${Math.round(m / 60)}h`;
+    return { main: t('common.time.every', { val }) };
+  }
+  if (agent.scheduleCalendar && agent.scheduleCalendar.length > 0) {
+    const cal = agent.scheduleCalendar[0];
+    const parts: string[] = [];
+    const isChinese = lang.toLowerCase().startsWith('zh');
+    if (isChinese) {
+      const days = ['日', '一', '二', '三', '四', '五', '六'];
+      if (cal.Month !== undefined) parts.push(`${cal.Month}月`);
+      if (cal.Weekday !== undefined) parts.push(`週${days[cal.Weekday] ?? cal.Weekday}`);
+      if (cal.Day !== undefined && cal.Month === undefined) parts.push(`${cal.Day}日`);
+    } else {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (cal.Month !== undefined) parts.push(`Mo${cal.Month}`);
+      if (cal.Weekday !== undefined) parts.push(days[cal.Weekday] ?? `D${cal.Weekday}`);
+      if (cal.Day !== undefined && cal.Month === undefined) parts.push(`D${cal.Day}`);
+    }
+    const hh = cal.Hour    !== undefined ? String(cal.Hour).padStart(2, '0')   : '**';
+    const mm = cal.Minute  !== undefined ? String(cal.Minute).padStart(2, '0') : '00';
+    if (cal.Hour !== undefined || cal.Minute !== undefined) parts.push(`${hh}:${mm}`);
+    const nextMs = nextCalendarRun(agent.scheduleCalendar);
+    return { main: parts.join(' ') || '—', next: nextMs ? nextTime(nextMs, t) : undefined };
+  }
+  return null;
+}
+
 const TASK_STATUS_CFG: Record<TaskStatus, { label: string; dot: string; badge: string; bar: string }> = {
   todo:        { label: '', dot: 'bg-slate-400',   badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500',         bar: 'bg-slate-400' },
   in_progress: { label: '', dot: 'bg-blue-500',    badge: 'bg-blue-50 dark:bg-blue-950/50 text-blue-600',          bar: 'bg-blue-500' },
@@ -149,7 +211,7 @@ const TASK_STATUS_CFG: Record<TaskStatus, { label: string; dot: string; badge: s
 };
 
 export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshSnapshot, stateDir }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [cronJobs, setCronJobs]       = useState<CronJob[]>([]);
   const [tasks, setTasks]             = useState<ManualTask[]>([]);
   const [crontabEntries, setCrontabEntries] = useState<CrontabEntry[]>([]);
@@ -162,10 +224,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [error, setError]             = useState('');
   const [view, setView]               = useState<'all' | 'cron' | 'task' | 'obs'>('all');
-  const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'loaded'>('all');
-  const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('all');
-  const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('all');
-  const { i18n } = useTranslation();
+  const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'stopped'>('running');
+  const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
+  const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
 
   // Update TASK_STATUS_CFG to use t after useTranslation is available
   useMemo(() => {
@@ -381,7 +442,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         if (view === 'all') return true;
         return item.type === view;
       })
-      .sort((a, b) => b.time - a.time);
+      .sort((a, b) => a.time - b.time);
   }, [cronJobs, tasks, observedEvents, view]);
 
   // ── KPI ────────────────────────────────────────────────────────────────────
@@ -420,12 +481,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       <div className="grid grid-cols-4 gap-3">
         {[
           { 
-            label: t('controlCenter.kpi.activityTimeline', '作業時間軸'), 
-            value: kpi.activityTimeline, 
-            color: 'text-indigo-600 dark:text-indigo-400',
-            targetId: 'activity-timeline-section'
-          },
-          { 
             label: t('controlCenter.kpi.systemServices', '系統服務'), 
             value: kpi.systemServices.total, 
             color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400',
@@ -434,7 +489,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           { 
             label: t('controlCenter.kpi.crontabEntries', '系統排程'), 
             value: kpi.crontabEntriesCount, 
-            color: 'text-blue-600 dark:text-blue-400',
+            color: 'text-amber-600 dark:text-amber-400',
             targetId: 'system-crontab-section'
           },
           { 
@@ -442,6 +497,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             value: kpi.cronSchedules.total, 
             color: 'text-violet-600 dark:text-violet-400',
             targetId: 'application-scheduling-section'
+          },
+          { 
+            label: t('controlCenter.kpi.activityTimeline', '作業時間軸'), 
+            value: kpi.activityTimeline, 
+            color: 'text-indigo-600 dark:text-indigo-400',
+            targetId: 'activity-timeline-section'
           },
         ].map(({ label, value, color, targetId }) => (
           <button 
@@ -455,10 +516,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
-        {/* ── Left: Mixed activity timeline ──────────────────────────────── */}
-        <div id="activity-timeline-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+        {/* ── Activity timeline ── full width, pinned to bottom ── */}
+        <div id="activity-timeline-section" className="xl:col-span-3 order-last bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
           <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(99,102,241,0.5),transparent)' }} />
           <div className="p-6 space-y-3">
 
@@ -672,8 +733,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           </div>
         </div>
 
-        {/* ── Right: Three-layer scheduling ──────────────────────────────────────── */}
-        <div className="flex flex-col gap-4">
+        {/* ── Three-layer scheduling ──────────────────────────────────────── */}
+        <div className="contents">
 
           {/* Layer 1: System services */}
           <div id="system-services-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
@@ -684,12 +745,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.services.title')}</span>
                 <span className="text-[9px] text-slate-400">LaunchAgents</span>
                 <div className="flex items-center gap-1 ml-auto">
-                  {(['all', 'running', 'loaded'] as const).map(f => {
+                  {(['all', 'running', 'stopped'] as const).map(f => {
                     const isActive = agentFilter === f;
-                    const Icon = f === 'all' ? Activity : f === 'running' ? CheckCircle : Clock;
+                    const Icon = f === 'all' ? Activity : f === 'running' ? Play : Pause;
                     const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
-                                : f === 'running' ? t('common.agent.running', { pid: '' }).split(' ')[0] 
-                                : t('common.agent.loaded');
+                                : f === 'running' ? t('controlCenter.services.filterRunning') 
+                                : t('controlCenter.services.filterStopped');
                     return (
                       <button 
                         key={f} 
@@ -717,38 +778,76 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               ) : launchAgents
                 .filter(a => {
                   if (agentFilter === 'running') return a.running;
-                  if (agentFilter === 'loaded') return a.loaded;
+                  if (agentFilter === 'stopped') return !a.running;
                   return true;
                 })
                 .map(agent => (
-                <div key={agent.label} className={`flex items-center gap-2.5 rounded-xl border border-slate-100 dark:border-slate-800 px-3 py-2 transition-all ${
-                  agent.loaded ? 'bg-white dark:bg-slate-900/50' : 'bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
+                <div key={agent.label} className={`rounded-xl border px-3 py-2.5 transition-all ${
+                  agent.running ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
+                  : agent.loaded ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
+                  : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${agent.running ? 'bg-emerald-500' : agent.loaded ? 'bg-amber-400' : 'bg-slate-400'}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">{agent.name}</div>
-                    <div className="text-[9px] text-slate-400 truncate">{agent.label}</div>
+                  <div className="flex items-center gap-2">
+                    {/* 主狀態 badge：執行中 / 已停止 */}
+                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                      agent.running
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                    }`}>
+                      {agent.running ? t('controlCenter.services.filterRunning') : t('controlCenter.services.filterStopped')}
+                    </span>
+                    {/* 名稱 */}
+                    <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{agent.name}</span>
+                    {/* 細節狀態 badge：已載入 / 未載入（僅非執行中時顯示） */}
+                    {!agent.running && (
+                      <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                        agent.loaded
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}>
+                        {agent.loaded ? t('common.agent.loaded') : t('common.agent.unloaded')}
+                      </span>
+                    )}
+                    {/* PID badge */}
+                    {agent.running && agent.pid != null && (
+                      <span className="shrink-0 text-[9px] font-mono text-slate-400 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                        PID {agent.pid}
+                      </span>
+                    )}
+                    {/* 操作按鈕 */}
+                    {agent.plistExists && (
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button onClick={() => void toggleLaunchAgent(agent.label)} title={agent.loaded ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
+                          className={`p-1 rounded-lg transition-all ${agent.loaded ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-emerald-600'}`}>
+                          {agent.loaded ? <Pause size={10} /> : <Play size={10} />}
+                        </button>
+                        <button onClick={() => void deleteLaunchAgent(agent.label)}
+                          className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg ${
-                    agent.running ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
-                    : agent.loaded ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                  }`}>
-                    {agent.running ? t('common.agent.running', { pid: agent.pid }) : agent.loaded ? t('common.agent.loaded') : agent.plistExists ? t('common.agent.unloaded') : t('common.agent.notInstalled')}
-                  </span>
-                  
-                  {agent.plistExists && (
-                    <div className="flex items-center gap-0.5 shrink-0 ml-2">
-                      <button onClick={() => void toggleLaunchAgent(agent.label)} title={agent.loaded ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
-                        className={`p-1 rounded-lg transition-all ${agent.loaded ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-emerald-600'}`}>
-                        {agent.loaded ? <Pause size={10} /> : <Play size={10} />}
-                      </button>
-                      <button onClick={() => void deleteLaunchAgent(agent.label)}
-                        className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
-                  )}
+                  {/* 副資訊：label · schedule · next */}
+                  <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
+                    <span className="truncate font-mono">{agent.label}</span>
+                    {(() => {
+                      const sched = formatLaunchAgentSchedule(agent, t, i18n.language);
+                      if (!sched) return null;
+                      return (
+                        <>
+                          <span className="opacity-40">·</span>
+                          <span className="font-mono text-violet-400/80">{sched.main}</span>
+                          {sched.next && (
+                            <>
+                              <span className="opacity-40">·</span>
+                              <span className="text-emerald-400/80">{sched.next}</span>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               ))}
             </div>
@@ -765,10 +864,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <div className="flex items-center gap-1 ml-auto">
                   {(['all', 'enabled', 'disabled'] as const).map(f => {
                     const isActive = ctFilter === f;
-                    const Icon = f === 'all' ? Activity : f === 'enabled' ? CheckCircle : Clock;
+                    const Icon = f === 'all' ? Activity : f === 'enabled' ? Play : Pause;
                     const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
-                                : f === 'enabled' ? t('common.status.success') 
-                                : t('common.status.todo');
+                                : f === 'enabled' ? t('controlCenter.crontab.filterEnabled') 
+                                : t('controlCenter.crontab.filterDisabled');
                     return (
                       <button 
                         key={f} 
@@ -799,12 +898,21 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   return true;
                 })
                 .map((entry, i) => (
-                <div key={i} className={`rounded-xl border px-3 py-2 transition-all ${
-                  entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
+                <div key={i} className={`rounded-xl border px-3 py-2.5 transition-all ${
+                  entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
                 }`}>
                   <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${entry.enabled !== false ? 'bg-amber-400' : 'bg-slate-400'}`} />
-                    <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">{entry.name}</span>
+                    {/* 狀態 badge */}
+                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                      entry.enabled !== false
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                    }`}>
+                      {entry.enabled !== false ? t('controlCenter.crontab.filterEnabled') : t('controlCenter.crontab.filterDisabled')}
+                    </span>
+                    {/* 名稱 */}
+                    <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{entry.name}</span>
+                    {/* 操作按鈕 */}
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button onClick={() => void toggleCrontab(entry.raw)} title={entry.enabled !== false ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
                         className={`p-1 rounded-lg transition-all ${entry.enabled !== false ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-amber-600'}`}>
@@ -816,14 +924,18 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </button>
                     </div>
                   </div>
-                  <div className="mt-1 pl-3.5 flex items-center gap-2 text-[10px] text-slate-400">
-                    <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded" title={describeCron(entry.schedule, i18n.language)}>
+                  {/* 副資訊：排程表達式 + 描述 + 指令 */}
+                  <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
+                    <span className="font-mono text-amber-400/80 bg-amber-50/50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded" title={describeCron(entry.schedule, i18n.language)}>
                       {entry.schedule}
                     </span>
-                    <span className="text-violet-400/80 max-w-[120px] truncate" title={describeCron(entry.schedule, i18n.language)}>
-                      {describeCron(entry.schedule, i18n.language)}
-                    </span>
-                    <span className="truncate max-w-[140px] opacity-60 ml-auto">{entry.command.split('/').slice(-2).join('/')}</span>
+                    {describeCron(entry.schedule, i18n.language) && (
+                      <>
+                        <span className="opacity-40">·</span>
+                        <span className="truncate max-w-[120px]">{describeCron(entry.schedule, i18n.language)}</span>
+                      </>
+                    )}
+                    <span className="truncate max-w-[140px] opacity-50 ml-auto">{entry.command.split('/').slice(-2).join('/')}</span>
                   </div>
                 </div>
               ))}

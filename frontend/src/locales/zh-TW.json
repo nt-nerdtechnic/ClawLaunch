@@ -173,12 +173,17 @@
 
     "services": {
       "title": "系統服務",
-      "empty": "未偵測到系統服務"
+      "empty": "未偵測到系統服務",
+      "filterRunning": "執行中",
+      "filterLoaded": "已載入",
+      "filterStopped": "已停止"
     },
     "crontab": {
       "title": "系統排程",
       "count": "crontab · {{count}} 項",
-      "empty": "無 crontab 項目"
+      "empty": "無 crontab 項目",
+      "filterEnabled": "啟用中",
+      "filterDisabled": "已停用"
     },
     "cronJobs": {
       "title": "應用排程",

@@ -102,12 +102,40 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
         const plistPath = path.join(agentsDir, filename);
         const name = friendlyNames[label] || label;
         let plistExists = false, keepAlive = false, comment = '';
+        let scheduleInterval: number | undefined;
+        let scheduleCalendar: { Hour?: number; Minute?: number; Weekday?: number; Day?: number; Month?: number }[] | undefined;
         try {
           const raw = await fs.readFile(plistPath, 'utf-8');
           plistExists = true;
           keepAlive = raw.includes('<key>KeepAlive</key>');
           const commentMatch = raw.match(/<key>Comment<\/key>\s*<string>([^<]+)<\/string>/);
           if (commentMatch) comment = commentMatch[1];
+
+          // Parse StartInterval (seconds between runs)
+          const siMatch = raw.match(/<key>StartInterval<\/key>\s*<integer>(\d+)<\/integer>/);
+          if (siMatch) scheduleInterval = parseInt(siMatch[1]);
+
+          // Parse StartCalendarInterval (calendar-based schedule)
+          const parseDictKeys = (dictStr: string) => {
+            const obj: { Hour?: number; Minute?: number; Weekday?: number; Day?: number; Month?: number } = {};
+            const re = /<key>(Hour|Minute|Weekday|Day|Month)<\/key>\s*<integer>(\d+)<\/integer>/g;
+            let m: RegExpExecArray | null;
+            while ((m = re.exec(dictStr)) !== null) {
+              (obj as Record<string, number>)[m[1]] = parseInt(m[2]);
+            }
+            return obj;
+          };
+          const arrayMatch = raw.match(/<key>StartCalendarInterval<\/key>\s*<array>([\s\S]*?)<\/array>/);
+          if (arrayMatch) {
+            const dictRe = /<dict>([\s\S]*?)<\/dict>/g;
+            const dicts: { Hour?: number; Minute?: number; Weekday?: number; Day?: number; Month?: number }[] = [];
+            let dm: RegExpExecArray | null;
+            while ((dm = dictRe.exec(arrayMatch[1])) !== null) dicts.push(parseDictKeys(dm[1]));
+            scheduleCalendar = dicts;
+          } else {
+            const dictMatch = raw.match(/<key>StartCalendarInterval<\/key>\s*<dict>([\s\S]*?)<\/dict>/);
+            if (dictMatch) scheduleCalendar = [parseDictKeys(dictMatch[1])];
+          }
         } catch { /* plist missing */ }
         const line = listOutput.split('\n').find(l => l.includes(label));
         let running = false, pid: number | null = null, exitCode: number | null = null;
@@ -117,7 +145,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
           exitCode = parts[1] ? parseInt(parts[1]) : null;
           running = pid !== null && !isNaN(pid);
         }
-        return { label, name, plistExists, keepAlive, comment, loaded: !!line, running, pid, exitCode };
+        return { label, name, plistExists, keepAlive, comment, loaded: !!line, running, pid, exitCode, scheduleInterval, scheduleCalendar };
       }));
       return { code: 0, stdout: JSON.stringify({ agents }), stderr: '', exitCode: 0 };
     } catch (e) {

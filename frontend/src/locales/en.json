@@ -173,12 +173,17 @@
 
     "services": {
       "title": "System Services",
-      "empty": "No system services detected"
+      "empty": "No system services detected",
+      "filterRunning": "Running",
+      "filterLoaded": "Loaded",
+      "filterStopped": "Stopped"
     },
     "crontab": {
       "title": "System Crontab",
       "count": "crontab · {{count}} items",
-      "empty": "No crontab entries"
+      "empty": "No crontab entries",
+      "filterEnabled": "Active",
+      "filterDisabled": "Disabled"
     },
     "cronJobs": {
       "title": "App Schedule",
