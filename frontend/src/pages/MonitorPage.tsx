@@ -2,8 +2,6 @@ import React from 'react';
 import { FolderOpen, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DecisionDashboard } from '../components/monitor/DecisionDashboard';
-import { ActionCenter } from '../components/ActionCenter';
-import { StaffGrid } from '../components/StaffGrid';
 import TerminalLog from '../components/common/TerminalLog';
 import { useStore } from '../store';
 import { useMonitorComputedValues } from '../hooks/useMonitorComputedValues';
@@ -27,26 +25,6 @@ interface MonitorPageProps {
 }
 
 // Status Card Component
-const StatusCard: React.FC<{ label: string; status: 'loading' | 'ok' | 'error' }> = ({ label, status }) => (
-  <div className={`rounded-2xl border px-6 py-4 flex items-center justify-between ${
-    status === 'ok'
-      ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-700/60 dark:bg-emerald-950/40'
-      : status === 'error'
-        ? 'border-red-200 bg-red-50 dark:border-red-700/60 dark:bg-red-950/40'
-        : 'border-amber-200 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/40'
-  }`}>
-    <span className={`text-sm font-bold ${
-      status === 'ok'
-        ? 'text-emerald-700 dark:text-emerald-300'
-        : status === 'error'
-          ? 'text-red-700 dark:text-red-300'
-          : 'text-amber-700 dark:text-amber-300'
-    }`}>
-      {label}
-    </span>
-    <div className={`w-3 h-3 rounded-full ${status === 'ok' ? 'bg-emerald-500' : status === 'error' ? 'bg-red-500' : 'bg-amber-500'}`} />
-  </div>
-);
 
 export const MonitorPage: React.FC<MonitorPageProps> = ({
   running,
@@ -211,23 +189,6 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
         resolvedConfigDir={resolvedConfigDir}
         snapshot={snapshot}
       />
-
-      {/* Action Center */}
-      <div id="monitor-action-center">
-        <ActionCenter />
-      </div>
-
-      {/* Staff Grid */}
-      <div id="monitor-staff-grid">
-        <StaffGrid />
-      </div>
-
-      {/* Environment Status */}
-      <div className="grid grid-cols-3 gap-8">
-        <StatusCard label={t('monitor.status.node')} status={envStatus.node} />
-        <StatusCard label={t('monitor.status.git')} status={envStatus.git} />
-        <StatusCard label={t('monitor.status.pnpm')} status={envStatus.pnpm} />
-      </div>
 
       {/* Terminal Log */}
       <div id="monitor-live-stream">

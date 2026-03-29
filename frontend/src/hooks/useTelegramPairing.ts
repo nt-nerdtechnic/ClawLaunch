@@ -50,7 +50,7 @@ export function useTelegramPairing(
     setTelegramPairingError('');
     try {
       const pairingFile = `${resolvedConfigDir}/credentials/telegram-pairing.json`;
-      const allowFromFile = `${resolvedConfigDir}/credentials/telegram-default-allowFrom.json`;
+      const allowFromFile = `${resolvedConfigDir}/credentials/telegram-allowFrom.json`;
       const [pairingRes, allowFromRes] = await Promise.all([
         window.electronAPI.exec(`test -f ${shellQuote(pairingFile)} && cat ${shellQuote(pairingFile)}`),
         window.electronAPI.exec(`test -f ${shellQuote(allowFromFile)} && cat ${shellQuote(allowFromFile)}`),
