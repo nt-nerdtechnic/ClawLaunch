@@ -187,7 +187,10 @@
       "pause": "Pause",
       "start": "Start",
       "filterEnabled": "Running",
-      "filterDisabled": "Stopped"
+      "filterDisabled": "Stopped",
+      "lastOk": "OK",
+      "lastFail": "Failed",
+      "errorCount": "{{count}} error(s)"
     }
   },
   "pixelOffice": {

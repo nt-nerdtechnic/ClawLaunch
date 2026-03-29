@@ -179,7 +179,10 @@
       "pause": "暂停",
       "start": "启动",
       "filterEnabled": "运作中",
-      "filterDisabled": "已停止"
+      "filterDisabled": "已停止",
+      "lastOk": "成功",
+      "lastFail": "失败",
+      "errorCount": "{{count}} 次错误"
     }
   },
   "pixelOffice": {

@@ -886,14 +886,44 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   const hasError = (job.state?.consecutiveErrors ?? 0) > 0;
                   return (
                     <div key={job.id} className={`rounded-xl border px-3 py-2.5 transition-all ${
-                      hasError ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-950/10'
-                      : job.enabled ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
-                      : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/20 opacity-50'
+                      !job.enabled
+                        ? 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
+                        : hasError
+                        ? 'border-rose-100 dark:border-rose-900/30 bg-white dark:bg-slate-900/50'
+                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
                     }`}>
                       <div className="flex items-center gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${job.enabled ? 'bg-violet-500' : 'bg-slate-400'}`} />
+                        {/* 運作狀態 badge */}
+                        <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                          job.enabled
+                            ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800/40'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                        }`}>
+                          {job.enabled ? t('controlCenter.cronJobs.filterEnabled') : t('controlCenter.cronJobs.filterDisabled')}
+                        </span>
+                        {/* 名稱 */}
                         <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
-                        {hasError && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
+                        {/* 上次執行結果 badge */}
+                        {job.state?.lastRunAtMs && (
+                          <span className={`shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                            job.state.lastStatus === 'ok'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
+                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/40'
+                          }`}>
+                            {job.state.lastStatus === 'ok'
+                              ? <CheckCircle size={8} />
+                              : <AlertTriangle size={8} />}
+                            {job.state.lastStatus === 'ok' ? t('controlCenter.cronJobs.lastOk') : t('controlCenter.cronJobs.lastFail')}
+                          </span>
+                        )}
+                        {/* 連續錯誤次數 badge */}
+                        {hasError && (
+                          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40">
+                            <AlertTriangle size={8} />
+                            {t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
+                          </span>
+                        )}
+                        {/* 操作按鈕 */}
                         <div className="flex items-center gap-0.5 shrink-0">
                           <button onClick={() => void toggleCron(job.id)} title={job.enabled ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
                             className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}>
@@ -905,17 +935,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           </button>
                         </div>
                       </div>
-                      <div className="mt-1 flex items-center gap-2 pl-3.5 text-[9px] text-slate-400 flex-wrap">
-                        <span className="font-mono">{formatInterval(job.schedule, t)}</span>
+                      {/* 副資訊列：排程 · 上次時間 · 下次時間 */}
+                      <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
+                        <span className="font-mono text-violet-400/70">{formatInterval(job.schedule, t)}</span>
                         {job.state?.lastRunAtMs && (
                           <>
                             <span className="opacity-40">·</span>
-                            <span className="flex items-center gap-0.5">
-                              {job.state.lastStatus === 'ok'
-                                ? <CheckCircle size={8} className="text-emerald-500" />
-                                : <AlertTriangle size={8} className="text-rose-400" />}
-                              {relTime(job.state.lastRunAtMs, t)}
-                            </span>
+                            <span>{relTime(job.state.lastRunAtMs, t)}</span>
                           </>
                         )}
                         {job.enabled && job.state?.nextRunAtMs && (
