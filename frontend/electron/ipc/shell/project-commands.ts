@@ -1,0 +1,262 @@
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { shellQuote } from '../../utils/shell-utils.js';
+import { writeFileIfMissing } from '../../services/skills.js';
+import type { CommandResult } from './types.js';
+import type { ShellExecContext } from '../shell-exec-handler.js';
+
+export async function handleProjectCommands(fullCommand: string, ctx: ShellExecContext): Promise<CommandResult | null> {
+  if (fullCommand.startsWith('project:check-empty')) {
+    const targetPath = fullCommand.replace('project:check-empty ', '').trim();
+    try {
+      const stats = await fs.stat(targetPath);
+      if (!stats.isDirectory()) return { code: 1, stderr: 'Not a directory', exitCode: 1 };
+      const files = await fs.readdir(targetPath);
+      const isEmpty = files.filter(f => !f.startsWith('.')).length === 0;
+      return { code: 0, stdout: JSON.stringify({ isEmpty }), exitCode: 0 };
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { code: 0, stdout: JSON.stringify({ isEmpty: true, notExist: true }), exitCode: 0 };
+      }
+      return { code: 1, stderr: (e as Error)?.message || 'project check-empty failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('project:get-versions')) {
+    try {
+      const repoUrl = 'https://github.com/openclaw/openclaw.git';
+      return new Promise<CommandResult>((resolve) => {
+        const gitProcess = spawn(`git ls-remote --tags ${repoUrl}`, { shell: true });
+        let stdout = '';
+        gitProcess.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+        gitProcess.on('close', (code) => {
+          if (code !== 0) {
+            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0 });
+            return;
+          }
+          const tags = stdout
+            .split('\n')
+            .filter(line => line.includes('refs/tags/'))
+            .map(line => line.split('refs/tags/')[1].replace('^{}', ''))
+            .filter((v, i, a) => a.indexOf(v) === i)
+            .reverse();
+          resolve({ code: 0, stdout: JSON.stringify(['main', ...tags]), exitCode: 0 });
+        });
+      });
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'get versions failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand === 'process:kill-all') {
+    ctx.stopGatewayWatchdog('process:kill-all');
+    ctx.stopGatewayHttpWatchdog('process:kill-all');
+    ctx.killAllSubprocesses();
+    return { code: 0, stdout: 'All tracked subprocesses killed', exitCode: 0 };
+  }
+
+  if (fullCommand.startsWith('project:initialize')) {
+    try {
+      const payloadStr = fullCommand.replace('project:initialize ', '').trim();
+      const { corePath, configPath, workspacePath, version, method } = JSON.parse(payloadStr);
+      const targetVersion = ctx.validateVersionRef(version || 'main');
+      const downloadMethod = method || 'git';
+
+      const checkAndWrap = async (dirPath: string, subName: string) => {
+        try {
+          await fs.mkdir(dirPath, { recursive: true });
+          const files = await fs.readdir(dirPath);
+          const isEmpty = files.filter(f => !f.startsWith('.')).length === 0;
+          return isEmpty ? dirPath : path.join(dirPath, subName);
+        } catch {
+          return path.join(dirPath, subName);
+        }
+      };
+
+      const finalCorePath = await checkAndWrap(corePath, 'openclaw');
+      const finalConfigPath = await checkAndWrap(configPath, '.openclaw');
+      const finalWorkspacePath = await checkAndWrap(workspacePath, 'openclaw-workspace');
+
+      const repoUrl = 'https://github.com/openclaw/openclaw.git';
+      const tarballUrl = `https://github.com/openclaw/openclaw/tarball/${encodeURIComponent(targetVersion)}`;
+
+      ctx.emitShellStdout(`>>> Initializing paths for version ${targetVersion} via ${downloadMethod}...\n`, 'stdout');
+      await fs.mkdir(finalCorePath, { recursive: true });
+
+      return new Promise<CommandResult>((resolve) => {
+        let childProcess: ReturnType<typeof spawn>;
+
+        const runCommandWithStreaming = (cmd: string, title: string) =>
+          new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
+            ctx.emitShellStdout(`>>> ${title}\n`, 'stdout');
+            const proc = spawn(cmd, { shell: true, cwd: finalCorePath });
+            ctx.activeProcesses.add(proc);
+            let stdout = '', stderr = '';
+            proc.stdout.on('data', (data: Buffer) => { const chunk = data.toString(); stdout += chunk; ctx.emitShellStdout(chunk, 'stdout'); });
+            proc.stderr.on('data', (data: Buffer) => { const chunk = data.toString(); stderr += chunk; ctx.emitShellStdout(chunk, 'stderr'); });
+            proc.on('error', (err) => { ctx.activeProcesses.delete(proc); resolveStep({ code: 1, stdout, stderr: stderr || err.message }); });
+            proc.on('close', (code: number) => { ctx.activeProcesses.delete(proc); resolveStep({ code: code ?? 0, stdout, stderr }); });
+          });
+
+        if (downloadMethod === 'zip') {
+          const actualCmd = `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(finalCorePath)}`;
+          childProcess = spawn(actualCmd, { shell: true });
+        } else {
+          const versionArgs = `--branch ${shellQuote(targetVersion)} --depth 1 --single-branch`;
+          const isSubDir = finalCorePath !== corePath;
+          const gitCmd = isSubDir
+            ? `git clone ${shellQuote(repoUrl)} ${versionArgs} ${shellQuote(path.basename(finalCorePath))}`
+            : `git clone ${repoUrl} ${versionArgs} .`;
+          const workingDir = isSubDir ? corePath : finalCorePath;
+          childProcess = spawn(`cd ${shellQuote(workingDir)} && ${gitCmd}`, { shell: true });
+        }
+
+        ctx.activeProcesses.add(childProcess);
+        childProcess.stdout.on('data', (data: Buffer) => { ctx.emitShellStdout(data.toString(), 'stdout'); });
+        childProcess.stderr.on('data', (data: Buffer) => { ctx.emitShellStdout(data.toString(), 'stderr'); });
+        childProcess.on('error', (err) => {
+          ctx.activeProcesses.delete(childProcess);
+          resolve({ code: 1, stderr: `Spawn error: ${err.message}`, exitCode: 1 });
+        });
+
+        childProcess.on('close', async (code: number) => {
+          if (code !== 0) {
+            ctx.activeProcesses.delete(childProcess);
+            const errorMsg = downloadMethod === 'zip'
+              ? `Download failed (code ${code}). Check your network connection.`
+              : `Git clone failed (code ${code}). Try switching to "ZIP" method or check your git/network.`;
+            resolve({ code: 1, stderr: errorMsg, exitCode: 1 });
+            return;
+          }
+
+          if (downloadMethod === 'git') {
+            const gitDirPath = path.join(finalCorePath, '.git');
+            try {
+              ctx.emitShellStdout('>>> Detaching from Git (Cleaning up .git directory)...\n', 'stdout');
+              await fs.rm(gitDirPath, { recursive: true, force: true });
+            } catch {
+              ctx.emitShellStdout('>>> Note: Could not remove .git folder, skipping...\n', 'stdout');
+            }
+          }
+
+          try {
+            const createdItems: string[] = [];
+            const existingItems: string[] = [];
+            const preExistingItems = new Set<string>();
+
+            const trackPreExisting = async (targetPath: string) => {
+              try { await fs.stat(targetPath); preExistingItems.add(targetPath); } catch { /* not pre-existing */ }
+            };
+            const trackOutcome = (targetPath: string) => {
+              if (preExistingItems.has(targetPath)) existingItems.push(targetPath);
+              else createdItems.push(targetPath);
+            };
+            const ensureDirWithTracking = async (dirPath: string) => {
+              await fs.mkdir(dirPath, { recursive: true });
+              trackOutcome(dirPath);
+            };
+
+            const configFilePath = path.join(finalConfigPath, 'openclaw.json');
+            const skillsDir = path.join(finalWorkspacePath, 'skills');
+            const extensionsDir = path.join(finalWorkspacePath, 'extensions');
+            const bootstrapFileNames = ['AGENTS.md', 'SOUL.md', 'TOOLS.md', 'IDENTITY.md', 'USER.md', 'HEARTBEAT.md', 'BOOTSTRAP.md', 'MEMORY.md'];
+
+            await trackPreExisting(finalConfigPath);
+            await trackPreExisting(configFilePath);
+            await trackPreExisting(finalWorkspacePath);
+            await trackPreExisting(skillsDir);
+            await trackPreExisting(extensionsDir);
+            for (const name of bootstrapFileNames) await trackPreExisting(path.join(finalWorkspacePath, name));
+
+            const pnpmCheckRes = await runCommandWithStreaming('zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version', 'Checking pnpm availability...');
+            if (pnpmCheckRes.code !== 0) {
+              const detail = [String(pnpmCheckRes.stderr || '').trim(), String(pnpmCheckRes.stdout || '').trim()].filter(Boolean).join('\n');
+              resolve({ code: 1, stderr: detail || 'pnpm is unavailable. Please install pnpm (https://pnpm.io/) and ensure it is in your PATH.', exitCode: 1 });
+              return;
+            }
+
+            const installRes = await runCommandWithStreaming('zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
+            if (installRes.code !== 0) {
+              const detail = [String(installRes.stderr || '').trim(), String(installRes.stdout || '').trim()].filter(Boolean).join('\n');
+              resolve({ code: 1, stderr: detail || `Dependency installation failed (exit code ${installRes.code}).`, exitCode: 1 });
+              return;
+            }
+
+            const warmupRes = await runCommandWithStreaming('zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
+            if (warmupRes.code !== 0) {
+              resolve({ code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 });
+              return;
+            }
+
+            ctx.emitShellStdout(`>>> Initializing config at ${finalConfigPath}...\n`, 'stdout');
+            await ensureDirWithTracking(finalConfigPath);
+
+            const setupEnv = `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_STATE_DIR=${shellQuote(finalConfigPath)}`;
+            const setupRes = await runCommandWithStreaming(
+              `zsh -ilc "${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}" 2>&1 || ${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}`,
+              'Initializing OpenClaw config...'
+            );
+            if (setupRes.code !== 0) {
+              resolve({ code: 1, stderr: setupRes.stderr || 'openclaw setup failed.', exitCode: 1 });
+              return;
+            }
+            trackOutcome(configFilePath);
+
+            try {
+              const raw = await fs.readFile(configFilePath, 'utf-8');
+              const parsed = JSON.parse(raw);
+              let changed = false;
+              if ('version' in parsed) { delete parsed['version']; changed = true; }
+              if ('corePath' in parsed) { delete parsed['corePath']; changed = true; }
+              if (changed) await fs.writeFile(configFilePath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf-8');
+            } catch { /* legacy cleanup failure does not block */ }
+
+            ctx.emitShellStdout(`>>> Setting up workspace at ${finalWorkspacePath}...\n`, 'stdout');
+            await ensureDirWithTracking(finalWorkspacePath);
+            await ensureDirWithTracking(skillsDir);
+            await ensureDirWithTracking(extensionsDir);
+
+            const bootstrapTemplates: Record<string, string> = {
+              'AGENTS.md': '# AGENTS\n\nList project-specific agents and responsibilities.\n',
+              'SOUL.md': '# SOUL\n\nDefine mission, product values, and non-negotiable principles.\n',
+              'TOOLS.md': '# TOOLS\n\nDocument approved tools, runtime constraints, and workflows.\n',
+              'IDENTITY.md': '# IDENTITY\n\nDescribe team identity, tone, and guardrails.\n',
+              'USER.md': '# USER\n\nCapture user context, personas, and preference assumptions.\n',
+              'HEARTBEAT.md': '# HEARTBEAT\n\nTrack operating rhythm, rituals, and handoff cadence.\n',
+              'BOOTSTRAP.md': '# BOOTSTRAP\n\nOutline startup checklist and first-run expectations.\n',
+              'MEMORY.md': '# MEMORY\n\nPersistent project memory and verify decisions.\n',
+            };
+
+            for (const [name, content] of Object.entries(bootstrapTemplates)) {
+              const targetPath = path.join(finalWorkspacePath, name);
+              const wrote = await writeFileIfMissing(targetPath, content);
+              if (!wrote) trackOutcome(targetPath);
+              else createdItems.push(targetPath);
+            }
+
+            ctx.emitShellStdout('>>> Initialization complete!\n', 'stdout');
+            resolve({
+              code: 0,
+              stdout: JSON.stringify({
+                corePath: finalCorePath,
+                configPath: finalConfigPath,
+                workspacePath: finalWorkspacePath,
+                createdItems: Array.from(new Set(createdItems)),
+                existingItems: Array.from(new Set(existingItems)),
+              }),
+              exitCode: 0,
+            });
+          } catch (e) {
+            resolve({ code: 1, stderr: (e as Error)?.message || 'project initialize failed', exitCode: 1 });
+          }
+          ctx.activeProcesses.delete(childProcess);
+        });
+      });
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'project initialize failed', exitCode: 1 };
+    }
+  }
+
+  return null;
+}

@@ -1,0 +1,1892 @@
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs/promises';
+import { mkdirSync, unlinkSync, watch as fsWatch, existsSync } from 'node:fs';
+import { loadLocales, t } from './utils/i18n.js';
+import { safeJsonParse, normalizeConfigDir, normalizeArray, normalizeString, normalizeNumber, pickFirst, estimateUsageCost, buildId } from './utils/normalize.js';
+import { sleep, shellQuote, escapeAppleScriptString, isPidAlive, uniqueNonEmptyPaths } from './utils/shell-utils.js';
+import { inferAuthChoiceFromProfile, parseOpenClawConfig, collectAuthProfiles, loadJsonFile, saveJsonFile, getAgentAuthProfilePaths, hasCredential, unwrapCliArg, AUTH_CHOICE_FLAG_MAPPING, AUTH_CHOICE_PROVIDER_ALIASES, SUPPORTED_AUTH_CHOICES, CREDENTIALLESS_AUTH_CHOICES, OAUTH_AUTH_CHOICES, sanitizeSecret, hasCjkCharacters, isLikelyNaturalLanguageSentence, isPlausibleMachineToken, getProfileProviderAliases, getChoiceAliases, providerAliasSets, providerMatchesAny, profileMatchesAliases } from './services/auth.js';
+import { copyDir, writeFileIfMissing, parseSkillMetadata, scanSkillsInDir, scanInstalledSkills } from './services/skills.js';
+import { writeLockFile, cleanupLockFile, checkConfigPathConflict, acquireConfigPathLock, getActiveLockFilePath } from './services/lock.js';
+import { normalizeReadModelSnapshot, buildReadModelHistoryFromJsonl, fallbackHistoryFromSnapshot, parseSessionJsonlForUsage, type RuntimeUsageEvent } from './services/snapshot.js';
+import { computeTaskGovernance, buildGovernanceEvents, resolveRuntimeDirFromCandidates, loadEventAcks, saveEventAcks, applyAckStateToEvents, buildAuditTimeline, buildDailyDigestMarkdown } from './services/governance.js';
+import { type ControlCenterState, type ControlTaskItem, type ControlProjectItem, type ControlQueueItem, type ControlAuditItem, type ControlApprovalItem, type ControlApprovalStatus, type ControlBudgetPolicy, nowIso, readControlCenterState, writeControlCenterState, appendControlAudit, buildControlOverview, buildControlBudgetStatus, enforceControlMutationTokenGate, pushQueueIfMissing, pushApprovalIfMissing, runControlAutoSync, parseControlPayload } from './services/control-center.js';
+import { buildGatewayUrlArg, readEnvOverride, resolveGatewayCredentials, buildGatewayAuthArg, isGatewayOnlineFromStatus, resolveOpenClawRuntime } from './services/openclaw-runtime.js';
+import { pickTextFromUnknownContent, extractMessageText, deriveSessionDisplayName, isAssistantMessage, extractRunIdFromSendPayload } from './utils/chat-helpers.js';
+import { registerShellExecHandler } from './ipc/shell-exec-handler.js';
+
+// ── Multi-instance support ──────────────────────────────────────────────────
+// Isolate userData by PID to prevent Chromium singleton lock causing the second instance to crash.
+// However, config.json (user settings) is stored in a fixed path PERSISTENT_CONFIG_DIR,
+// so that the previous settings can be read on each restart and won't disappear due to PID changes.
+app.setPath('userData', `${app.getPath('userData')}-${process.pid}`);
+mkdirSync(app.getPath('userData'), { recursive: true });
+// Fixed config directory: ~/Library/Application Support/NT-ClawLaunch/
+const PERSISTENT_CONFIG_DIR = path.join(
+  app.getPath('appData'),
+  app.getName().replace(/ /g, '-'),
+);
+mkdirSync(PERSISTENT_CONFIG_DIR, { recursive: true });
+const CONFIG_DIR = PERSISTENT_CONFIG_DIR;
+const getClawlaunchFile = () => path.join(app.getPath('home'), '.clawlaunch', 'clawlaunch.json');
+// ───────────────────────────────────────────────────────────────────────────
+
+// Suppress EPIPE errors that occur when concurrently/piped launchers close
+// the parent stdout/stderr pipe while Electron tries to write to console.
+process.stdout?.on('error', (err: NodeJS.ErrnoException) => { if (err.code === 'EPIPE') return; });
+process.stderr?.on('error', (err: NodeJS.ErrnoException) => { if (err.code === 'EPIPE') return; });
+process.on('uncaughtException', (err: NodeJS.ErrnoException) => { if (err.code === 'EPIPE') return; throw err; });
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+let mainWindow: BrowserWindow | null = null;
+const activeProcesses = new Set<ReturnType<typeof spawn>>();
+const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean }>();
+
+const DEV_PORT_RANGE_START = 5173;
+const DEV_PORT_RANGE_END = 5185;
+const DEV_SERVER_WAIT_MS = 15000;
+
+const NT_CLAW_TERMINAL_MARKER_PREFIX = '__NT_CLAWLAUNCH_MANAGED__';
+
+interface LauncherConfig {
+  corePath?: string;
+  configPath?: string;
+  autoRestartGateway?: boolean;
+}
+
+interface GatewayStartOptions {
+  autoRestart: boolean;
+  maxRestarts: number;
+  baseBackoffMs: number;
+}
+
+interface GatewayWatchdogState {
+  child: ReturnType<typeof spawn> | null;
+  command: string;
+  stopRequested: boolean;
+  restartAttempts: number;
+  restartTimer: NodeJS.Timeout | null;
+  options: GatewayStartOptions;
+}
+
+interface GatewayHttpWatchdogOptions {
+  enabled: boolean;
+  healthCheckCommand: string;
+  restartCommand: string;
+  intervalMs: number;
+  failThreshold: number;
+  maxRestarts: number;
+  startupGraceMs: number;
+  restartCooldownMs: number;
+}
+
+interface GatewayHttpWatchdogState {
+  timer: NodeJS.Timeout | null;
+  checking: boolean;
+  consecutiveFailures: number;
+  restartAttempts: number;
+  suppressChecksUntil: number;
+  options: GatewayHttpWatchdogOptions;
+}
+
+const DEFAULT_GATEWAY_WATCHDOG_OPTIONS: GatewayStartOptions = {
+  autoRestart: false,
+  maxRestarts: 5,
+  baseBackoffMs: 1000,
+};
+
+const DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS: GatewayHttpWatchdogOptions = {
+  enabled: false,
+  healthCheckCommand: '',
+  restartCommand: '',
+  intervalMs: 15000,
+  failThreshold: 2,
+  maxRestarts: 5,
+  startupGraceMs: 20000,
+  restartCooldownMs: 20000,
+};
+
+const gatewayWatchdog: GatewayWatchdogState = {
+  child: null,
+  command: '',
+  stopRequested: false,
+  restartAttempts: 0,
+  restartTimer: null,
+  options: { ...DEFAULT_GATEWAY_WATCHDOG_OPTIONS },
+};
+
+const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
+  timer: null,
+  checking: false,
+  consecutiveFailures: 0,
+  restartAttempts: 0,
+  suppressChecksUntil: 0,
+  options: { ...DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS },
+};
+
+
+const sendToRenderer = (channel: string, payload: unknown) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const webContents = mainWindow.webContents;
+  if (!webContents || webContents.isDestroyed()) return false;
+  try {
+    webContents.send(channel, payload);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const emitShellStdout = (data: string, source: 'stdout' | 'stderr' = 'stdout') => {
+  sendToRenderer('shell:stdout', { data, source });
+};
+
+const traceLifecycleAction = (
+  action: string,
+  details: Record<string, unknown> = {},
+  callerFrameIndex = 3,
+) => {
+  const stackLines = String(new Error().stack || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const rawCaller = stackLines[callerFrameIndex] || stackLines[stackLines.length - 1] || 'unknown';
+  const caller = rawCaller.replace(/^at\s+/, '');
+  const detailText = Object.entries(details)
+    .map(([key, value]) => `${key}=${String(value ?? '')}`)
+    .join(' ');
+  const suffix = detailText ? ` ${detailText}` : '';
+  emitShellStdout(
+    `[launcher-trace] ts=${new Date().toISOString()} action=${action}${suffix} caller=${caller}\n`,
+    'stdout',
+  );
+};
+
+const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart') => {
+  const marker = `${NT_CLAW_TERMINAL_MARKER_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+  const finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; ${command}; printf "\\n${t('main.shell.terminal.footer')}"; read -r _`;
+  const line1 = `tell application "Terminal" to do script "${escapeAppleScriptString(finalCmd)}"`;
+  const line2 = 'tell application "Terminal" to activate';
+  return `osascript -e ${shellQuote(line1)} -e ${shellQuote(line2)}`;
+};
+
+const clearGatewayRestartTimer = () => {
+  if (gatewayWatchdog.restartTimer) {
+    clearTimeout(gatewayWatchdog.restartTimer);
+    gatewayWatchdog.restartTimer = null;
+  }
+};
+
+const stopGatewayWatchdog = (reason = 'manual stop') => {
+  traceLifecycleAction('stopGatewayWatchdog', {
+    reason,
+    childPid: gatewayWatchdog.child?.pid ?? 'none',
+    childKilled: gatewayWatchdog.child ? gatewayWatchdog.child.killed : 'none',
+    restartAttempts: gatewayWatchdog.restartAttempts,
+  });
+  gatewayWatchdog.stopRequested = true;
+  clearGatewayRestartTimer();
+  if (gatewayWatchdog.child && !gatewayWatchdog.child.killed) {
+    try {
+      gatewayWatchdog.child.kill('SIGTERM');
+    } catch (_) {
+      // ignore
+    }
+  }
+  gatewayWatchdog.child = null;
+  gatewayWatchdog.command = '';
+  gatewayWatchdog.restartAttempts = 0;
+  gatewayWatchdog.options = { ...DEFAULT_GATEWAY_WATCHDOG_OPTIONS };
+  if (reason) {
+    emitShellStdout(`[gateway-watchdog] stopped: ${reason}\n`, 'stdout');
+  }
+};
+
+const clearGatewayHttpWatchdogTimer = () => {
+  if (gatewayHttpWatchdog.timer) {
+    clearInterval(gatewayHttpWatchdog.timer);
+    gatewayHttpWatchdog.timer = null;
+  }
+};
+
+const stopGatewayHttpWatchdog = (reason = 'manual stop') => {
+  clearGatewayHttpWatchdogTimer();
+  gatewayHttpWatchdog.checking = false;
+  gatewayHttpWatchdog.consecutiveFailures = 0;
+  gatewayHttpWatchdog.restartAttempts = 0;
+  gatewayHttpWatchdog.suppressChecksUntil = 0;
+  gatewayHttpWatchdog.options = { ...DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS };
+  emitShellStdout(`[gateway-http-watchdog] stopped: ${reason}\n`, 'stdout');
+};
+
+const runGatewayHttpWatchdogCheck = async () => {
+  if (gatewayHttpWatchdog.checking) return;
+  if (!gatewayHttpWatchdog.options.enabled) return;
+  if (Date.now() < gatewayHttpWatchdog.suppressChecksUntil) return;
+  const healthCheckCommand = String(gatewayHttpWatchdog.options.healthCheckCommand || '').trim();
+  const restartCommand = String(gatewayHttpWatchdog.options.restartCommand || '').trim();
+  if (!healthCheckCommand || !restartCommand) return;
+
+  gatewayHttpWatchdog.checking = true;
+  try {
+    const healthRes = await runShellCommand(healthCheckCommand);
+    const online = isGatewayOnlineFromStatus(healthRes);
+    if (online) {
+      gatewayHttpWatchdog.consecutiveFailures = 0;
+      return;
+    }
+
+    gatewayHttpWatchdog.consecutiveFailures += 1;
+    const failStdout = String(healthRes.stdout || '').trim();
+    const failStderr = String(healthRes.stderr || '').trim();
+    emitShellStdout(
+      `[gateway-http-watchdog] health check failed (${gatewayHttpWatchdog.consecutiveFailures}/${gatewayHttpWatchdog.options.failThreshold}) code=${String(healthRes.code)} stdout=${failStdout ? 'non-empty' : 'empty'} stderr=${failStderr ? 'non-empty' : 'empty'}\n`,
+      'stderr',
+    );
+
+    if (gatewayHttpWatchdog.consecutiveFailures < gatewayHttpWatchdog.options.failThreshold) {
+      return;
+    }
+
+    // Double confirmation before restart to reduce misjudgment caused by transient jitter.
+    await sleep(1200);
+    const recheckRes = await runShellCommand(healthCheckCommand);
+    const recheckOnline = isGatewayOnlineFromStatus(recheckRes);
+    if (recheckOnline) {
+      gatewayHttpWatchdog.consecutiveFailures = 0;
+      emitShellStdout('[gateway-http-watchdog] false alarm recovered on recheck, skip restart\n', 'stdout');
+      return;
+    }
+
+    gatewayHttpWatchdog.consecutiveFailures = 0;
+
+    if (gatewayHttpWatchdog.restartAttempts >= gatewayHttpWatchdog.options.maxRestarts) {
+      emitShellStdout(
+        `[gateway-http-watchdog] max restart attempts reached (${gatewayHttpWatchdog.options.maxRestarts}), stop restarting\n`,
+        'stderr',
+      );
+      return;
+    }
+
+    gatewayHttpWatchdog.restartAttempts += 1;
+    emitShellStdout(
+      `[gateway-http-watchdog] restart attempt ${gatewayHttpWatchdog.restartAttempts}/${gatewayHttpWatchdog.options.maxRestarts} via macOS Terminal\n`,
+      'stdout',
+    );
+
+    const ok = await launchGatewayViaTerminal(restartCommand);
+    if (ok) {
+      gatewayHttpWatchdog.suppressChecksUntil = Date.now() + gatewayHttpWatchdog.options.restartCooldownMs;
+      emitShellStdout('[gateway-http-watchdog] restart command sent to Terminal\n', 'stdout');
+    } else {
+      emitShellStdout('[gateway-http-watchdog] failed to open Terminal for restart\n', 'stderr');
+    }
+  } catch (e) {
+    emitShellStdout(`[gateway-http-watchdog] check error: ${String(e?.message || e)}\n`, 'stderr');
+  } finally {
+    gatewayHttpWatchdog.checking = false;
+  }
+};
+
+const startGatewayHttpWatchdog = (options: Partial<GatewayHttpWatchdogOptions>) => {
+  const nextOptions: GatewayHttpWatchdogOptions = {
+    enabled: Boolean(options.enabled),
+    healthCheckCommand: String(options.healthCheckCommand || '').trim(),
+    restartCommand: String(options.restartCommand || '').trim(),
+    intervalMs: Number.isFinite(Number(options.intervalMs)) ? Math.max(5000, Number(options.intervalMs)) : 15000,
+    failThreshold: Number.isFinite(Number(options.failThreshold)) ? Math.max(1, Number(options.failThreshold)) : 2,
+    maxRestarts: Number.isFinite(Number(options.maxRestarts)) ? Math.max(1, Number(options.maxRestarts)) : 5,
+    startupGraceMs: Number.isFinite(Number(options.startupGraceMs)) ? Math.max(3000, Number(options.startupGraceMs)) : 20000,
+    restartCooldownMs: Number.isFinite(Number(options.restartCooldownMs)) ? Math.max(3000, Number(options.restartCooldownMs)) : 20000,
+  };
+
+  if (!nextOptions.enabled || !nextOptions.healthCheckCommand || !nextOptions.restartCommand) {
+    stopGatewayHttpWatchdog('disabled or missing command');
+    return;
+  }
+
+  clearGatewayHttpWatchdogTimer();
+  gatewayHttpWatchdog.options = nextOptions;
+  gatewayHttpWatchdog.consecutiveFailures = 0;
+  gatewayHttpWatchdog.restartAttempts = 0;
+  gatewayHttpWatchdog.suppressChecksUntil = Date.now() + nextOptions.startupGraceMs;
+  gatewayHttpWatchdog.checking = false;
+  emitShellStdout(
+    `[gateway-http-watchdog] started (interval=${nextOptions.intervalMs}ms, threshold=${nextOptions.failThreshold})\n`,
+    'stdout',
+  );
+
+  gatewayHttpWatchdog.timer = setInterval(() => {
+    void runGatewayHttpWatchdogCheck();
+  }, nextOptions.intervalMs);
+
+  void runGatewayHttpWatchdogCheck();
+};
+
+const launchGatewayViaTerminal = async (command: string) => {
+  const osascriptCmd = buildTerminalLaunchScript(command);
+  const res = await runShellCommand(osascriptCmd);
+  return (res.code ?? 1) === 0;
+};
+
+const spawnWatchedGatewayProcess = (command: string) => {
+  const child = spawn(command, { shell: true });
+  gatewayWatchdog.child = child;
+  activeProcesses.add(child);
+
+  emitShellStdout(`[gateway-watchdog] process started (pid=${String(child.pid ?? 'unknown')})\n`, 'stdout');
+
+  child.stdout.on('data', (data) => {
+    emitShellStdout(data.toString(), 'stdout');
+  });
+  child.stderr.on('data', (data) => {
+    emitShellStdout(data.toString(), 'stderr');
+  });
+
+  child.on('exit', async (code: number | null, signal: NodeJS.Signals | null) => {
+    activeProcesses.delete(child);
+    if (gatewayWatchdog.child === child) {
+      gatewayWatchdog.child = null;
+    }
+
+    if (gatewayWatchdog.stopRequested) {
+      return;
+    }
+
+    const failed = code !== 0 || signal !== null;
+    if (!failed) {
+      emitShellStdout('[gateway-watchdog] process exited cleanly, no restart required\n', 'stdout');
+      return;
+    }
+
+    emitShellStdout(
+      `[gateway-watchdog] process exited unexpectedly (code=${String(code)}, signal=${String(signal)})\n`,
+      'stderr',
+    );
+
+    if (!gatewayWatchdog.options.autoRestart) {
+      emitShellStdout('[gateway-watchdog] auto-restart is disabled\n', 'stderr');
+      return;
+    }
+
+    if (gatewayWatchdog.restartAttempts >= gatewayWatchdog.options.maxRestarts) {
+      emitShellStdout(
+        `[gateway-watchdog] max restart attempts reached (${gatewayWatchdog.options.maxRestarts}), stop restarting\n`,
+        'stderr',
+      );
+      return;
+    }
+
+    gatewayWatchdog.restartAttempts += 1;
+    const delayMs = Math.min(
+      gatewayWatchdog.options.baseBackoffMs * 2 ** (gatewayWatchdog.restartAttempts - 1),
+      30000,
+    );
+
+    emitShellStdout(
+      `[gateway-watchdog] restart attempt ${gatewayWatchdog.restartAttempts}/${gatewayWatchdog.options.maxRestarts} in ${delayMs}ms\n`,
+      'stdout',
+    );
+
+    clearGatewayRestartTimer();
+    gatewayWatchdog.restartTimer = setTimeout(() => {
+      if (gatewayWatchdog.stopRequested || !gatewayWatchdog.command) {
+        return;
+      }
+      spawnWatchedGatewayProcess(gatewayWatchdog.command);
+    }, delayMs);
+  });
+
+  return child;
+};
+
+interface OpenClawChatInvokeRequest {
+  requestId: string;
+  sessionKey: string;
+  agentId: string;
+  message: string;
+  stream?: boolean;
+  deliver?: boolean;
+  forceLocal?: boolean;
+}
+
+
+
+const runShellCommand = (command: string) => new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+  const child = spawn(command, { shell: true });
+  activeProcesses.add(child);
+  let stdout = '';
+  let stderr = '';
+  let settled = false;
+
+  child.stdout.on('data', (data) => {
+    stdout += data.toString();
+  });
+  child.stderr.on('data', (data) => {
+    stderr += data.toString();
+  });
+
+  child.on('error', (error) => {
+    activeProcesses.delete(child);
+    if (settled) return;
+    settled = true;
+    resolve({ code: 1, stdout, stderr: stderr || String(error?.message || error) });
+  });
+
+  child.on('close', (code: number) => {
+    activeProcesses.delete(child);
+    if (settled) return;
+    settled = true;
+    resolve({ code: code ?? 1, stdout, stderr });
+  });
+});
+
+
+// ── Gateway WebSocket Client ─────────────────────────────────────────────────
+// Replaces CLI polling: connects directly to Gateway for real-time streaming.
+class GatewayWSClient {
+  private ws: WebSocket | null = null;
+  private pending = new Map<string, {
+    resolve: (v: unknown) => void;
+    reject: (e: Error) => void;
+    timeoutId: ReturnType<typeof setTimeout>;
+  }>();
+  private reqCounter = 0;
+  private chatListeners = new Map<string, (payload: unknown) => void>();
+  private connectNonce: string | null = null;
+  private connectSent = false;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private token: string | undefined;
+  onConnected?: () => void;
+  onDisconnected?: () => void;
+
+  // ── Protocol: { type:'req', id, method, params } / { type:'res', id, ok, payload, error } / { type:'event', event, payload }
+  connect(wsUrl: string, token?: string): void {
+    this.token = token;
+    this.connectNonce = null;
+    this.connectSent = false;
+
+    // Use globalThis.WebSocket (Node 22+) or fall back to nothing (Electron has it built-in)
+    const WS = (globalThis as Record<string, unknown>).WebSocket as (new (url: string) => WebSocket) | undefined;
+    if (!WS) {
+      emitShellStdout('[gateway-ws] WebSocket not available in this environment\n', 'stderr');
+      this.onDisconnected?.();
+      return;
+    }
+
+    const ws: WebSocket = new WS(wsUrl);
+    this.ws = ws;
+
+    ws.addEventListener('open', () => {
+      // Queue a fallback connect in case server doesn't send challenge
+      this.connectTimer = setTimeout(() => { void this.sendConnect(); }, 1000);
+    });
+
+    ws.addEventListener('message', (event: MessageEvent) => {
+      let frame: unknown;
+      try { frame = JSON.parse(String(event.data)); } catch { return; }
+      this.handleFrame(frame);
+    });
+
+    ws.addEventListener('close', () => {
+      if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+      this.ws = null;
+      this.rejectAllPending('WebSocket disconnected');
+      this.onDisconnected?.();
+    });
+
+    ws.addEventListener('error', (err) => {
+      emitShellStdout(`[gateway-ws] socket error: ${String((err as ErrorEvent)?.message || err)}\n`, 'stderr');
+    });
+  }
+
+  disconnect(): void {
+    if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+    const ws = this.ws;
+    this.ws = null;
+    try { (ws as WebSocket)?.close(); } catch {}
+    this.rejectAllPending('Client disconnected');
+  }
+
+  /** Send a request and wait for matching { type:'res' } response */
+  request<T = unknown>(method: string, params?: unknown): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (!this.isConnected) {
+        reject(new Error('Gateway WebSocket not connected'));
+        return;
+      }
+      const id = `r${++this.reqCounter}-${Date.now()}`;
+      const timeoutId = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Gateway request timed out: ${method}`));
+      }, 30000);
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timeoutId });
+      try {
+        this.ws!.send(JSON.stringify({ type: 'req', id, method, params: params ?? null }));
+      } catch (e) {
+        clearTimeout(timeoutId);
+        this.pending.delete(id);
+        reject(new Error(`Gateway send failed: ${e.message}`));
+      }
+    });
+  }
+
+  subscribeChatEvent(sessionKey: string, listener: (payload: unknown) => void): () => void {
+    this.chatListeners.set(sessionKey, listener);
+    return () => this.chatListeners.delete(sessionKey);
+  }
+
+  get isConnected(): boolean {
+    if (!this.ws) return false;
+    return this.ws.readyState === 1; // WebSocket.OPEN
+  }
+
+  private async sendConnect(): Promise<void> {
+    if (this.connectSent) return;
+    this.connectSent = true;
+    if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+
+    const params: Record<string, unknown> = {
+      minProtocol: 3,
+      maxProtocol: 3,
+      client: {
+        id: 'cli',
+        version: app.getVersion() || 'dev',
+        platform: process.platform,
+        mode: 'cli',
+      },
+      role: 'operator',
+      scopes: ['operator.admin', 'operator.approvals'],
+      caps: [],
+      auth: this.token ? { token: this.token } : undefined,
+    };
+
+    try {
+      await this.request<unknown>('connect', params);
+      this.onConnected?.();
+    } catch (e) {
+      emitShellStdout(`[gateway-ws] connect request rejected: ${e instanceof Error ? e.message : String(e)}\n`, 'stderr');
+      (this.ws as WebSocket)?.close(4008, 'connect failed');
+    }
+  }
+
+  private handleFrame(frame: unknown): void {
+    const f = frame as { type?: string; event?: string; payload?: Record<string, unknown>; id?: string; ok?: boolean; error?: unknown };
+    if (f.type === 'event') {
+      const evt = f.event;
+      if (evt === 'connect.challenge') {
+        const nonce = typeof f.payload?.nonce === 'string' ? f.payload.nonce : null;
+        if (nonce) {
+          this.connectNonce = nonce;
+          void this.sendConnect();
+        }
+        return;
+      }
+      if (evt === 'chat') {
+        this.dispatchChatEvent(f.payload);
+      }
+      return;
+    }
+
+    if (f.type === 'res') {
+      const pending = this.pending.get(f.id ?? '');
+      if (pending) {
+        clearTimeout(pending.timeoutId);
+        this.pending.delete(f.id ?? '');
+        if (f.ok) {
+          pending.resolve(f.payload ?? null);
+        } else {
+          pending.reject(new Error(String((f.error as { message?: string })?.message || f.error || 'Gateway error')));
+        }
+      }
+      return;
+    }
+  }
+
+  private dispatchChatEvent(payload: unknown): void {
+    const p = payload as Record<string, unknown>;
+    const sessionKey = String(p?.sessionKey || '');
+    if (sessionKey && this.chatListeners.has(sessionKey)) {
+      this.chatListeners.get(sessionKey)!(payload);
+    } else if (!sessionKey) {
+      for (const listener of this.chatListeners.values()) {
+        listener(payload);
+      }
+    }
+  }
+
+  private rejectAllPending(reason: string): void {
+    for (const [, pending] of this.pending) {
+      clearTimeout(pending.timeoutId);
+      pending.reject(new Error(reason));
+    }
+    this.pending.clear();
+  }
+}
+
+
+// ── Gateway WebSocket singleton ───────────────────────────────────────────────
+let gwsClient: GatewayWSClient | null = null;
+
+async function ensureGatewayWsConnected(): Promise<{ ok: boolean; error?: string }> {
+  if (gwsClient?.isConnected) return { ok: true };
+
+  // Disconnect any stale client before creating a new one
+  gwsClient?.disconnect();
+  gwsClient = null;
+
+  const runtime = await resolveOpenClawRuntime();
+  const { gatewayPort, gatewayToken } = runtime;
+
+  if (!gatewayPort || !/^\d+$/.test(gatewayPort)) {
+    const err = 'No gateway port configured in openclaw.json (gateway.port)';
+    emitShellStdout(`[gateway-ws] ${err}\n`, 'stderr');
+    return { ok: false, error: err };
+  }
+
+  const portNum = Number.parseInt(gatewayPort, 10);
+  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    return { ok: false, error: `Invalid gateway port: ${gatewayPort}` };
+  }
+
+  const wsUrl = `ws://127.0.0.1:${gatewayPort}`;
+  emitShellStdout(`[gateway-ws] connecting to ${wsUrl}${gatewayToken ? ' (with token)' : ''}\n`, 'stdout');
+
+  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    const client = new GatewayWSClient();
+    let settled = false;
+
+    const settle = (result: { ok: boolean; error?: string }) => {
+      if (settled) return;
+      settled = true;
+      if (result.ok) {
+        gwsClient = client;
+        gwsClient.onDisconnected = () => {
+          emitShellStdout('[gateway-ws] disconnected\n', 'stderr');
+          sendToRenderer('openclaw:gateway.status', { connected: false });
+        };
+        emitShellStdout('[gateway-ws] connected\n', 'stdout');
+        sendToRenderer('openclaw:gateway.status', { connected: true });
+      } else {
+        emitShellStdout(`[gateway-ws] failed: ${result.error}\n`, 'stderr');
+        client.disconnect();
+      }
+      resolve(result);
+    };
+
+    // 15 second timeout to accommodate Gateway startup delay + challenge handshake
+    const timer = setTimeout(() => {
+      settle({ ok: false, error: 'WebSocket connection timeout (15s)' });
+    }, 15000);
+
+    client.onConnected = () => {
+      clearTimeout(timer);
+      settle({ ok: true });
+    };
+
+    client.onDisconnected = () => {
+      clearTimeout(timer);
+      settle({ ok: false, error: `WebSocket connection refused (port ${gatewayPort})` });
+    };
+
+    client.connect(wsUrl, gatewayToken || undefined);
+  });
+}
+
+function validateVersionRef(raw: string): string {
+  const value = String(raw || '').trim();
+  if (!value) {
+    throw new Error('Invalid version: empty');
+  }
+  if (value.length > 128) {
+    throw new Error('Invalid version: too long');
+  }
+  if (!/^[A-Za-z0-9._/-]+$/.test(value)) {
+    throw new Error(`Invalid version format: ${value}`);
+  }
+  return value;
+}
+
+function isDevServerReachable(url: string, timeoutMs = 600): Promise<boolean> {
+  return new Promise((resolve) => {
+    const normalizedUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const req = http.get(`${normalizedUrl}/@vite/client`, (res) => {
+      const statusOk = Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 300);
+      if (!statusOk) {
+        res.resume();
+        resolve(false);
+        return;
+      }
+
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        // Ensure this is really Vite and not any random HTTP service.
+        resolve(body.includes('vite') || body.includes('/@react-refresh'));
+      });
+    });
+
+    req.on('error', () => resolve(false));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function resolveDevServerUrl(): Promise<string> {
+  const envUrl = process.env.VITE_DEV_SERVER_URL;
+  if (envUrl && await isDevServerReachable(envUrl)) {
+    return envUrl;
+  }
+
+  const deadline = Date.now() + DEV_SERVER_WAIT_MS;
+  while (Date.now() < deadline) {
+    for (let port = DEV_PORT_RANGE_START; port <= DEV_PORT_RANGE_END; port++) {
+      const url = `http://localhost:${port}`;
+      if (await isDevServerReachable(url)) {
+        return url;
+      }
+    }
+     
+    await sleep(250);
+  }
+
+  return `http://localhost:${DEV_PORT_RANGE_START}`;
+}
+
+function killAllSubprocesses() {
+  traceLifecycleAction('killAllSubprocesses', {
+    activeProcessCount: activeProcesses.size,
+    hasGwsClient: Boolean(gwsClient),
+  });
+  stopGatewayWatchdog('kill-all-subprocesses');
+  stopGatewayHttpWatchdog('kill-all-subprocesses');
+  gwsClient?.disconnect();
+  gwsClient = null;
+  for (const proc of activeProcesses) {
+    try {
+      if (!proc.killed) {
+        proc.kill('SIGTERM');
+        // Force kill if SIGTERM doesn't work.
+        setTimeout(() => {
+          if (!proc.killed) proc.kill('SIGKILL');
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('Failed to kill subprocess:', e);
+    }
+  }
+  activeProcesses.clear();
+}
+
+async function activateConfigPath(newConfigPath: string): Promise<void> {
+  const { conflictPid, suggestionPath } = await acquireConfigPathLock(newConfigPath);
+
+  if (conflictPid !== null) {
+    const suggestionLine = suggestionPath ? t('main.dialogs.configPathConflict.suggestion', { path: suggestionPath }) : '';
+    const dialogOptions = {
+      type: 'warning' as const,
+      title: t('main.dialogs.configPathConflict.title'),
+      message: t('main.dialogs.configPathConflict.message', {
+        pid: conflictPid,
+        path: String(newConfigPath || '').trim(),
+        suggestion: suggestionLine,
+      }),
+      buttons: [t('main.dialogs.configPathConflict.ok')],
+    };
+    const parentWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    if (parentWindow) {
+      dialog.showMessageBox(parentWindow, dialogOptions).catch(() => {});
+    } else {
+      dialog.showMessageBox(dialogOptions).catch(() => {});
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
+async function createWindow() {
+  const iconPath = process.env.NODE_ENV === 'development'
+    ? path.join(__dirname, '../public/icon.png')
+    : path.join(__dirname, 'icon.png');
+
+  mainWindow = new BrowserWindow({
+    width: 1100,
+    height: 750,
+    minWidth: 320,
+    minHeight: 500,
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#020617',
+    show: false,
+    icon: iconPath,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(iconPath);
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    const devServerUrl = await resolveDevServerUrl();
+    console.log(`[dev] Loading renderer from ${devServerUrl}`);
+    mainWindow.loadURL(devServerUrl);
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+
+// ── Activity Observation Engine ───────────────────────────────────────────────
+// Passively observes all agent artifacts without modifying agents.
+// Collectors: FileSystem Watcher + JSONL Scanner + Cron State Scanner
+// Inference: raw events → semantic ActivityEvent with human-readable title
+
+interface ActivityEvent {
+  id: string;
+  timestamp: number;        // epoch ms
+  source: 'fs' | 'jsonl' | 'cron' | 'system';
+  type:
+    | 'skill_created' | 'skill_updated' | 'skill_deleted'
+    | 'config_changed' | 'task_updated' | 'script_executed'
+    | 'agent_action' | 'file_change'
+    | 'scheduled_run' | 'service_state';
+  category: 'development' | 'execution' | 'scheduled' | 'task' | 'config' | 'alert' | 'system';
+  title: string;
+  detail?: string;
+  path?: string;
+  agent?: string;
+  exitCode?: number;
+}
+
+const ACTIVITY_STORE_FILE = path.join(PERSISTENT_CONFIG_DIR, 'activity-store.json');
+const ACTIVITY_MAX = 500;
+
+// In-memory ring buffer — flushed to disk async
+let activityBuffer: ActivityEvent[] = [];
+let activityFlushPending = false;
+
+async function loadActivityStore(): Promise<void> {
+  try {
+    const raw = await fs.readFile(ACTIVITY_STORE_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) activityBuffer = parsed.slice(-ACTIVITY_MAX);
+  } catch { activityBuffer = []; }
+}
+
+async function flushActivityStore(): Promise<void> {
+  if (activityFlushPending) return;
+  activityFlushPending = true;
+  try {
+    await fs.writeFile(ACTIVITY_STORE_FILE, JSON.stringify(activityBuffer.slice(-ACTIVITY_MAX)), 'utf-8');
+  } catch { /* non-fatal */ }
+  finally { activityFlushPending = false; }
+}
+
+function pushActivity(event: Omit<ActivityEvent, 'id'>): ActivityEvent {
+  const full: ActivityEvent = { id: buildId('act'), ...event };
+  // Deduplicate: skip if exact same title+timestamp already exists (avoid double-scan)
+  const isDuplicate = activityBuffer.some(
+    e => e.title === full.title && e.timestamp === full.timestamp
+  );
+  if (isDuplicate) return full;
+  activityBuffer.push(full);
+  if (activityBuffer.length > ACTIVITY_MAX) activityBuffer = activityBuffer.slice(-ACTIVITY_MAX);
+  void flushActivityStore();
+  return full;
+}
+
+// ── Inference Engine ──────────────────────────────────────────────────────────
+// Map raw path/event → semantic type + title
+
+function inferFsEvent(
+  watchEvent: 'rename' | 'change',
+  filePath: string,
+  existed: boolean,
+): Omit<ActivityEvent, 'id' | 'timestamp'> | null {
+  const base = path.basename(filePath);
+  const parts = filePath.split(path.sep);
+
+  // Detect if path contains a 'skills' segment followed by a skill name
+  const skillsIdx = parts.lastIndexOf('skills');
+  const isInSkills = skillsIdx >= 0 && parts.length > skillsIdx + 1;
+  const skillName = isInSkills ? parts[skillsIdx + 1] : null;
+
+  // Detect if path contains a 'config' segment
+  const isInConfig = parts.includes('config') && !isInSkills;
+
+  if (base === 'SKILL.md' && isInSkills) {
+    const type = (watchEvent === 'rename' && !existed) ? 'skill_created' : 'skill_updated';
+    return { source: 'fs', type, category: 'development',
+      title: `${type === 'skill_created' ? t('main.activity.skills.created') : t('main.activity.skills.updated')}：${skillName}`,
+      detail: filePath, path: filePath };
+  }
+  if ((base.endsWith('.py') || base.endsWith('.ts') || base.endsWith('.js')) && isInSkills) {
+    return { source: 'fs', type: 'skill_updated', category: 'development',
+      title: `${watchEvent === 'rename' ? t('main.activity.skills.codeAdded') : t('main.activity.skills.codeModified')}：${skillName}/${base}`,
+      detail: filePath, path: filePath };
+  }
+  if (isInConfig && (base.endsWith('.json') || base.endsWith('.yaml') || base.endsWith('.toml'))) {
+    return { source: 'fs', type: 'config_changed', category: 'config',
+      title: `${t('main.activity.config.changed')}：${base}`, detail: filePath, path: filePath };
+  }
+  if (base === 'tasks.json') {
+    return { source: 'fs', type: 'task_updated', category: 'task',
+      title: t('main.activity.tasks.updated'), detail: filePath, path: filePath };
+  }
+  if (base.endsWith('.py') && !isInSkills) {
+    return { source: 'fs', type: 'script_executed', category: 'execution',
+      title: `${watchEvent === 'rename' ? t('main.activity.scripts.created') : t('main.activity.scripts.modified')}：${base}`,
+      detail: filePath, path: filePath };
+  }
+  const ext = path.extname(base);
+  if (!base.startsWith('.') && ['.md', '.txt', '.json', '.yaml', '.toml', '.sh'].includes(ext)) {
+    return { source: 'fs', type: 'file_change', category: 'system',
+      title: `${watchEvent === 'rename' ? t('main.activity.files.createdDeleted') : t('main.activity.files.modified')}：${path.basename(path.dirname(filePath))}/${base}`,
+      detail: filePath, path: filePath };
+  }
+  return null;
+}
+
+// ── FileSystem Watcher ────────────────────────────────────────────────────────
+const HOME = process.env['HOME'] || '';
+
+// Read launcher config to derive dynamic paths (corePath, workspacePath, stateDir)
+async function readLauncherConfigPaths(): Promise<{
+  corePath: string; workspacePath: string; configPath: string; stateDir: string;
+}> {
+  const fallback = {
+    corePath: '', workspacePath: '', configPath: '',
+    stateDir: process.env['OPENCLAW_STATE_DIR'] || path.join(HOME, '.openclaw'),
+  };
+  try {
+    const raw = await fs.readFile(getClawlaunchFile(), 'utf-8');
+    const cfg = JSON.parse(raw);
+    return {
+      corePath:      String(cfg.corePath      || '').trim(),
+      workspacePath: String(cfg.workspacePath || '').trim(),
+      configPath:    String(cfg.configPath    || '').trim(),
+      stateDir:      String(cfg.stateDir      || process.env['OPENCLAW_STATE_DIR'] || path.join(HOME, '.openclaw')).trim(),
+    };
+  } catch { return fallback; }
+}
+
+// Build watch dir list from config — no hardcoded paths
+async function buildWatchDirs(): Promise<string[]> {
+  const { corePath, workspacePath, stateDir } = await readLauncherConfigPaths();
+  const dirs: string[] = [];
+  if (corePath) {
+    dirs.push(path.join(corePath, 'skills'));
+    dirs.push(path.join(corePath, 'config'));
+    dirs.push(corePath);
+  }
+  if (workspacePath) dirs.push(workspacePath);
+  if (stateDir)      dirs.push(path.join(stateDir, 'agents'));
+  // Remove duplicates and missing dirs
+  return [...new Set(dirs)];
+}
+
+const activeWatchers: ReturnType<typeof fsWatch>[] = [];
+
+async function startActivityWatcher(extraDirs: string[] = []): Promise<void> {
+  // Stop existing watchers first
+  for (const w of activeWatchers) { try { w.close(); } catch {} }
+  activeWatchers.length = 0;
+
+  const configDirs = await buildWatchDirs();
+  const dirsToWatch = [...new Set([...configDirs, ...extraDirs])];
+
+  for (const dir of dirsToWatch) {
+    if (!existsSync(dir)) continue;
+    try {
+      const watcher = fsWatch(dir, { recursive: true }, (watchEvent, filename) => {
+        if (!filename) return;
+        const fullPath = path.join(dir, String(filename));
+        const base = path.basename(fullPath);
+        if (base.startsWith('.') || fullPath.endsWith('~') || fullPath.endsWith('.lock')) return;
+        const existed = existsSync(fullPath);
+        const inferred = inferFsEvent(watchEvent as 'rename' | 'change', fullPath, existed);
+        if (inferred) pushActivity({ ...inferred, timestamp: Date.now() });
+      });
+      activeWatchers.push(watcher);
+    } catch { /* dir not watchable */ }
+  }
+}
+
+// ── JSONL Session Scanner ─────────────────────────────────────────────────────
+// Tracks last-seen byte offset per session file to avoid re-reading old lines.
+const jsonlOffsets: Map<string, number> = new Map();
+
+async function scanJsonlFile(filePath: string): Promise<void> {
+  try {
+    const fh = await fs.open(filePath, 'r');
+    const stat = await fh.stat();
+    const offset = jsonlOffsets.get(filePath) ?? 0;
+    if (stat.size <= offset) { await fh.close(); return; }
+    const len = stat.size - offset;
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, offset);
+    await fh.close();
+    jsonlOffsets.set(filePath, stat.size);
+    const lines = buf.toString('utf-8').split('\n').filter(Boolean);
+    const agentMatch = filePath.match(/agents\/([^/]+)\/sessions\//);
+    const agentId = agentMatch ? agentMatch[1] : 'unknown';
+
+    for (const line of lines) {
+      try {
+        const evt = JSON.parse(line);
+        if (evt?.type !== 'message') continue;
+        const ts = evt.timestamp ? new Date(evt.timestamp).getTime() : Date.now();
+        const msg = evt.message || {};
+        const role = msg.role || '';
+        const contentArr: unknown[] = Array.isArray(msg.content) ? msg.content as unknown[] : [];
+
+        // Extract toolCall entries from assistant messages
+        if (role === 'assistant') {
+          for (const c of contentArr) {
+            const cv = c as Record<string, unknown>;
+            if (!cv || cv.type !== 'toolCall') continue;
+            const toolName = String(cv.name || '');
+            const args = (cv.arguments as Record<string, unknown>) || {};
+
+            if (toolName === 'exec') {
+              const cmd = String(args.command || '').trim().slice(0, 100);
+              if (!cmd) continue;
+              pushActivity({
+                timestamp: ts, source: 'jsonl', type: 'script_executed', category: 'execution',
+                title: `${t('main.activity.agent.exec')} [${agentId}]：${cmd}`,
+                detail: cmd, agent: agentId,
+              });
+            } else if (toolName === 'write') {
+              const fp = String(args.path || '');
+              const base = path.basename(fp);
+              if (!fp) continue;
+              const fpParts = fp.split(path.sep);
+              const isSkill = fpParts.includes('skills');
+              const isConfig = fpParts.includes('config') && !isSkill;
+              pushActivity({
+                timestamp: ts, source: 'jsonl',
+                type: isSkill ? 'skill_created' : 'file_change',
+                category: isSkill ? 'development' : isConfig ? 'config' : 'execution',
+                title: (isSkill
+                  ? `${t('main.activity.agent.createSkillFile')} [${agentId}]`
+                  : `${t('main.activity.agent.writeFile')} [${agentId}]`) + `：${base}`,
+                detail: fp, agent: agentId, path: fp,
+              });
+            } else if (toolName === 'edit') {
+              const fp = String(args.path || '');
+              const base = path.basename(fp);
+              if (!fp) continue;
+              const fpParts = fp.split(path.sep);
+              const isSkill = fpParts.includes('skills');
+              pushActivity({
+                timestamp: ts, source: 'jsonl',
+                type: isSkill ? 'skill_updated' : 'file_change',
+                category: isSkill ? 'development' : 'execution',
+                title: (isSkill
+                  ? `${t('main.activity.agent.modifySkill')} [${agentId}]`
+                  : `${t('main.activity.agent.editFile')} [${agentId}]`) + `：${base}`,
+                detail: fp, agent: agentId, path: fp,
+              });
+            } else if (toolName === 'web_fetch' || toolName === 'web_search') {
+              const query = String(args.url || args.query || '').slice(0, 80);
+              pushActivity({
+                timestamp: ts, source: 'jsonl', type: 'agent_action', category: 'execution',
+                title: `${toolName === 'web_search' ? t('main.activity.agent.webSearch') : t('main.activity.agent.webScrape')} [${agentId}]：${query}`,
+                detail: query, agent: agentId,
+              });
+            }
+          }
+        }
+      } catch { /* malformed line */ }
+    }
+  } catch { /* file not readable */ }
+}
+
+async function scanAllSessions(stateDir?: string): Promise<void> {
+  const resolved = stateDir || (await readLauncherConfigPaths()).stateDir;
+  const base = resolved || path.join(HOME, '.openclaw');
+  const agentsDir = path.join(base, 'agents');
+  try {
+    const agents = await fs.readdir(agentsDir);
+    for (const agent of agents) {
+      const sessionsDir = path.join(agentsDir, agent, 'sessions');
+      try {
+        const files = await fs.readdir(sessionsDir);
+        const jsonlFiles = files.filter(f => f.endsWith('.jsonl')).map(f => path.join(sessionsDir, f));
+        // Only scan last 10 files (most recent)
+        const recent = jsonlFiles.sort().slice(-10);
+        for (const f of recent) { await scanJsonlFile(f); }
+      } catch { /* no sessions dir */ }
+    }
+  } catch { /* no agents dir */ }
+}
+
+// ── Cron State Scanner ────────────────────────────────────────────────────────
+// Reads OpenClaw jobs.json and generates events from lastRunAtMs changes.
+const cronLastSeen: Map<string, number> = new Map();
+
+async function scanCronJobs(stateDir?: string): Promise<void> {
+  const resolved = stateDir || (await readLauncherConfigPaths()).stateDir;
+  const base = resolved || path.join(HOME, '.openclaw');
+  const cronPath = path.join(base, 'cron', 'jobs.json');
+  try {
+    const raw = await fs.readFile(cronPath, 'utf-8');
+    const data = JSON.parse(raw);
+    for (const job of (data.jobs || [])) {
+      const lastRun = job.state?.lastRunAtMs;
+      if (!lastRun) continue;
+      const prev = cronLastSeen.get(job.id);
+      if (prev === lastRun) continue;
+      cronLastSeen.set(job.id, lastRun);
+      if (prev !== undefined) {
+        // New run detected
+        const isOk = job.state?.lastStatus === 'ok';
+        pushActivity({
+          timestamp: lastRun,
+          source: 'cron', type: 'scheduled_run',
+          category: isOk ? 'scheduled' : 'alert',
+          title: `${isOk ? t('main.activity.cron.success') : t('main.activity.cron.failure')}：${job.name}`,
+          detail: job.state?.lastError,
+          agent: job.agentId,
+          exitCode: isOk ? 0 : 1,
+        });
+      }
+    }
+  } catch { /* no jobs.json */ }
+}
+
+
+app.whenReady().then(async () => {
+  await loadLocales();
+  createWindow().catch((err) => {
+    console.error('Failed to create window:', err);
+  });
+
+  // Boot Activity Observation Engine
+  void loadActivityStore().then(async () => {
+    await startActivityWatcher();
+    void scanAllSessions();
+    void scanCronJobs();
+    setInterval(() => {
+      void scanAllSessions();
+      void scanCronJobs();
+    }, 60000);
+  });
+});
+
+ipcMain.on('window:resize', (event, mode: 'mini' | 'expanded') => {
+  if (!mainWindow) return;
+  if (mode === 'mini') {
+    mainWindow.setSize(320, 550, true);
+    mainWindow.setResizable(false);
+  } else {
+    mainWindow.setSize(1100, 750, true);
+    mainWindow.setResizable(true);
+  }
+});
+
+ipcMain.handle('window:set-title', (_event, title: string) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setTitle(String(title || ''));
+  }
+});
+
+ipcMain.handle('dialog:selectDirectory', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openDirectory']
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
+
+registerShellExecHandler({
+  mainWindow,
+  activeProcesses,
+  sendToRenderer,
+  emitShellStdout,
+  runShellCommand,
+  activateConfigPath,
+  spawnWatchedGatewayProcess,
+  stopGatewayWatchdog,
+  stopGatewayHttpWatchdog,
+  startGatewayHttpWatchdog,
+  gatewayWatchdog: gatewayWatchdog as unknown as Record<string, unknown>,
+  defaultGatewayOptions: DEFAULT_GATEWAY_WATCHDOG_OPTIONS as unknown as Record<string, unknown>,
+  readLauncherConfigPaths,
+  persistentConfigDir: PERSISTENT_CONFIG_DIR,
+  getClawlaunchFile,
+  validateVersionRef,
+  killAllSubprocesses,
+  startActivityWatcher,
+});
+
+
+ipcMain.handle('port:find-free', async (_event, startPort?: number, endPort?: number) => {
+  const start = Math.max(1024, Math.min(65533, Number(startPort) || 10000));
+  const end = Math.max(start + 1, Math.min(65535, Number(endPort) || 60000));
+
+  const isPortFree = (port: number): Promise<boolean> => new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => resolve(true));
+    });
+  });
+
+  for (let port = start; port <= end; port++) {
+    const free = await isPortFree(port);
+    if (free) return { port };
+  }
+  return { port: null, error: `No free port found in range ${start}-${end}` };
+});
+
+// ── usage:scan-sessions ────────────────────────────────────────────────────
+// Directly scan ~/.openclaw/agents/*/sessions/*.jsonl, no backend pre-aggregation required
+// Copy openclaw-control-center usage-cost.ts Track 2 (JSONL scan) logic
+ipcMain.handle('usage:scan-sessions', async (_event, payload?: string) => {
+  try {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+    const parsed = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+    const agentsDir: string = parsed.agentsDir || path.join(homeDir, '.openclaw', 'agents');
+
+    const events: RuntimeUsageEvent[] = [];
+
+    let agentIds: string[] = [];
+    try { agentIds = await fs.readdir(agentsDir); } catch { /* dir not found */ }
+
+    for (const agentId of agentIds) {
+      const sessionsDir = path.join(agentsDir, agentId, 'sessions');
+      let files: string[] = [];
+      try {
+        const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
+        files = entries.filter((e) => e.isFile() && e.name.endsWith('.jsonl')).map((e) => e.name);
+      } catch { continue; }
+
+      for (const file of files) {
+        let content = '';
+        try { content = await fs.readFile(path.join(sessionsDir, file), 'utf-8'); } catch { continue; }
+        const parsed = parseSessionJsonlForUsage(content, agentId);
+        for (const ev of parsed) events.push(ev);
+      }
+    }
+
+    return { code: 0, stdout: JSON.stringify(events), stderr: '' };
+  } catch (e) {
+    return { code: 1, stdout: '[]', stderr: String(e?.message || 'scan failed') };
+  }
+});
+// ──────────────────────────────────────────────────────────────────────────
+
+ipcMain.handle('shell:kill-port-holder', async (_event, rawPort: number) => {
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { success: false, error: 'Invalid port', port };
+  }
+
+  // Try unloading launchctl-managed gateway daemon first to avoid immediate restart after kill
+  const launchctlLabel = 'ai.openclaw.gateway';
+  const uid = (await runShellCommand('id -u')).stdout.trim();
+  if (uid) {
+    await runShellCommand(`launchctl bootout gui/${uid}/${launchctlLabel} 2>/dev/null || true`);
+    await sleep(300);
+  }
+
+  const lookupRes = await runShellCommand(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`);
+  const pidLines = String(lookupRes.stdout || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const pids = Array.from(new Set(pidLines
+    .map((line) => Number(line))
+    .filter((pid) => Number.isInteger(pid) && pid > 0)));
+
+  if (!pids.length) {
+    return { success: true, error: undefined, port, pids: [], killed: [], forceKilled: [], failed: [] };
+  }
+
+  const termSent: number[] = [];
+  const forceKilled: number[] = [];
+  const failed: Array<{ pid: number; reason: string }> = [];
+
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+      termSent.push(pid);
+    } catch (e) {
+      failed.push({ pid, reason: e?.message || 'SIGTERM failed' });
+    }
+  }
+
+  if (termSent.length > 0) {
+    await sleep(450);
+  }
+
+  for (const pid of termSent) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      continue;
+    }
+
+    try {
+      process.kill(pid, 'SIGKILL');
+      forceKilled.push(pid);
+    } catch (e) {
+      failed.push({ pid, reason: e?.message || 'SIGKILL failed' });
+    }
+  }
+
+  return {
+    success: termSent.length > 0,
+    port,
+    pids,
+    killed: termSent,
+    forceKilled,
+    failed,
+  };
+});
+
+ipcMain.handle('shell:open-external', async (_event, url: string) => {
+    try {
+        await shell.openExternal(url);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('openclaw:chat.invoke', async (_event, request: OpenClawChatInvokeRequest) => {
+  if (!request?.requestId || !request?.sessionKey || !request?.agentId || !request?.message) {
+    return {
+      success: false,
+      requestId: request?.requestId || '',
+      error: 'Missing request parameters',
+    };
+  }
+
+  const runtime = await resolveOpenClawRuntime();
+  if (!runtime.openclawPrefix) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      error: 'OpenClaw runtime not configured',
+    };
+  }
+
+  if (runtime.gatewayUrlArg && !runtime.gatewayAuthArg) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      error: t('main.ipc.errors.gatewayAuthMissing'),
+      reason: 'gateway-explicit-auth-missing',
+    };
+  }
+
+  const messageId = `${request.requestId}-assistant`;
+
+  if (request.forceLocal) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode: 'gateway' as const,
+      reason: 'core-required-force-local-blocked',
+      error: t('main.ipc.errors.forceGateway'),
+    };
+  }
+
+  const statusRes = await runShellCommand(`${runtime.openclawPrefix} gateway status --json`);
+  const gatewayOnline = isGatewayOnlineFromStatus(statusRes);
+  if (!gatewayOnline) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode: 'gateway' as const,
+      reason: 'core-required-gateway-offline',
+      error: t('main.ipc.errors.coreNotStarted'),
+    };
+  }
+
+  const wsResult = await ensureGatewayWsConnected();
+  if (!wsResult.ok) {
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode: 'gateway' as const,
+      reason: 'gateway-ws-unavailable',
+      error: wsResult.error || 'Cannot connect to gateway WebSocket',
+    };
+  }
+
+  const params: Record<string, unknown> = {
+    message: request.message,
+    deliver: Boolean(request.deliver),
+    idempotencyKey: request.requestId,
+  };
+
+  activeChatRequests.set(request.requestId, {
+    sessionKey: request.sessionKey,
+    agentId: request.agentId,
+    aborted: false,
+  });
+
+  const emitChunk = (payload: { delta?: string; done?: boolean; state?: string; error?: string }) => {
+    sendToRenderer('openclaw:chat.chunk', {
+      requestId: request.requestId,
+      messageId,
+      delta: payload.delta || '',
+      done: payload.done,
+      state: payload.state,
+      error: payload.error,
+      mode: 'gateway' as const,
+      reason: '',
+    });
+  };
+
+  // Subscribe to WebSocket chat events for this session
+  const unsubscribe = gwsClient!.subscribeChatEvent(request.sessionKey, (payload) => {
+    const chatState = activeChatRequests.get(request.requestId);
+    if (!chatState) return;
+    if (chatState.aborted) {
+      unsubscribe();
+      activeChatRequests.delete(request.requestId);
+      return;
+    }
+    const p = payload as Record<string, unknown>;
+    const state = String(p?.state || '');
+    if (state === 'delta') {
+      const delta = extractMessageText(p?.message);
+      if (delta) emitChunk({ delta, state: 'delta' });
+    } else if (state === 'final') {
+      unsubscribe();
+      emitChunk({ done: true, state: 'final' });
+      activeChatRequests.delete(request.requestId);
+    } else if (state === 'aborted') {
+      unsubscribe();
+      emitChunk({ done: true, state: 'aborted' });
+      activeChatRequests.delete(request.requestId);
+    } else if (state === 'error') {
+      const errorMsg = String(p?.error || p?.message || 'Chat error');
+      unsubscribe();
+      emitChunk({ error: errorMsg, done: true, state: 'error' });
+      activeChatRequests.delete(request.requestId);
+    }
+  });
+
+  try {
+    const sendResult = await gwsClient!.request<unknown>('chat.send', params);
+    const runId = extractRunIdFromSendPayload(sendResult);
+    if (runId) {
+      const state = activeChatRequests.get(request.requestId);
+      if (state) activeChatRequests.set(request.requestId, { ...state, runId });
+    }
+  } catch (e) {
+    unsubscribe();
+    activeChatRequests.delete(request.requestId);
+    return {
+      success: false,
+      requestId: request.requestId,
+      messageId,
+      mode: 'gateway' as const,
+      reason: '',
+      error: e.message || 'Failed to send chat message',
+    };
+  }
+
+  return {
+    success: true,
+    requestId: request.requestId,
+    messageId,
+    mode: 'gateway' as const,
+    reason: '',
+  };
+});
+
+ipcMain.handle('openclaw:chat.abort', async (_event, requestId: string) => {
+  const chatState = activeChatRequests.get(requestId);
+  if (!chatState) {
+    return { success: false, error: 'No active chat request' };
+  }
+
+  activeChatRequests.set(requestId, { ...chatState, aborted: true });
+
+  if (!gwsClient?.isConnected) {
+    return { success: false, error: 'Gateway WebSocket not connected' };
+  }
+
+  try {
+    const abortParams: Record<string, unknown> = { sessionKey: chatState.sessionKey };
+    if (chatState.runId) abortParams.runId = chatState.runId;
+    if (chatState.agentId) abortParams.agentId = chatState.agentId;
+
+    await gwsClient.request('chat.abort', abortParams);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// ── openclaw:gateway.ws-ensure ────────────────────────────────────────────────
+// Called by renderer when Core starts, to proactively establish WebSocket.
+ipcMain.handle('openclaw:gateway.ws-ensure', async () => {
+  const result = await ensureGatewayWsConnected();
+  return { connected: result.ok, error: result.error };
+});
+
+// ── openclaw:gateway.ws-status ────────────────────────────────────────────────
+// Returns current WebSocket connection status without attempting to connect.
+ipcMain.handle('openclaw:gateway.ws-status', () => {
+  return { connected: gwsClient?.isConnected ?? false };
+});
+
+// ── openclaw:sessions.list ────────────────────────────────────────────────────
+// List sessions by reading agents/*/sessions/sessions.json (authoritative index)
+ipcMain.handle('openclaw:sessions.list', async () => {
+  try {
+    const { stateDir } = await readLauncherConfigPaths();
+    const base = stateDir || path.join(HOME, '.openclaw');
+    const agentsDir = path.join(base, 'agents');
+
+    const sessions: Array<{
+      sessionKey: string;
+      agentId: string;
+      sessionId: string;
+      displayName: string;
+      lastMessage: string;
+      lastTimestamp: string;
+      messageCount: number;
+    }> = [];
+
+    let agentIds: string[] = [];
+    try {
+      agentIds = await fs.readdir(agentsDir);
+    } catch {
+      return { code: 0, stdout: JSON.stringify([]), stderr: '' };
+    }
+
+    for (const agentId of agentIds) {
+      const sessionsDir = path.join(agentsDir, agentId, 'sessions');
+      const sessionsJsonPath = path.join(sessionsDir, 'sessions.json');
+
+      let sessionsIndex: Record<string, unknown> = {};
+      try {
+        const raw = await fs.readFile(sessionsJsonPath, 'utf-8');
+        sessionsIndex = JSON.parse(raw);
+      } catch {
+        continue; // no sessions.json for this agent
+      }
+
+      for (const [sessionKey, metaRaw] of Object.entries(sessionsIndex) as [string, unknown][]) {
+        const meta = metaRaw as Record<string, unknown>;
+        const sessionId = String(meta?.sessionId || '');
+        if (!sessionId) continue;
+
+        // Prefer explicit sessionFile, fallback to <sessionId>.jsonl
+        const sessionFile: string = (typeof meta?.sessionFile === 'string' && meta.sessionFile)
+          ? (meta.sessionFile as string)
+          : path.join(sessionsDir, `${sessionId}.jsonl`);
+
+        let content = '';
+        try {
+          content = await fs.readFile(sessionFile, 'utf-8');
+        } catch {
+          // JSONL not yet written (e.g., Telegram group never messaged); include with metadata only
+          sessions.push({
+            sessionKey,
+            agentId,
+            sessionId,
+            displayName: deriveSessionDisplayName(sessionKey, meta),
+            lastMessage: '',
+            lastTimestamp: String(meta?.updatedAt || ''),
+            messageCount: 0,
+          });
+          continue;
+        }
+
+        const lines = content.split(/\r?\n/).filter(Boolean);
+        let lastMessage = '';
+        let lastTimestamp = '';
+        let messageCount = 0;
+
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.type !== 'message') continue;
+            messageCount++;
+            if (entry.timestamp) lastTimestamp = String(entry.timestamp);
+            const role = entry.message?.role;
+            if (role === 'assistant' || role === 'user') {
+              const text = extractMessageText(entry.message);
+              if (text) lastMessage = text.slice(0, 100);
+            }
+          } catch {
+            /* skip malformed line */
+          }
+        }
+
+        sessions.push({
+          sessionKey,
+          agentId,
+          sessionId,
+          displayName: deriveSessionDisplayName(sessionKey, meta),
+          lastMessage,
+          lastTimestamp: lastTimestamp || String(meta?.updatedAt || ''),
+          messageCount,
+        });
+      }
+    }
+
+    // Sort by lastTimestamp descending (numeric ms or ISO string)
+    sessions.sort((a, b) => {
+      const ta = Number(a.lastTimestamp) || new Date(a.lastTimestamp).getTime() || 0;
+      const tb = Number(b.lastTimestamp) || new Date(b.lastTimestamp).getTime() || 0;
+      return tb - ta;
+    });
+
+    return { code: 0, stdout: JSON.stringify(sessions), stderr: '' };
+  } catch (e) {
+    return { code: 1, stdout: '', stderr: e?.message || 'Unknown error' };
+  }
+});
+
+// ── openclaw:session.load ─────────────────────────────────────────────────────
+// Load full message history for a given session key by looking up sessions.json
+ipcMain.handle('openclaw:session.load', async (_event, payload: { sessionKey: string; agentId: string }) => {
+  try {
+    const sessionKey = String(payload?.sessionKey || '').trim();
+    const agentId = String(payload?.agentId || '').trim();
+    if (!sessionKey || !agentId) {
+      return { code: 1, stdout: '', stderr: 'Missing sessionKey or agentId' };
+    }
+
+    const { stateDir } = await readLauncherConfigPaths();
+    const base = stateDir || path.join(HOME, '.openclaw');
+    const sessionsDir = path.join(base, 'agents', agentId, 'sessions');
+
+    // Look up sessions.json to find the correct JSONL file for this session key
+    let sessionFile = '';
+    try {
+      const raw = await fs.readFile(path.join(sessionsDir, 'sessions.json'), 'utf-8');
+      const index = JSON.parse(raw) as Record<string, unknown>;
+      const meta = index[sessionKey] as Record<string, unknown>;
+      if (meta?.sessionFile && typeof meta.sessionFile === 'string') {
+        sessionFile = meta.sessionFile as string;
+      } else if (meta?.sessionId) {
+        sessionFile = path.join(sessionsDir, `${meta.sessionId}.jsonl`);
+      }
+    } catch {
+      // fallback: treat sessionKey as UUID directly (legacy)
+      sessionFile = path.join(sessionsDir, `${sessionKey}.jsonl`);
+    }
+    if (!sessionFile) {
+      return { code: 0, stdout: JSON.stringify([]), stderr: '' };
+    }
+
+    let content = '';
+    try {
+      content = await fs.readFile(sessionFile, 'utf-8');
+    } catch {
+      return { code: 0, stdout: JSON.stringify([]), stderr: '' };
+    }
+
+    const messages: Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+    }> = [];
+
+    const lines = content.split(/\r?\n/).filter(Boolean);
+    let idx = 0;
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type !== 'message') continue;
+        const role = entry.message?.role as string;
+        if (role !== 'user' && role !== 'assistant') continue;
+        const text = extractMessageText(entry.message);
+        if (!text) continue;
+        messages.push({
+          id: String(entry.id || entry.message?.id || `loaded-${agentId}-${idx++}`),
+          role: role as 'user' | 'assistant',
+          content: text,
+          timestamp: String(entry.timestamp || ''),
+        });
+      } catch {
+        /* skip malformed line */
+      }
+    }
+
+    return { code: 0, stdout: JSON.stringify(messages), stderr: '' };
+  } catch (e) {
+    return { code: 1, stdout: '', stderr: e?.message || 'Unknown error' };
+  }
+});
+
+ipcMain.handle('events:ack', async (_event, payload) => {
+  try {
+    const eventId = normalizeString(payload?.eventId, '');
+    if (!eventId) {
+      return { success: false, error: 'Missing eventId' };
+    }
+
+    const runtimeCandidates = [
+      normalizeString(payload?.runtimeDir, ''),
+      normalizeString(payload?.configPath, '') ? path.join(normalizeString(payload?.configPath, ''), 'runtime') : '',
+      normalizeString(payload?.workspacePath, '') ? path.join(normalizeString(payload?.workspacePath, ''), 'runtime') : '',
+      normalizeString(payload?.corePath, '') ? path.join(normalizeString(payload?.corePath, ''), 'runtime') : '',
+    ].filter(Boolean);
+
+    const runtimeDir = (await resolveRuntimeDirFromCandidates(runtimeCandidates)) || runtimeCandidates[0] || '';
+    if (!runtimeDir) {
+      return { success: false, error: 'No runtimeDir available for ack storage' };
+    }
+
+    const ttlMs = Math.max(60_000, Math.min(7 * 24 * 60 * 60 * 1000, Number(payload?.ttlMs || 30 * 60 * 1000)));
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlMs);
+
+    const ackMap = await loadEventAcks(runtimeDir);
+    ackMap[eventId] = {
+      ackedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+    await saveEventAcks(runtimeDir, ackMap);
+
+    return {
+      success: true,
+      eventId,
+      ackedAt: ackMap[eventId].ackedAt,
+      expiresAt: ackMap[eventId].expiresAt,
+      runtimeDir,
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('events:state', async (_event, payload) => {
+  try {
+    const runtimeCandidates = [
+      normalizeString(payload?.runtimeDir, ''),
+      normalizeString(payload?.configPath, '') ? path.join(normalizeString(payload?.configPath, ''), 'runtime') : '',
+      normalizeString(payload?.workspacePath, '') ? path.join(normalizeString(payload?.workspacePath, ''), 'runtime') : '',
+      normalizeString(payload?.corePath, '') ? path.join(normalizeString(payload?.corePath, ''), 'runtime') : '',
+    ].filter(Boolean);
+
+    const runtimeDir = (await resolveRuntimeDirFromCandidates(runtimeCandidates)) || runtimeCandidates[0] || '';
+    if (!runtimeDir) {
+      return { success: false, error: 'No runtimeDir available' };
+    }
+
+    const ackMap = await loadEventAcks(runtimeDir);
+    return { success: true, runtimeDir, acks: ackMap };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
+  try {
+    if (!targetPath || typeof targetPath !== 'string') {
+      return { success: false, error: 'Missing target path' };
+    }
+    const openError = await shell.openPath(targetPath);
+    if (openError) {
+      return { success: false, error: openError };
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') {
+      return { success: false, error: 'Missing file path' };
+    }
+    const resolved = filePath.startsWith('~/')
+      ? path.join(app.getPath('home'), filePath.slice(2))
+      : filePath;
+    await fs.writeFile(resolved, content, 'utf-8');
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// ── Activity Engine IPC ───────────────────────────────────────────────────────
+
+ipcMain.handle('activity:events:list', async (_event, payload?: string) => {
+  const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+  const limit = Number(opts?.limit ?? 200);
+  const categoryFilter = opts?.category as string | undefined;
+  const sourceFilter = opts?.source as string | undefined;
+  const since = Number(opts?.since ?? 0);
+
+  let events = activityBuffer.slice(-ACTIVITY_MAX);
+  if (since) events = events.filter(e => e.timestamp > since);
+  if (categoryFilter) events = events.filter(e => e.category === categoryFilter);
+  if (sourceFilter) events = events.filter(e => e.source === sourceFilter);
+  events = events.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+  return { code: 0, stdout: JSON.stringify({ events, total: events.length }), stderr: '', exitCode: 0 };
+});
+
+ipcMain.handle('activity:scan:now', async (_event, payload?: string) => {
+  const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+  const stateDir = opts?.stateDir as string | undefined;
+  await Promise.all([
+    scanAllSessions(stateDir),
+    scanCronJobs(stateDir),
+  ]);
+  return { code: 0, stdout: JSON.stringify({ scanned: true, total: activityBuffer.length }), stderr: '', exitCode: 0 };
+});
+
+ipcMain.handle('activity:watch:restart', async (_event, payload?: string) => {
+  const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+  const extraDirs: string[] = Array.isArray(opts?.extraDirs) ? opts.extraDirs : [];
+  await startActivityWatcher(extraDirs);
+  const dirs = await buildWatchDirs();
+  return { code: 0, stdout: JSON.stringify({ ok: true, watching: dirs.length + extraDirs.length }), stderr: '', exitCode: 0 };
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.on('before-quit', () => {
+  gwsClient?.disconnect();
+  gwsClient = null;
+  killAllSubprocesses();
+  const lockPath = getActiveLockFilePath();
+  if (lockPath) {
+    try { unlinkSync(lockPath); } catch {}
+  }
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
