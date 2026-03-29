@@ -102,13 +102,14 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
         const label = filename.replace('.plist', '');
         const plistPath = path.join(agentsDir, filename);
         const name = friendlyNames[label] || label;
-        let plistExists = false, keepAlive = false, comment = '';
+        let plistExists = false, keepAlive = false, runAtLoad = false, comment = '';
         let scheduleInterval: number | undefined;
         let scheduleCalendar: { Hour?: number; Minute?: number; Weekday?: number; Day?: number; Month?: number }[] | undefined;
         try {
           const raw = await fs.readFile(plistPath, 'utf-8');
           plistExists = true;
-          keepAlive = raw.includes('<key>KeepAlive</key>');
+          keepAlive = /<key>KeepAlive<\/key>\s*<true\/>/.test(raw) || (raw.includes('<key>KeepAlive</key>') && !/<key>KeepAlive<\/key>\s*<false\/>/.test(raw));
+          runAtLoad = /<key>RunAtLoad<\/key>\s*<true\/>/.test(raw);
           const commentMatch = raw.match(/<key>Comment<\/key>\s*<string>([^<]+)<\/string>/);
           if (commentMatch) comment = commentMatch[1];
 
@@ -146,7 +147,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
           exitCode = parts[1] ? parseInt(parts[1]) : null;
           running = pid !== null && !isNaN(pid);
         }
-        return { label, name, plistExists, keepAlive, comment, loaded: !!line, running, pid, exitCode, scheduleInterval, scheduleCalendar };
+        return { label, name, plistExists, keepAlive, runAtLoad, comment, loaded: !!line, running, pid, exitCode, scheduleInterval, scheduleCalendar };
       }));
       return { code: 0, stdout: JSON.stringify({ agents }), stderr: '', exitCode: 0 };
     } catch (e) {

@@ -4,25 +4,12 @@ import type { TFunction } from 'i18next';
 import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle, Clock,
-  CalendarClock, Activity, Server, Terminal, ClipboardList,
-  Code2, FileEdit, Settings, ScanLine,
+  CalendarClock, Activity, Server, Terminal,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
-
-interface ManualTask {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  priority: string;
-  overall_progress: number;
-  updated_at: string;
-  created_at: string;
-}
 
 interface CrontabEntry {
   schedule: string;
@@ -45,6 +32,7 @@ interface LaunchAgent {
   name: string;
   plistExists: boolean;
   keepAlive: boolean;
+  runAtLoad: boolean;
   comment: string;
   loaded: boolean;
   running: boolean;
@@ -80,25 +68,8 @@ interface CronJob {
   delivery: { mode: string; channel?: string };
 }
 
-// Observed activity event from the Activity Engine
-interface ObservedEvent {
-  id: string;
-  timestamp: number;
-  source: 'fs' | 'jsonl' | 'cron' | 'system';
-  type: string;
-  category: 'development' | 'execution' | 'scheduled' | 'task' | 'config' | 'alert' | 'system';
-  title: string;
-  detail?: string;
-  path?: string;
-  agent?: string;
-  exitCode?: number;
-}
-
 // Unified activity entries
-type ActivityItem =
-  | { type: 'cron'; id: string; name: string; time: number; status?: 'ok' | 'error'; duration?: number; hasError: boolean; error?: string; schedule: CronSchedule }
-  | { type: 'task'; id: string; name: string; time: number; taskStatus: TaskStatus; progress: number; priority: string }
-  | { type: 'obs'; id: string; name: string; time: number; event: ObservedEvent };
+type ActivityItem = { type: 'cron'; id: string; name: string; time: number; status?: 'ok' | 'error'; duration?: number; hasError: boolean; error?: string; schedule: CronSchedule };
 
 interface ControlCenterPageProps {
   onRefreshSnapshot?: () => Promise<void>;
@@ -201,42 +172,31 @@ function formatLaunchAgentSchedule(
     const nextMs = nextCalendarRun(agent.scheduleCalendar);
     return { main: parts.join(' ') || '—', next: nextMs ? nextTime(nextMs, t) : undefined };
   }
+  if (agent.keepAlive) {
+    const label = lang.toLowerCase().startsWith('zh') ? '常駐服務' : 'Keep-Alive';
+    return { main: label };
+  }
+  if (agent.runAtLoad) {
+    const label = lang.toLowerCase().startsWith('zh') ? '啟動時執行' : 'Run at load';
+    return { main: label };
+  }
   return null;
 }
-
-const TASK_STATUS_CFG: Record<TaskStatus, { label: string; dot: string; badge: string; bar: string }> = {
-  todo:        { label: '', dot: 'bg-slate-400',   badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500',         bar: 'bg-slate-400' },
-  in_progress: { label: '', dot: 'bg-blue-500',    badge: 'bg-blue-50 dark:bg-blue-950/50 text-blue-600',          bar: 'bg-blue-500' },
-  blocked:     { label: '', dot: 'bg-rose-500',    badge: 'bg-rose-50 dark:bg-rose-950/50 text-rose-600',          bar: 'bg-rose-500' },
-  done:        { label: '', dot: 'bg-emerald-500', badge: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600', bar: 'bg-emerald-500' },
-};
 
 export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshSnapshot, stateDir }) => {
   const { t, i18n } = useTranslation();
   const [cronJobs, setCronJobs]       = useState<CronJob[]>([]);
-  const [tasks, setTasks]             = useState<ManualTask[]>([]);
   const [crontabEntries, setCrontabEntries] = useState<CrontabEntry[]>([]);
   const [launchAgents, setLaunchAgents]     = useState<LaunchAgent[]>([]);
-  const [observedEvents, setObservedEvents] = useState<ObservedEvent[]>([]);
   const [loading, setLoading]         = useState(false);
   const [cronLoading, setCronLoading] = useState(false);
   const [systemLoading, setSystemLoading] = useState(false);
-  const [scanning, setScanning]       = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [error, setError]             = useState('');
-  const [view, setView]               = useState<'all' | 'cron' | 'task' | 'obs'>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
   const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'stopped'>('running');
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
-
-  // Update TASK_STATUS_CFG to use t after useTranslation is available
-  useMemo(() => {
-    TASK_STATUS_CFG.todo.label = t('common.status.todo');
-    TASK_STATUS_CFG.in_progress.label = t('common.status.in_progress');
-    TASK_STATUS_CFG.blocked.label = t('common.status.blocked');
-    TASK_STATUS_CFG.done.label = t('common.status.done');
-  }, [t]);
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -261,27 +221,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     } catch { setCronJobs([]); }
   }, [stateDir]);
 
-  const loadTasks = useCallback(async () => {
-    try {
-      const res = await window.electronAPI.exec('control:tasks:list');
-      console.log('[ControlCenter] loadTasks res:', res.stdout);
-      const items: ManualTask[] = (JSON.parse(res.stdout || '{}').items || []).map((t: Record<string, unknown>) => ({
-        id: String(t.id || ''),
-        title: String(t.title || ''),
-        status: (['todo','in_progress','blocked','done'].includes(t.status as string) ? t.status as string : 'todo') as TaskStatus,
-        priority: String(t.priority || 'medium'),
-        overall_progress: Number(t.overall_progress ?? 0),
-        updated_at: String(t.updated_at || t.updatedAt || ''),
-        created_at: String(t.created_at || t.createdAt || ''),
-      }));
-      console.log(`[ControlCenter] loadTasks parsed ${items.length} items`);
-      setTasks(items);
-    } catch (e) { 
-      console.error('[ControlCenter] loadTasks failed:', e);
-      setTasks([]); 
-    }
-  }, []);
-
   const loadSystem = useCallback(async () => {
     try {
       const [ctRes, laRes] = await Promise.all([
@@ -302,46 +241,25 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   }, []);
 
-  const loadObservedEvents = useCallback(async () => {
-    try {
-      if (!window.electronAPI.listActivityEvents) return;
-      const res = await window.electronAPI.listActivityEvents({ limit: 200 });
-      // res is { code, stdout, stderr } — events are inside stdout JSON
-      const parsed = JSON.parse(res?.stdout || '{}');
-      if (Array.isArray(parsed?.events)) setObservedEvents(parsed.events);
-    } catch { /* non-fatal */ }
-  }, []);
-
-  const triggerScan = useCallback(async () => {
-    setScanning(true);
-    try {
-      if (window.electronAPI.scanActivityNow) {
-        const r = await window.electronAPI.scanActivityNow();
-        void r;
-      }
-      await loadObservedEvents();
-    } finally { setScanning(false); }
-  }, [loadObservedEvents]);
-
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      await Promise.all([loadCron(), loadTasks(), loadSystem(), loadObservedEvents()]);
+      await Promise.all([loadCron(), loadSystem()]);
       if (onRefreshSnapshot) await onRefreshSnapshot();
       setLastRefreshed(new Date());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('controlCenter.errors.genericLoadFailed'));
     } finally { setLoading(false); }
-  }, [loadCron, loadTasks, loadSystem, loadObservedEvents, onRefreshSnapshot, t]);
+  }, [loadCron, loadSystem, onRefreshSnapshot, t]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
   useEffect(() => {
-    const id = setInterval(() => void Promise.all([loadCron(), loadTasks(), loadSystem(), loadObservedEvents()]), 30000);
+    const id = setInterval(() => void Promise.all([loadCron(), loadSystem()]), 30000);
     return () => clearInterval(id);
-  }, [loadCron, loadTasks, loadSystem, loadObservedEvents]);
+  }, [loadCron, loadSystem]);
 
   // ── Cron actions ───────────────────────────────────────────────────────────
 
@@ -403,10 +321,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   // ── Merged activity feed ───────────────────────────────────────────────────
 
   const activityFeed = useMemo((): ActivityItem[] => {
-    const cronItems: ActivityItem[] = cronJobs
+    return cronJobs
       .filter(j => j.state?.lastRunAtMs)
       .map(j => ({
-        type: 'cron',
+        type: 'cron' as const,
         id: j.id,
         name: j.name,
         time: j.state.lastRunAtMs!,
@@ -415,69 +333,25 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         hasError: (j.state.consecutiveErrors ?? 0) > 0,
         error: j.state.lastError,
         schedule: j.schedule,
-      }));
-
-    const taskItems: ActivityItem[] = tasks.map(t => {
-      const ts = t.updated_at || t.created_at;
-      return {
-        type: 'task',
-        id: t.id,
-        name: t.title,
-        time: ts ? new Date(ts).getTime() : 0,
-        taskStatus: t.status,
-        progress: t.overall_progress,
-        priority: t.priority,
-      };
-    });
-
-    // Deduplicate observed events against cron items (same timestamp+source)
-    const cronTimestamps = new Set(cronItems.map(c => c.time));
-    const observedItems: ActivityItem[] = observedEvents
-      .filter(e => e.source !== 'cron' || !cronTimestamps.has(e.timestamp))
-      .map(e => ({
-        type: 'obs' as const,
-        id: e.id,
-        name: e.title,
-        time: e.timestamp,
-        event: e,
-      }));
-
-    const allItems = [...cronItems, ...taskItems, ...observedItems];
-
-    return allItems
-      .filter(item => {
-        if (view === 'all') return true;
-        return item.type === view;
-      })
+      }))
       .sort((a, b) => a.time - b.time);
-  }, [cronJobs, tasks, observedEvents, view]);
+  }, [cronJobs]);
 
   // ── KPI ────────────────────────────────────────────────────────────────────
 
   const kpi = useMemo(() => {
-    // 1. 作業紀錄 (Timeline) - 與下方渲染標題旁顯示的 activityFeed.length 一致
-    const totalActivities = activityFeed.length;
-
-    // 2. 內部排程 (Cron) - 指下方「系統排程」區塊
     const totalCrons = (cronJobs || []).length;
     const activeCrons = (cronJobs || []).filter(j => j.enabled).length;
-
-    // 3. 系統服務 (LaunchAgents)
     const totalAgents = (launchAgents || []).length;
-    const runningAgents = (launchAgents || []).filter(a => a.running).length;
-
-    // 4. 待辦任務 (Tasks) - 用戶改稱為「應用排程」的部分數據？
-    // 但根據用戶要求，應用排程應為原先的 cronJobs (內部排程)，系統排程為 crontabEntries
-    const totalTasks = (tasks || []).length;
+    const runningAgents = (launchAgents || []).filter(a => a.running || a.loaded).length;
 
     return {
-      activityTimeline: totalActivities,
+      activityTimeline: activityFeed.length,
       systemServices: { running: runningAgents, total: totalAgents },
       crontabEntriesCount: (crontabEntries || []).length,
       cronSchedules: { active: activeCrons, total: totalCrons },
-      manualTasks: totalTasks,
     };
-  }, [activityFeed, cronJobs, tasks, launchAgents, crontabEntries]);
+  }, [activityFeed, cronJobs, launchAgents, crontabEntries]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -538,46 +412,11 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <span className="text-[10px] text-slate-400">{t('controlCenter.timeline.count', { count: activityFeed.length })}</span>
               </div>
               <div className="flex items-center gap-2">
-                {/* Unified Filter Buttons */}
-                <div className="flex items-center gap-1 border-r border-slate-200 dark:border-slate-700 pr-2 mr-1">
-                    {(['all', 'cron', 'task', 'obs'] as const).map(f => {
-                      const isActive = view === f;
-                      const color = f === 'cron' ? (isActive ? 'bg-violet-500 border-violet-500' : 'text-violet-400')
-                                  : f === 'task' ? (isActive ? 'bg-amber-500 border-amber-500' : 'text-amber-400')
-                                  : f === 'obs'  ? (isActive ? 'bg-indigo-500 border-indigo-500' : 'text-indigo-400')
-                                  : (isActive ? 'bg-slate-600 border-slate-600' : 'text-slate-400');
-                      const Icon = f === 'cron' ? CalendarClock : f === 'task' ? ClipboardList : f === 'obs' ? ScanLine : Activity;
-                      const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
-                                  : f === 'cron' ? t('controlCenter.timeline.tabs.cron') 
-                                  : f === 'task' ? t('controlCenter.timeline.tabs.task') 
-                                  : t('controlCenter.timeline.tabs.observation');
-                      return (
-                        <button
-                          key={f}
-                          onClick={() => setView(f)}
-                          title={label}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[9px] font-bold transition-all ${
-                            isActive ? `${color} text-white` : `bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 ${color}`
-                          }`}
-                        >
-                          <Icon size={8} />
-                          <span className="hidden sm:inline">{label}</span>
-                        </button>
-                      );
-                    })}
-                </div>
                 {lastRefreshed && (
                   <span className="text-[10px] text-slate-400 tabular-nums">
                     {lastRefreshed.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </span>
                 )}
-                <button
-                  onClick={() => void triggerScan()}
-                  title={t('controlCenter.timeline.scanBtn')}
-                  className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
-                >
-                  <ScanLine size={10} className={scanning ? 'animate-pulse' : ''} />
-                </button>
                 <button
                   onClick={() => void refresh()}
                   title={t('controlCenter.actions.refresh')}
@@ -642,98 +481,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </div>
                     </div>
                   );
-                } else if (item.type === 'task') {
-                  // task item
-                  const cfg = TASK_STATUS_CFG[item.taskStatus];
-                  const progress = Math.min(100, Math.max(0, item.progress));
-                  const isDone = item.taskStatus === 'done';
-                  return (
-                    <div
-                      key={`task-${item.id}-${i}`}
-                      className={`rounded-2xl border px-3.5 py-2.5 transition-all ${
-                        isDone
-                          ? 'border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 opacity-60'
-                          : 'border-amber-100 dark:border-amber-900/30 bg-amber-50/20 dark:bg-amber-950/10'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {/* Task icon */}
-                        <div className="shrink-0 w-5 h-5 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
-                          <ClipboardList size={10} className="text-amber-500" />
-                        </div>
-                        <span className={`flex-1 min-w-0 text-[12px] font-semibold truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>
-                          {item.name}
-                        </span>
-                        <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg ${cfg.badge}`}>
-                          {cfg.label}
-                        </span>
-                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time, t)}</span>
-                      </div>
-                      {/* Progress bar */}
-                      {progress > 0 && (
-                        <div className="mt-1.5 flex items-center gap-2 pl-7">
-                          <div className="flex-1 h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                            <div className={`h-full rounded-full ${cfg.bar}`} style={{ width: `${progress}%` }} />
-                          </div>
-                          <span className="text-[9px] text-slate-400 font-mono">{progress.toFixed(0)}%</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                } else if (item.type === 'obs') {
-                  // observed event
-                  const ev = item.event;
-                  const catIcon = ev.category === 'development'
-                    ? <Code2 size={10} className="text-indigo-500" />
-                    : ev.category === 'execution'
-                    ? <Terminal size={10} className="text-sky-500" />
-                    : ev.category === 'config'
-                    ? <Settings size={10} className="text-slate-500" />
-                    : ev.category === 'alert'
-                    ? <AlertTriangle size={10} className="text-rose-500" />
-                    : <FileEdit size={10} className="text-slate-400" />;
-                  const catColor = ev.category === 'development'
-                    ? 'bg-indigo-50 dark:bg-indigo-950/40'
-                    : ev.category === 'execution'
-                    ? 'bg-sky-50 dark:bg-sky-950/40'
-                    : ev.category === 'config'
-                    ? 'bg-slate-100 dark:bg-slate-800/60'
-                    : ev.category === 'alert'
-                    ? 'bg-rose-50 dark:bg-rose-950/30'
-                    : 'bg-slate-50 dark:bg-slate-900/40';
-                  const borderColor = ev.category === 'development'
-                    ? 'border-indigo-100 dark:border-indigo-900/40'
-                    : ev.category === 'alert'
-                    ? 'border-rose-200 dark:border-rose-800/40'
-                    : 'border-slate-100 dark:border-slate-800';
-                  const srcLabel = ev.source === 'fs' ? t('common.source.fs')
-                    : ev.source === 'jsonl' ? t('common.source.agent')
-                    : ev.source === 'cron' ? t('common.source.cron')
-                    : t('common.source.system');
-                  return (
-                    <div
-                      key={`obs-${item.id}-${i}`}
-                      className={`rounded-2xl border px-3.5 py-2.5 transition-all ${borderColor} ${catColor}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="shrink-0 w-5 h-5 rounded-lg bg-white/60 dark:bg-slate-900/50 flex items-center justify-center">
-                          {catIcon}
-                        </div>
-                        <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
-                          {item.name}
-                        </span>
-                        <span className="shrink-0 text-[9px] text-slate-400 font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                          {srcLabel}
-                        </span>
-                        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">{relTime(item.time, t)}</span>
-                      </div>
-                      {ev.detail && (
-                        <div className="mt-1 pl-7 text-[10px] text-slate-400 truncate max-w-full">
-                          {ev.detail.slice(0, 100)}
-                        </div>
-                      )}
-                    </div>
-                  );
                 } else { return null; }
               })}
             </div>
@@ -784,37 +531,27 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
               ) : launchAgents
                 .filter(a => {
-                  if (agentFilter === 'running') return a.running;
-                  if (agentFilter === 'stopped') return !a.running;
+                  if (agentFilter === 'running') return a.running || a.loaded;
+                  if (agentFilter === 'stopped') return !a.running && !a.loaded;
                   return true;
                 })
                 .map(agent => (
                 <div key={agent.label} className={`rounded-xl border px-3 py-2.5 transition-all ${
-                  agent.running ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
-                  : agent.loaded ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
-                  : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
+                  agent.running || agent.loaded
+                    ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
+                    : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
                 }`}>
                   <div className="flex items-center gap-2">
-                    {/* 主狀態 badge：執行中 / 已停止 */}
+                    {/* 主狀態 badge：執行中（有 PID 或已載入）/ 已停止 */}
                     <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
-                      agent.running
+                      agent.running || agent.loaded
                         ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
                     }`}>
-                      {agent.running ? t('controlCenter.services.filterRunning') : t('controlCenter.services.filterStopped')}
+                      {agent.running || agent.loaded ? t('controlCenter.services.filterRunning') : t('controlCenter.services.filterStopped')}
                     </span>
                     {/* 名稱 */}
                     <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{agent.name}</span>
-                    {/* 細節狀態 badge：已載入 / 未載入（僅非執行中時顯示） */}
-                    {!agent.running && (
-                      <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
-                        agent.loaded
-                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
-                      }`}>
-                        {agent.loaded ? t('common.agent.loaded') : t('common.agent.unloaded')}
-                      </span>
-                    )}
                     {/* PID badge */}
                     {agent.running && agent.pid != null && (
                       <span className="shrink-0 text-[9px] font-mono text-slate-400 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
