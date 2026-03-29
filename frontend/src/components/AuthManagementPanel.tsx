@@ -7,12 +7,17 @@ import { ConfigService } from '../services/configService';
 import { getProviderGroups } from '../constants/providers';
 import { execInTerminal } from '../utils/terminal';
 
+interface AuthManagementPanelProps {
+  /** 新增或刪除 auth profile 完成後的回呼，供父層重新載入 authProfiles */
+  onAuthChange?: () => void;
+}
+
 /**
  * 自包含的 Auth 管理面板。
  * 直接從 Zustand 讀取 config / addLog / setRuntimeProfile，
- * 不需要任何外部 props。
+ * 接受可選的 onAuthChange callback 以便父層同步 auth 狀態。
  */
-export const AuthManagementPanel: React.FC = () => {
+export const AuthManagementPanel: React.FC<AuthManagementPanelProps> = ({ onAuthChange }) => {
   const { t } = useTranslation();
   const config = useStore((s) => s.config);
   const addLog = useStore((s) => s.addLog);
@@ -85,6 +90,7 @@ export const AuthManagementPanel: React.FC = () => {
       addLog(t('runtime.actions.authRemoved', { id: profileId }), 'system');
       await loadAuthProfiles();
       await refreshRuntimeProfile();
+      onAuthChange?.();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('auth.errors.removeFailed');
       setAuthAddError(msg);
@@ -113,6 +119,7 @@ export const AuthManagementPanel: React.FC = () => {
       });
       addLog(t('auth.onboardLaunched'), 'system');
       await loadAuthProfiles();
+      onAuthChange?.();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('auth.errors.onboardFailed');
       setAuthAddError(msg);
@@ -165,6 +172,7 @@ export const AuthManagementPanel: React.FC = () => {
       setAuthAddSecret('');
       await loadAuthProfiles();
       await refreshRuntimeProfile();
+      onAuthChange?.();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('auth.errors.addFailed');
       setAuthAddError(msg);

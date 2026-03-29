@@ -48,11 +48,12 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   // 從 Zustand 直接讀取，無須從外部傳入
   const config = useStore((s) => s.config);
   const runtimeProfile = useStore((s) => s.runtimeProfile);
+  const detectedConfig = useStore((s) => s.detectedConfig);
   const setRuntimeProfile = useStore((s) => s.setRuntimeProfile);
   const addLog = useStore((s) => s.addLog);
   const resolvedConfigDir = ConfigService.normalizeConfigDir(config.configPath);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
-  const { authProfiles } = useAuthProfiles(resolvedConfigDir, 'runtimeSettings');
+  const { authProfiles, loadAuthProfiles } = useAuthProfiles(resolvedConfigDir, 'runtimeSettings');
   const {
     effectiveAuthorizedProviders,
     modelOptionGroups,
@@ -75,8 +76,8 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const shellQuote = ConfigService.shellQuote;
   const buildOpenClawEnvPrefix = (cfg?: Partial<typeof config>) =>
     ConfigService.buildOpenClawEnvPrefix(cfg?.configPath ?? config.configPath);
-  const effectiveRuntimeModel = String(runtimeProfile?.model || '').trim();
-  const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || '').trim();
+  const effectiveRuntimeModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
+  const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
   const effectiveRuntimeGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
   const {
     handleSaveConfig,
@@ -255,7 +256,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           )}
 
           {/* Auth management panel（自包含） */}
-          <AuthManagementPanel />
+          <AuthManagementPanel onAuthChange={loadAuthProfiles} />
 
           <div className="grid grid-cols-1 gap-5">
             {/* Model Selection */}

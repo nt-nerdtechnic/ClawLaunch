@@ -70,7 +70,12 @@ function App() {
   if (viewMode === 'mini') {
     return (
       <>
-        <MiniView running={running} onToggle={handleToggleGatewayWithStopModal} onExpand={toggleViewMode} />
+        <MiniView
+          running={running}
+          onToggle={handleToggleGatewayWithStopModal}
+          onExpand={toggleViewMode}
+          onExpandTo={(tab) => { toggleViewMode(); setActiveTab(tab); }}
+        />
         <PixelOfficeWidget compact />
         <ChatWidget compact />
       </>
