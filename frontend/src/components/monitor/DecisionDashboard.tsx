@@ -5,6 +5,7 @@ import type { ReadModelSnapshot } from '../../store';
 
 type AppConfig = { corePath: string; configPath: string; workspacePath: string };
 type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
+const AUDIT_PAGE_SIZE = 10;
 
 type AuditLogEntry = {
   ts: string;
@@ -41,6 +42,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
   const { running, config, resolvedConfigDir } = props;
   const [chatSessionCount, setChatSessionCount] = useState(0);
   const [auditFilter, setAuditFilter] = useState<'today' | 'all'>('today');
+  const [auditPage, setAuditPage] = useState(1);
   const [auditLog, setAuditLog] = useState<AuditLogSummary>({
     writes: 0,
     changedPaths: 0,
@@ -124,7 +126,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           "  entries.push({ ts: ts, cmd: argv, result: finalResult, rawResult, suspicious: suspCount });",
           "}",
           "entries.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());",
-          "process.stdout.write(JSON.stringify({ ok: true, writes, changedPaths, suspicious, updatedAt: lastTs ? new Date(lastTs).toISOString() : '', entries: entries.slice(0, 50) }));",
+          "process.stdout.write(JSON.stringify({ ok: true, writes, changedPaths, suspicious, updatedAt: lastTs ? new Date(lastTs).toISOString() : '', entries: entries.slice(0, 200) }));",
         ].join(' ');
         const cmd = `AUDIT_LOG=${shellQuote(auditLogPath)} FILTER_MODE=${auditFilter} node -e ${shellQuote(parserScript)}`;
 
@@ -166,6 +168,24 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
       clearInterval(timer);
     };
   }, [running, auditFilter, config.configPath, config.corePath, config.workspacePath, resolvedConfigDir]);
+
+  useEffect(() => {
+    setAuditPage(1);
+  }, [auditFilter]);
+
+  const auditTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(auditLog.entries.length / AUDIT_PAGE_SIZE)),
+    [auditLog.entries.length],
+  );
+
+  useEffect(() => {
+    setAuditPage((current) => Math.min(current, auditTotalPages));
+  }, [auditTotalPages]);
+
+  const pagedAuditEntries = useMemo(() => {
+    const start = (auditPage - 1) * AUDIT_PAGE_SIZE;
+    return auditLog.entries.slice(start, start + AUDIT_PAGE_SIZE);
+  }, [auditLog.entries, auditPage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,9 +339,9 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {auditLog.entries.map((entry, i) => (
+                  {pagedAuditEntries.map((entry, i) => (
                     <tr
-                      key={`${entry.ts}-${i}`}
+                      key={`${entry.ts}-${(auditPage - 1) * AUDIT_PAGE_SIZE + i}`}
                       className="border-b border-slate-100 dark:border-slate-800 last:border-0 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       <td className="px-3 py-2 text-slate-400 dark:text-slate-500 whitespace-nowrap font-mono text-[11px]">
@@ -351,6 +371,34 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                   ))}
                 </tbody>
               </table>
+              <div className="flex items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/50 px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <span>
+                  {t('monitor.decision.auditPageSummary', {
+                    from: (auditPage - 1) * AUDIT_PAGE_SIZE + 1,
+                    to: Math.min(auditPage * AUDIT_PAGE_SIZE, auditLog.entries.length),
+                    total: auditLog.entries.length,
+                  })}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span>{t('monitor.decision.auditPageInfo', { page: auditPage, pages: auditTotalPages })}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                    disabled={auditPage <= 1}
+                    className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-800"
+                  >
+                    {t('monitor.decision.auditPagePrev')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
+                    disabled={auditPage >= auditTotalPages}
+                    className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-800"
+                  >
+                    {t('monitor.decision.auditPageNext')}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
       </section>
