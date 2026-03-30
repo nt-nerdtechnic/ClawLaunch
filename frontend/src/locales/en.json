@@ -781,6 +781,12 @@
       "deleteConfirm": "Are you sure you want to remove the skill \"{{name}}\"? This will delete the folder in the workspace and cannot be undone.",
       "moveCoreConfirm": "Move system skill \"{{name}}\" into the workspace skills directory? After moving, it will no longer stay in the core skills directory.",
       "moveCoreError": "Failed to move system skill. Please try again later.",
+      "moveToCoreConfirm": "Move workspace skill \"{{name}}\" into the core skills directory?",
+      "moveToCoreError": "Failed to move workspace skill to core. Please try again later.",
+      "deleteCoreConfirm": "⚠️ Permanently delete core skill \"{{name}}\"? This removes it from the Core directory and cannot be undone.",
+      "deleteCoreError": "Failed to delete core skill. Please try again later.",
+      "coreUnlocked": "Unlocked — click to delete this core skill",
+      "coreUnlockedWarning": "⚠️ Core unlock mode: the lock icon on each card will permanently delete the skill. This cannot be undone — proceed carefully.",
       "electronUnavailable": "electronAPI unavailable, please ensure the Electron environment is started correctly.",
       "parseError": "Failed to parse skill data, please try again.",
       "scanFailed": "Scan failed, please try again.",
@@ -814,6 +820,9 @@
       "import": "Import Skill",
       "remove": "Remove Skill",
       "moveToWorkspace": "Move to Workspace",
+      "moveToCore": "Move to Core",
+      "unlockCore": "Unlock core skills (allow deletion)",
+      "lockCore": "Re-lock core skills",
       "viewDetails": "View Details"
     }
   },
@@ -1409,7 +1418,8 @@
       "success": {
         "skillImported": "Skill imported successfully: {{name}}",
         "skillRemoved": "Skill removed successfully",
-        "skillMoved": "System skill moved to workspace successfully: {{name}}"
+        "skillMoved": "System skill moved to workspace successfully: {{name}}",
+        "skillMovedToCore": "Workspace skill moved to core successfully: {{name}}"
       }
     },
     "titles": {

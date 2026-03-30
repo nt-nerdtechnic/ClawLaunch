@@ -773,6 +773,12 @@
       "deleteConfirm": "确定要移除技能「{{name}}」吗？这将会删除工作区内的文件夹且无法还原。",
       "moveCoreConfirm": "确定要将系统技能「{{name}}」移动到工作区 skills 目录吗？移动后该技能将不再位于核心技能目录。",
       "moveCoreError": "移动系统技能失败，请稍后再试。",
+      "moveToCoreConfirm": "确定要将工作区技能「{{name}}」移动到核心 skills 目录吗？",
+      "moveToCoreError": "移动工作区技能到核心区失败，请稍后再试。",
+      "deleteCoreConfirm": "⚠️ 确定要永久删除系统核心技能「{{name}}」吗？此操作将直接删除 Core 目录，无法还原。",
+      "deleteCoreError": "删除核心技能失败，请稍后再试。",
+      "coreUnlocked": "已解锁：点击删除此核心技能",
+      "coreUnlockedWarning": "⚠️ 核心技能解锁模式：卡片上的锁头图示可直接删除技能，删除后无法还原，请谨慎操作。",
       "electronUnavailable": "electronAPI 不可用，请确认 Electron 环境正确启动。",
       "parseError": "技能资料解析失败，请重试。",
       "scanFailed": "扫描失败，请重试。",
@@ -804,6 +810,9 @@
       "import": "导入手边技能",
       "remove": "移除技能",
       "moveToWorkspace": "移到工作区",
+      "moveToCore": "移到核心区",
+      "unlockCore": "解锁核心技能（允许删除）",
+      "lockCore": "重新锁定核心技能",
       "viewDetails": "查看详情"
     }
   },
@@ -1172,7 +1181,8 @@
       "success": {
         "skillImported": "成功导入技能：{{name}}",
         "skillRemoved": "技能已成功移除",
-        "skillMoved": "已成功将系统技能移动到工作区：{{name}}"
+        "skillMoved": "已成功将系统技能移动到工作区：{{name}}",
+        "skillMovedToCore": "已成功将工作区技能移动到核心区：{{name}}"
       }
     },
     "titles": {

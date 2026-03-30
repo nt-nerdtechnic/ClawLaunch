@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 import type { SkillItem } from '../store';
-import { Info, Lock, ChevronDown, ChevronUp, Puzzle, ShieldCheck, RefreshCw, PackagePlus, Trash2, FolderOpen, Blocks, AlertCircle } from 'lucide-react';
+import { Info, Lock, LockOpen, ChevronDown, ChevronUp, Puzzle, ShieldCheck, RefreshCw, PackagePlus, Trash2, FolderOpen, Blocks, AlertCircle, Loader2 } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 
 // ── Skill Card Component ──────────────────────────────────────────────────────────────
@@ -10,13 +10,19 @@ function SkillCard({
   isCore,
   onRemove,
   onMoveToWorkspace,
+  onMoveToCore,
   actionsDisabled,
+  isRemoving,
+  isMoving,
 }: {
   skill: SkillItem;
   isCore: boolean;
   onRemove?: () => void;
   onMoveToWorkspace?: () => void;
+  onMoveToCore?: () => void;
   actionsDisabled?: boolean;
+  isRemoving?: boolean;
+  isMoving?: boolean;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -40,14 +46,26 @@ function SkillCard({
           </div>
           <div className="flex items-center gap-2">
              {!isCore && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
-                disabled={actionsDisabled}
-                className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                title={t('skillManager.actions.remove')}
-              >
-                <Trash2 size={16} />
-              </button>
+              <>
+                {onMoveToCore && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMoveToCore?.(); }}
+                    disabled={actionsDisabled}
+                    className="p-2 rounded-xl text-slate-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-40"
+                    title={t('skillManager.actions.moveToCore')}
+                  >
+                    {isMoving ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                  </button>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
+                  disabled={actionsDisabled}
+                  className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  title={t('skillManager.actions.remove')}
+                >
+                  {isRemoving ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                </button>
+              </>
             )}
             {isCore && (
               <>
@@ -58,12 +76,26 @@ function SkillCard({
                     className="p-2 rounded-xl text-slate-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-40"
                     title={t('skillManager.actions.moveToWorkspace')}
                   >
-                    <PackagePlus size={16} />
+                    {isMoving ? <Loader2 size={16} className="animate-spin" /> : <PackagePlus size={16} />}
                   </button>
                 )}
-                <div className="p-2 text-slate-300 dark:text-slate-700" title={t('skillManager.status.systemRequired')}>
-                  <Lock size={14} />
-                </div>
+                {onRemove ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
+                    disabled={actionsDisabled}
+                    className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-40"
+                    title={t('skillManager.actions.remove')}
+                  >
+                    {isRemoving ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  </button>
+                ) : (
+                  <div
+                    className="p-2 text-slate-300 dark:text-slate-700"
+                    title={t('skillManager.status.systemRequired')}
+                  >
+                    <Lock size={14} />
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -127,6 +159,9 @@ export function SkillManager() {
   const [scanning, setScanning] = useState(false);
   const [acting, setActing] = useState(false);
   const [scanError, setScanError] = useState('');
+  const [coreUnlocked, setCoreUnlocked] = useState(false);
+  const [removingSkillId, setRemovingSkillId] = useState<string | null>(null);
+  const [movingSkillId, setMovingSkillId] = useState<string | null>(null);
 
   const rescan = useCallback(async () => {
     if (!window.electronAPI) {
@@ -187,17 +222,43 @@ export function SkillManager() {
     if (!confirmed) return;
 
     setActing(true);
+    setRemovingSkillId(skill.id);
     try {
       const baseDir = config.workspacePath || config.configPath;
       if (!baseDir) {
         alert(t('skillManager.status.importError', { msg: 'Missing workspace/config path' }));
         setActing(false);
+        setRemovingSkillId(null);
         return;
       }
       await window.electronAPI.exec(`skill:delete ${baseDir}/skills/${skill.id}`);
       await rescan();
     } catch (_e) {}
     setActing(false);
+    setRemovingSkillId(null);
+  };
+
+  const handleDeleteCore = async (skill: SkillItem) => {
+    if (!window.electronAPI || acting) return;
+    const confirmed = confirm(t('skillManager.status.deleteCoreConfirm', { name: skill.name }));
+    if (!confirmed) return;
+    setActing(true);
+    setRemovingSkillId(skill.id);
+    try {
+      const payload = JSON.stringify({ skillId: skill.id });
+      const result = await window.electronAPI.exec(`skill:delete-core ${payload}`);
+      if (result?.exitCode !== 0) {
+        alert(result?.stderr || t('skillManager.status.deleteCoreError'));
+        setActing(false);
+        setRemovingSkillId(null);
+        return;
+      }
+      await rescan();
+    } catch (_e) {
+      alert(t('skillManager.status.deleteCoreError'));
+    }
+    setActing(false);
+    setRemovingSkillId(null);
   };
 
   const handleMoveToWorkspace = async (skill: SkillItem) => {
@@ -207,12 +268,14 @@ export function SkillManager() {
     if (!confirmed) return;
 
     setActing(true);
+    setMovingSkillId(skill.id);
     try {
       const payload = JSON.stringify({ skillId: skill.id });
       const result = await window.electronAPI.exec(`skill:move-core ${payload}`);
       if (result?.exitCode !== 0) {
         alert(result?.stderr || t('skillManager.status.moveCoreError'));
         setActing(false);
+        setMovingSkillId(null);
         return;
       }
       await rescan();
@@ -221,6 +284,33 @@ export function SkillManager() {
       alert(t('skillManager.status.moveCoreError'));
     }
     setActing(false);
+    setMovingSkillId(null);
+  };
+
+  const handleMoveToCore = async (skill: SkillItem) => {
+    if (!window.electronAPI || acting) return;
+
+    const confirmed = confirm(t('skillManager.status.moveToCoreConfirm', { name: skill.name }));
+    if (!confirmed) return;
+
+    setActing(true);
+    setMovingSkillId(skill.id);
+    try {
+      const payload = JSON.stringify({ skillId: skill.id });
+      const result = await window.electronAPI.exec(`skill:move-to-core ${payload}`);
+      if (result?.exitCode !== 0) {
+        alert(result?.stderr || t('skillManager.status.moveToCoreError'));
+        setActing(false);
+        setMovingSkillId(null);
+        return;
+      }
+      await rescan();
+      setActiveTab('core');
+    } catch (_e) {
+      alert(t('skillManager.status.moveToCoreError'));
+    }
+    setActing(false);
+    setMovingSkillId(null);
   };
 
   const tabs = [
@@ -270,6 +360,20 @@ export function SkillManager() {
             </button>
           )}
           
+          {activeTab === 'core' && (
+            <button
+              onClick={() => setCoreUnlocked(v => !v)}
+              disabled={acting}
+              className={`p-3 rounded-2xl border transition-all disabled:opacity-40 ${
+                coreUnlocked
+                  ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-500 shadow-lg shadow-amber-200/50 dark:shadow-amber-900/30'
+                  : 'border-slate-200 dark:border-slate-800 text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+              title={coreUnlocked ? t('skillManager.actions.lockCore') : t('skillManager.actions.unlockCore')}
+            >
+              {coreUnlocked ? <LockOpen size={18} /> : <Lock size={18} />}
+            </button>
+          )}
           <button
             onClick={rescan}
             disabled={scanning || acting}
@@ -316,7 +420,10 @@ export function SkillManager() {
                 skill={skill}
                 isCore={true}
                 onMoveToWorkspace={() => handleMoveToWorkspace(skill)}
+                onRemove={coreUnlocked ? () => handleDeleteCore(skill) : undefined}
                 actionsDisabled={acting || scanning}
+                isRemoving={removingSkillId === skill.id}
+                isMoving={movingSkillId === skill.id}
               />
             ))
           ) : (
@@ -343,7 +450,10 @@ export function SkillManager() {
                   skill={skill}
                   isCore={false}
                   onRemove={() => handleRemove(skill)}
+                  onMoveToCore={() => handleMoveToCore(skill)}
                   actionsDisabled={acting || scanning}
+                  isRemoving={removingSkillId === skill.id}
+                  isMoving={movingSkillId === skill.id}
                 />
               ))
             )

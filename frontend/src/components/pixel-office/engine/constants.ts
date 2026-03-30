@@ -22,9 +22,9 @@ export const WALK_SPEED            = 50;   // px/sec (proportional to new TILE_S
 export const ANIM_FRAME_MS_IDLE    = 600;
 export const ANIM_FRAME_MS_WALK    = 160;
 export const ANIM_FRAME_MS_TYPE    = 320;
-export const IDLE_WANDER_DELAY_MIN = 2000;
-export const IDLE_WANDER_DELAY_MAX = 5000;
-export const MAX_WANDER_COUNT      = 3;
+export const IDLE_WANDER_DELAY_MIN = 6000;
+export const IDLE_WANDER_DELAY_MAX = 14000;
+export const MAX_WANDER_COUNT      = 2;
 
 // ─── 8 agent base colours (one per theme) ─────────────────────────────────────
 export const AGENT_COLORS = [

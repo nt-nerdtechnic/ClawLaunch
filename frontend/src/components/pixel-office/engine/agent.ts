@@ -226,10 +226,18 @@ function pixelToTile(px: number, py: number): Vec2 {
 }
 
 function randomWalkableTile(room: RoomConfig): Vec2 | null {
-  // Try up to 20 times to find a random walkable tile
+  // Sprite is SPRITE_DRAW_H (60px = 3 tiles) tall, drawn ABOVE the foot.
+  // North wall occupies rows 0-1 (y < 40px). To avoid the sprite body
+  // visually overlapping the wall, require foot tile y >= 5
+  // (foot pixel = 5*20+10 = 110, sprite top = 110-60 = 50 > wall bottom 40).
+  // Similarly keep x >= 2 so the 36px-wide sprite clears the left wall.
+  const MIN_Y = 5;
+  const MAX_Y = room.heightTiles - 3; // keep away from bottom wall too
+  const MIN_X = 2;
+  const MAX_X = room.widthTiles - 3;
   for (let i = 0; i < 20; i++) {
-    const x = 2 + Math.floor(Math.random() * (room.widthTiles - 4));
-    const y = 3 + Math.floor(Math.random() * (room.heightTiles - 5));
+    const x = MIN_X + Math.floor(Math.random() * (MAX_X - MIN_X + 1));
+    const y = MIN_Y + Math.floor(Math.random() * (MAX_Y - MIN_Y + 1));
     if (room.walkable[y]?.[x]) {
       return { x, y };
     }

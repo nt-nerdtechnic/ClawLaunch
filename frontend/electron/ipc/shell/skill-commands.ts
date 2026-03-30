@@ -52,7 +52,7 @@ export async function handleSkillCommands(fullCommand: string, ctx: ShellExecCon
     }
   }
 
-  if (fullCommand.startsWith('skill:delete')) {
+  if (fullCommand.startsWith('skill:delete') && !fullCommand.startsWith('skill:delete-core')) {
     try {
       const skillPath = fullCommand.replace('skill:delete ', '').trim();
       if (!skillPath) throw new Error(t('main.ipc.errors.missingPath'));
@@ -145,6 +145,113 @@ export async function handleSkillCommands(fullCommand: string, ctx: ShellExecCon
       return { code: 0, stdout: t('main.ipc.success.skillMoved', { name: skillId }), exitCode: 0 };
     } catch (e) {
       return { code: 1, stderr: (e as Error)?.message || 'skill move failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('skill:move-to-core')) {
+    try {
+      const payloadRaw = fullCommand.replace('skill:move-to-core', '').trim();
+      let skillId = '';
+      if (payloadRaw) {
+        try {
+          const payload = JSON.parse(payloadRaw);
+          skillId = typeof payload?.skillId === 'string' ? payload.skillId.trim() : '';
+        } catch {
+          skillId = payloadRaw.trim();
+        }
+      }
+
+      if (!skillId) {
+        throw new Error(t('main.ipc.errors.missingPath'));
+      }
+      if (skillId !== path.basename(skillId) || skillId.includes('..')) {
+        throw new Error(t('main.ipc.errors.securityDenied'));
+      }
+
+      const launcherConfigPath = ctx.getClawlaunchFile();
+      let configuredWorkspacePath = '', configuredConfigPath = '', configuredCorePath = '';
+      try {
+        const launcherRaw = await fs.readFile(launcherConfigPath, 'utf-8');
+        const launcherCfg = JSON.parse(launcherRaw || '{}');
+        configuredWorkspacePath = typeof launcherCfg.workspacePath === 'string' ? launcherCfg.workspacePath.trim() : '';
+        configuredConfigPath = typeof launcherCfg.configPath === 'string' ? launcherCfg.configPath.trim() : '';
+        configuredCorePath = typeof launcherCfg.corePath === 'string' ? launcherCfg.corePath.trim() : '';
+      } catch { /* no config */ }
+
+      const sourceBaseDir = configuredWorkspacePath || configuredConfigPath;
+      if (!sourceBaseDir) {
+        throw new Error(t('main.ipc.errors.missingPath'));
+      }
+      if (!configuredCorePath) {
+        throw new Error(t('main.ipc.errors.missingCorePath'));
+      }
+
+      const workspaceSkillsRoot = path.resolve(sourceBaseDir, 'skills');
+      const coreSkillsRoot = path.resolve(configuredCorePath, 'skills');
+      const sourcePath = path.resolve(workspaceSkillsRoot, skillId);
+      const targetPath = path.resolve(coreSkillsRoot, skillId);
+
+      const sourceAllowed = sourcePath === workspaceSkillsRoot || sourcePath.startsWith(`${workspaceSkillsRoot}${path.sep}`);
+      const targetAllowed = targetPath === coreSkillsRoot || targetPath.startsWith(`${coreSkillsRoot}${path.sep}`);
+      if (!sourceAllowed || !targetAllowed) {
+        throw new Error(t('main.ipc.errors.securityDenied'));
+      }
+
+      const sourceStats = await fs.stat(sourcePath).catch(() => null);
+      if (!sourceStats || !sourceStats.isDirectory()) {
+        throw new Error(t('main.ipc.errors.skillNotFound', { name: skillId }));
+      }
+
+      const targetStats = await fs.stat(targetPath).catch(() => null);
+      if (targetStats) {
+        throw new Error(t('main.ipc.errors.skillAlreadyExists', { name: skillId }));
+      }
+
+      await fs.mkdir(coreSkillsRoot, { recursive: true });
+      await moveDirWithFallback(sourcePath, targetPath);
+
+      return { code: 0, stdout: t('main.ipc.success.skillMovedToCore', { name: skillId }), exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'skill move-to-core failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('skill:delete-core')) {
+    try {
+      const payloadRaw = fullCommand.replace('skill:delete-core', '').trim();
+      let skillId = '';
+      if (payloadRaw) {
+        try {
+          const payload = JSON.parse(payloadRaw);
+          skillId = typeof payload?.skillId === 'string' ? payload.skillId.trim() : '';
+        } catch {
+          skillId = payloadRaw.trim();
+        }
+      }
+      if (!skillId) throw new Error(t('main.ipc.errors.missingPath'));
+      if (skillId !== path.basename(skillId) || skillId.includes('..')) {
+        throw new Error(t('main.ipc.errors.securityDenied'));
+      }
+      const launcherConfigPath = ctx.getClawlaunchFile();
+      let configuredCorePath = '';
+      try {
+        const launcherRaw = await fs.readFile(launcherConfigPath, 'utf-8');
+        const launcherCfg = JSON.parse(launcherRaw || '{}');
+        configuredCorePath = typeof launcherCfg.corePath === 'string' ? launcherCfg.corePath.trim() : '';
+      } catch { /* no config */ }
+      if (!configuredCorePath) throw new Error(t('main.ipc.errors.missingCorePath'));
+      const coreSkillsRoot = path.resolve(configuredCorePath, 'skills');
+      const resolvedTarget = path.resolve(coreSkillsRoot, skillId);
+      const isInsideCore = resolvedTarget === coreSkillsRoot || resolvedTarget.startsWith(`${coreSkillsRoot}${path.sep}`);
+      if (!isInsideCore) throw new Error(t('main.ipc.errors.securityDenied'));
+      const stats = await fs.stat(resolvedTarget).catch(() => null);
+      if (!stats || !stats.isDirectory()) {
+        throw new Error(t('main.ipc.errors.skillNotFound', { name: skillId }));
+      }
+      await fs.rm(resolvedTarget, { recursive: true, force: true });
+      return { code: 0, stdout: t('main.ipc.success.skillRemoved'), exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'skill delete-core failed', exitCode: 1 };
     }
   }
 

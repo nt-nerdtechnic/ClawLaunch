@@ -4,6 +4,7 @@ import type { PixelAgent, RoomConfig } from './engine/types';
 import { CANVAS_W, CANVAS_H, AGENT_COLORS, SPRITE_DRAW_W, SPRITE_DRAW_H } from './engine/constants';
 import { buildSpriteCache, type SpriteCache } from './engine/spriteCache';
 import { createMainHall } from './engine/room';
+import { applyNavMaskToRoom } from './engine/navmask';
 import { createAgent, syncAgentWithSnapshot } from './engine/agent';
 import { hitTestAgent } from './engine/tooltip';
 import { usePixelOfficeAgents, type PixelAgentSummary } from './hooks/usePixelOfficeAgents';
@@ -27,6 +28,8 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
 
   // Load AI-generated background image (falls back to procedural tiles if missing)
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [navMaskImage, setNavMaskImage] = useState<HTMLImageElement | null>(null);
+
   useEffect(() => {
     const img = new Image();
     img.onload = () => setBgImage(img);
@@ -34,8 +37,22 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
     img.src = '/pixel_office_bg.png';
   }, []);
 
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setNavMaskImage(img);
+    img.onerror = () => setNavMaskImage(null); // optional asset
+    img.src = '/pixel_office_navmask.png';
+  }, []);
+
   // Build room (stable singleton)
-  const room = useMemo<RoomConfig>(() => createMainHall(), []);
+  const room = useMemo<RoomConfig>(() => {
+    const baseRoom = createMainHall();
+    if (!navMaskImage) return baseRoom;
+    return applyNavMaskToRoom(baseRoom, navMaskImage, {
+      walkableMinAlpha: 32,
+      inflateBlockedTiles: 1,
+    });
+  }, [navMaskImage]);
 
   // Build sprite cache (stable singleton)
   const cache = useMemo<SpriteCache>(() => buildSpriteCache(AGENT_COLORS), []);
