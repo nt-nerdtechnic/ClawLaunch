@@ -216,7 +216,7 @@ class GatewayWSClient {
 // ── Gateway WebSocket singleton ───────────────────────────────────────────────
 
 let gwsClient: GatewayWSClient | null = null;
-const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean }>();
+const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean; startedAtMs: number }>();
 
 // Concurrency lock: ensures only one connection attempt runs at a time.
 // Subsequent callers await the same Promise instead of spawning a new client.
@@ -377,6 +377,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       sessionKey: request.sessionKey,
       agentId: request.agentId,
       aborted: false,
+      startedAtMs: Date.now(),
     });
 
     const emitChunk = (payload: { delta?: string; done?: boolean; state?: string; error?: string }) => {
@@ -651,6 +652,112 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       return { code: 0, stdout: JSON.stringify(messages), stderr: '' };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle('openclaw:session.abort', async (_event, payload?: string) => {
+    try {
+      const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+      const sessionKey = String(opts?.sessionKey || '').trim();
+      if (!sessionKey) {
+        return { success: false, error: 'sessionKey is required' };
+      }
+      const agentId = String(opts?.agentId || 'main').trim();
+
+      for (const [reqId, state] of activeChatRequests.entries()) {
+        if (state.sessionKey === sessionKey && (!opts.agentId || state.agentId === agentId)) {
+          activeChatRequests.set(reqId, { ...state, aborted: true });
+          if (gwsClient?.isConnected) {
+            try {
+              const abortParams: Record<string, unknown> = { sessionKey };
+              if (state.runId) abortParams.runId = state.runId;
+              if (state.agentId) abortParams.agentId = state.agentId;
+              await gwsClient.request('chat.abort', abortParams);
+              return { success: true };
+            } catch (e) {
+              return { success: false, error: (e as Error)?.message || 'abort failed' };
+            }
+          }
+        }
+      }
+
+      return { success: false, error: 'no active chat request found for this session' };
+    } catch (e) {
+      return { success: false, error: (e as Error)?.message || 'abort session failed' };
+    }
+  });
+
+  ipcMain.handle('openclaw:sessions.scan', async (_event, payload?: string) => {
+    try {
+      const opts = payload ? (() => { try { return JSON.parse(payload); } catch { return {}; } })() : {};
+      const activeMinutes = Number(opts?.activeMinutes ?? 3);
+      const now = Date.now();
+      const activeWindowMs = Math.max(1, activeMinutes) * 60 * 1000;
+      const byKey = new Map<string, {
+        key: string;
+        kind: string;
+        updatedAt: string;
+        ageMs: number;
+        sessionId: string;
+        model?: string;
+      }>();
+
+      // Source 1: track in-flight requests in memory (real running tasks started from this app)
+      for (const [, state] of activeChatRequests.entries()) {
+        const ts = state.startedAtMs || now;
+        byKey.set(state.sessionKey, {
+          key: state.sessionKey,
+          kind: 'chat',
+          updatedAt: new Date(ts).toISOString(),
+          ageMs: Math.max(0, now - ts),
+          sessionId: state.runId || state.sessionKey,
+          model: state.agentId || 'main',
+        });
+      }
+
+      // Source 2: scan OpenClaw session indexes so external/CLI tasks can still be observed.
+      const { stateDir } = await readLauncherConfigPaths();
+      const base = stateDir || path.join(HOME, '.openclaw');
+      const agentsDir = path.join(base, 'agents');
+      let agentIds: string[] = [];
+      try { agentIds = await fs.readdir(agentsDir); } catch { agentIds = []; }
+
+      for (const agentId of agentIds) {
+        const sessionsJsonPath = path.join(agentsDir, agentId, 'sessions', 'sessions.json');
+        let sessionsIndex: Record<string, unknown> = {};
+        try {
+          const raw = await fs.readFile(sessionsJsonPath, 'utf-8');
+          sessionsIndex = JSON.parse(raw);
+        } catch {
+          continue;
+        }
+
+        for (const [sessionKey, metaRaw] of Object.entries(sessionsIndex) as [string, unknown][]) {
+          const meta = metaRaw as Record<string, unknown>;
+          const updatedAtRaw = String(meta?.updatedAt || '').trim();
+          const updatedMs = updatedAtRaw ? (new Date(updatedAtRaw).getTime() || Number(updatedAtRaw) || 0) : 0;
+          if (!updatedMs) continue;
+          const ageMs = Math.max(0, now - updatedMs);
+          if (ageMs > activeWindowMs) continue;
+
+          const existing = byKey.get(sessionKey);
+          if (existing && existing.ageMs <= ageMs) continue;
+
+          byKey.set(sessionKey, {
+            key: sessionKey,
+            kind: 'session',
+            updatedAt: new Date(updatedMs).toISOString(),
+            ageMs,
+            sessionId: String(meta?.sessionId || sessionKey),
+            model: agentId,
+          });
+        }
+      }
+
+      const sessions = Array.from(byKey.values()).sort((a, b) => a.ageMs - b.ageMs);
+      return { code: 0, stdout: JSON.stringify({ sessions }), stderr: '' };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'scan active sessions failed' };
     }
   });
 }

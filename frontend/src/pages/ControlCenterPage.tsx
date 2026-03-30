@@ -258,7 +258,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     try {
       setSessionScanLoading(true);
       console.log('[ControlCenter] Scanning active sessions...');
-      const res = await window.electronAPI.scanActiveSessions({ activeMinutes: 3 });
+      const res = await window.electronAPI.scanActiveSessions({ activeMinutes: 15 });
       console.log('[ControlCenter] scanActiveSessions response:', res);
       if (res.code !== 0) {
         console.warn('[ControlCenter] scanActiveSessions error code:', res.code, 'stderr:', res.stderr);
@@ -498,7 +498,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               <div className="flex items-center gap-2">
                 <Activity size={13} className="text-indigo-500" />
                 <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 dark:text-slate-100">{t('controlCenter.activeSessions.title', '執行中工作')}</h3>
-                <span className="text-[10px] text-slate-400">{activeSessions.length} {t('controlCenter.timeline.count', { count: activeSessions.length })}</span>
+                <span className="text-[10px] text-slate-400">{t('controlCenter.timeline.count', { count: activeSessions.length })}</span>
               </div>
               <div className="flex items-center gap-2">
                 {lastSessionsScanned && (

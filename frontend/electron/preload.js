@@ -43,4 +43,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('openclaw:gateway.status', listener);
     };
   },
+  scanActiveSessions: (payload) => ipcRenderer.invoke('openclaw:sessions.scan', payload ? JSON.stringify(payload) : undefined),
+  abortSession: (payload) => ipcRenderer.invoke('openclaw:session.abort', payload ? JSON.stringify(payload) : undefined),
 });
