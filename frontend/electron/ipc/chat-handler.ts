@@ -788,9 +788,15 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
             ? String(meta.sessionFile)
             : path.join(agentsDir, agentId, 'sessions', `${sessionId}.jsonl`);
 
+          // Regex for completion markers in assistant messages
+          const DONE_PATTERN = /[✅☑️✔️]|完成|已完成|done|finished|completed|succeeded|成功|sprint.*完成|合併.*完成/i;
+          let lastAssistantText = '';
+          let isCompletedByContent = false;
+
           try {
             const content = await fs.readFile(sessionFile, 'utf-8');
             const lines = content.split(/\r?\n/).filter(Boolean);
+            // Scan forward: collect title hint, lastMessage, and last assistant text
             for (let i = 0; i < lines.length; i++) {
               try {
                 const entry = JSON.parse(lines[i]);
@@ -801,15 +807,31 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
                 if (!text) continue;
                 if (!titleHint) titleHint = extractCronDisplayNameFromText(text);
                 lastMessage = text.slice(0, 160);
+                if (role === 'assistant') lastAssistantText = text;
               } catch {
                 continue;
               }
+            }
+            // Detect completion from last assistant message
+            if (lastAssistantText && DONE_PATTERN.test(lastAssistantText)) {
+              isCompletedByContent = true;
             }
           } catch {
             lastMessage = '';
           }
 
           if (titleHint) displayName = titleHint;
+
+          // Determine running state:
+          // - 'main' type is a persistent daemon listener (not a one-shot task); only mark
+          //   running if in-memory (handled in source-1 above), never from index.
+          // - cron/subagent: recent heartbeat AND not explicitly aborted AND no completion marker
+          const sessionType = normalizedKey.split(':')[2] || '';
+          const isPersistentMain = sessionType === 'main';
+          const isRunningFromIndex = !isPersistentMain
+            && ageMs <= Math.max(5_000, indexRunningHeartbeatMs)
+            && meta?.abortedLastRun !== true
+            && !isCompletedByContent;
 
           byKey.set(normalizedKey, {
             key: normalizedKey,
@@ -822,10 +844,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
             lastMessage,
             model: String(meta?.model || ''),
             source: 'index',
-            // Index sessions come from persisted state; infer running when update/heartbeat is very recent
-            // and the last run wasn't explicitly aborted.
-            isRunning: ageMs <= Math.max(5_000, indexRunningHeartbeatMs)
-              && meta?.abortedLastRun !== true,
+            isRunning: isRunningFromIndex,
           });
         }
       }
