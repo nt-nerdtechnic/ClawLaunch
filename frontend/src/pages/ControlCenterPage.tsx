@@ -240,7 +240,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [triggeringJobIds, setTriggeringJobIds] = useState<Set<string>>(new Set());
   const [error, setError]             = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
-  const [activeSessionFilter, setActiveSessionFilter] = useState<'all' | 'running' | 'stopped'>('all');
+  const [activeSessionFilter, setActiveSessionFilter] = useState<'all' | 'running' | 'stopped'>('running');
   const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'stopped'>('running');
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
