@@ -1439,6 +1439,8 @@
       "notInstalled": "未安裝"
     },
     "labels": {
+      "success": "成功",
+      "failure": "失敗",
       "notParsed": "未解析到",
       "oauthFlow": "OAuth 流程",
       "noKeyRequired": "無須密鑰",

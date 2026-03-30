@@ -1431,6 +1431,8 @@
       "notInstalled": "Not Installed"
     },
     "labels": {
+      "success": "Success",
+      "failure": "Failure",
       "notParsed": "N/A",
       "oauthFlow": "OAuth Flow",
       "noKeyRequired": "No Key Required",

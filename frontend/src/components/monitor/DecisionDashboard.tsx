@@ -9,7 +9,8 @@ type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
 type AuditLogEntry = {
   ts: string;
   cmd: string;
-  result: string;
+  result: 'success' | 'failure';
+  rawResult: string;
   suspicious: number;
 };
 
@@ -114,7 +115,13 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
           "  const suspCount = Array.isArray(item?.suspicious) ? item.suspicious.length : 0;",
           "  suspicious += suspCount;",
           "  const argv = Array.isArray(item?.argv) ? item.argv.slice(2).join(' ') : '';",
-          "  entries.push({ ts: ts, cmd: argv, result: item?.result || '', suspicious: suspCount });",
+          "  const rawResult = String(item?.result ?? item?.event ?? '').trim();",
+          "  const statusRaw = String(item?.status ?? '').trim().toLowerCase();",
+          "  const knownSuccess = ['ok', 'success', 'passed', 'completed'].includes(statusRaw);",
+          "  const knownFailure = ['error', 'failed', 'failure', 'denied'].includes(statusRaw);",
+          "  const explicitSuccess = typeof item?.ok === 'boolean' ? item.ok : typeof item?.success === 'boolean' ? item.success : Number.isFinite(Number(item?.exitCode)) ? Number(item.exitCode) === 0 : Number.isFinite(Number(item?.code)) ? Number(item.code) === 0 : knownSuccess ? true : knownFailure ? false : null;",
+          "  const finalResult = explicitSuccess === null ? (suspCount > 0 ? 'failure' : 'success') : (explicitSuccess ? 'success' : 'failure');",
+          "  entries.push({ ts: ts, cmd: argv, result: finalResult, rawResult, suspicious: suspCount });",
           "}",
           "entries.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());",
           "process.stdout.write(JSON.stringify({ ok: true, writes, changedPaths, suspicious, updatedAt: lastTs ? new Date(lastTs).toISOString() : '', entries: entries.slice(0, 50) }));",
@@ -329,8 +336,15 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                         )}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                          {entry.result}
+                        <span
+                          title={entry.rawResult || undefined}
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                            entry.result === 'success'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                              : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
+                          }`}
+                        >
+                          {entry.result === 'success' ? t('common.labels.success') : t('common.labels.failure')}
                         </span>
                       </td>
                     </tr>
