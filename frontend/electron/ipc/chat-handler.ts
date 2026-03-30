@@ -825,13 +825,17 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           // Determine running state:
           // - 'main' type is a persistent daemon listener (not a one-shot task); only mark
           //   running if in-memory (handled in source-1 above), never from index.
-          // - cron/subagent: recent heartbeat AND not explicitly aborted AND no completion marker
+          // - cron/subagent: prefer explicit run state from session index; fallback to heartbeat.
           const sessionType = normalizedKey.split(':')[2] || '';
           const isPersistentMain = sessionType === 'main';
+          const runStateText = String(meta?.runState || meta?.status || meta?.state || '').toLowerCase();
+          const hasExplicitRunningState = /(^|\b)(running|in_progress|in-progress|pending|initializing|streaming|executing|working)(\b|$)/.test(runStateText);
+          const hasExplicitStoppedState = /(^|\b)(done|completed|success|succeeded|failed|error|aborted|stopped|cancelled|canceled|idle)(\b|$)/.test(runStateText);
           const isRunningFromIndex = !isPersistentMain
-            && ageMs <= Math.max(5_000, indexRunningHeartbeatMs)
             && meta?.abortedLastRun !== true
             && !isCompletedByContent;
+          const isHeartbeatFresh = ageMs <= Math.max(5_000, indexRunningHeartbeatMs);
+          const isRunning = isRunningFromIndex && (hasExplicitRunningState || (!hasExplicitStoppedState && isHeartbeatFresh));
 
           byKey.set(normalizedKey, {
             key: normalizedKey,
@@ -844,7 +848,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
             lastMessage,
             model: String(meta?.model || ''),
             source: 'index',
-            isRunning: isRunningFromIndex,
+            isRunning,
           });
         }
       }
