@@ -1,4 +1,4 @@
-import type { RoomConfig, Furniture, DeskSlot } from './types';
+import type { RoomConfig, Furniture, DeskSlot, DeskSlotsConfig } from './types';
 import { CANVAS_TILES_W, CANVAS_TILES_H, TILE_SIZE, FURNITURE_SCALE } from './constants';
 
 /** Create the main hall room layout (30x20 tiles). */
@@ -94,4 +94,34 @@ export function createMainHall(): RoomConfig {
     deskSlots,
     spawnPoint: { x: 10 * TILE_SIZE, y: 16 * TILE_SIZE },
   };
+}
+
+/** Override desk slots from external config (e.g. from pixel_office_deskslots.json). */
+export function applyDeskSlotsConfig(room: RoomConfig, config: DeskSlotsConfig): RoomConfig {
+  if (!config?.slots || config.slots.length === 0) return room;
+
+  const newSlots: DeskSlot[] = [];
+  for (const slot of config.slots) {
+    if (typeof slot.id === 'number' && typeof slot.x === 'number' && typeof slot.y === 'number') {
+      const seatPixel = { x: slot.x, y: slot.y };
+      const seatTile = {
+        x: Math.floor(seatPixel.x / TILE_SIZE),
+        y: Math.floor(seatPixel.y / TILE_SIZE),
+      };
+      newSlots.push({
+        deskTile: seatTile,
+        seatTile,
+        seatPixel,
+      });
+    }
+  }
+
+  if (newSlots.length > 0) {
+    return {
+      ...room,
+      deskSlots: newSlots,
+    };
+  }
+
+  return room;
 }

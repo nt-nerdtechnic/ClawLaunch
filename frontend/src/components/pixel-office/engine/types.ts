@@ -58,6 +58,16 @@ export interface DeskSlot {
   seatPixel: Vec2;   // pixel position for agent when seated
 }
 
+export interface DeskSlotsConfig {
+  description?: string;
+  slots: Array<{
+    id: number;
+    x: number;        // seatPixel.x
+    y: number;        // seatPixel.y
+    label?: string;   // optional label for desk
+  }>;
+}
+
 export interface RoomConfig {
   widthTiles: number;
   heightTiles: number;

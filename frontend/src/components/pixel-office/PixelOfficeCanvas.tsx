@@ -3,8 +3,9 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { PixelAgent, RoomConfig } from './engine/types';
 import { CANVAS_W, CANVAS_H, AGENT_COLORS, SPRITE_DRAW_W, SPRITE_DRAW_H } from './engine/constants';
 import { buildSpriteCache, type SpriteCache } from './engine/spriteCache';
-import { createMainHall } from './engine/room';
+import { createMainHall, applyDeskSlotsConfig } from './engine/room';
 import { applyNavMaskToRoom } from './engine/navmask';
+import type { DeskSlotsConfig } from './engine/types';
 import { createAgent, syncAgentWithSnapshot } from './engine/agent';
 import { hitTestAgent } from './engine/tooltip';
 import { usePixelOfficeAgents, type PixelAgentSummary } from './hooks/usePixelOfficeAgents';
@@ -29,6 +30,7 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
   // Load AI-generated background image (falls back to procedural tiles if missing)
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [navMaskImage, setNavMaskImage] = useState<HTMLImageElement | null>(null);
+  const [deskSlotsConfig, setDeskSlotsConfig] = useState<DeskSlotsConfig | null>(null);
 
   useEffect(() => {
     const img = new Image();
@@ -44,15 +46,25 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
     img.src = '/pixel_office_navmask.png';
   }, []);
 
+  useEffect(() => {
+    fetch('/pixel_office_deskslots.json')
+      .then(res => res.json())
+      .then(data => setDeskSlotsConfig(data))
+      .catch(() => setDeskSlotsConfig(null)); // optional asset
+  }, []);
+
   // Build room (stable singleton)
   const room = useMemo<RoomConfig>(() => {
-    const baseRoom = createMainHall();
+    let baseRoom = createMainHall();
+    if (deskSlotsConfig) {
+      baseRoom = applyDeskSlotsConfig(baseRoom, deskSlotsConfig);
+    }
     if (!navMaskImage) return baseRoom;
     return applyNavMaskToRoom(baseRoom, navMaskImage, {
       walkableMinAlpha: 32,
       inflateBlockedTiles: 1,
     });
-  }, [navMaskImage]);
+  }, [navMaskImage, deskSlotsConfig]);
 
   // Build sprite cache (stable singleton)
   const cache = useMemo<SpriteCache>(() => buildSpriteCache(AGENT_COLORS), []);
