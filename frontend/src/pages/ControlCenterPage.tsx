@@ -78,6 +78,8 @@ interface ActiveSession {
   agentId?: string;
   displayName?: string;
   lastMessage?: string;
+  source?: 'memory' | 'index';
+  isRunning?: boolean;
   systemSent?: number;
   inputTokens?: number;
   outputTokens?: number;
@@ -272,10 +274,35 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       const dedup = new Map<string, ActiveSession>();
       for (const raw of rawSessions) {
         const s = raw as ActiveSession;
-        const dedupKey = `${String(s.key || '').trim()}|${String(s.sessionId || '').trim()}`;
-        if (!dedup.has(dedupKey)) dedup.set(dedupKey, s);
+        const normKey = String(s.key || '').trim();
+        const normSessionId = String(s.sessionId || '').trim();
+        const dedupKey = normKey || normSessionId;
+        if (!dedupKey) continue;
+        const existing = dedup.get(dedupKey);
+        if (!existing || (existing.ageMs ?? Number.MAX_SAFE_INTEGER) > (s.ageMs ?? Number.MAX_SAFE_INTEGER)) {
+          dedup.set(dedupKey, s);
+        }
       }
-      const sessions = Array.from(dedup.values());
+
+      // Secondary dedup: collapse visually identical cards from mixed sources.
+      const byFingerprint = new Map<string, ActiveSession>();
+      for (const s of dedup.values()) {
+        const fingerprint = [
+          String(s.displayName || '').trim(),
+          String(s.lastMessage || '').trim(),
+          String(s.agentId || s.model || '').trim(),
+          String(s.kind || '').trim(),
+        ].join('|');
+        if (!fingerprint.replace(/\|/g, '')) {
+          byFingerprint.set(`${String(s.key || '').trim()}|${String(s.sessionId || '').trim()}`, s);
+          continue;
+        }
+        const existing = byFingerprint.get(fingerprint);
+        if (!existing || (existing.ageMs ?? Number.MAX_SAFE_INTEGER) > (s.ageMs ?? Number.MAX_SAFE_INTEGER)) {
+          byFingerprint.set(fingerprint, s);
+        }
+      }
+      const sessions = Array.from(byFingerprint.values());
       console.log('[ControlCenter] loadActiveSessions parsed:', parsed);
       console.log('[ControlCenter] loadActiveSessions got', sessions.length, 'sessions:', sessions);
       setActiveSessions(sessions);
@@ -461,16 +488,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       <div className="grid grid-cols-4 gap-3">
         {[
           { 
-            label: t('controlCenter.kpi.systemServices', '系統服務'), 
-            value: kpi.systemServices.total, 
-            color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400',
-            targetId: 'system-services-section'
-          },
-          { 
-            label: t('controlCenter.kpi.crontabEntries', '系統排程'), 
-            value: kpi.crontabEntriesCount, 
-            color: 'text-amber-600 dark:text-amber-400',
-            targetId: 'system-crontab-section'
+            label: t('controlCenter.kpi.activeSessions', '執行中工作'), 
+            value: kpi.activeSessions, 
+            color: 'text-indigo-600 dark:text-indigo-400',
+            targetId: 'active-sessions-section'
           },
           { 
             label: t('controlCenter.kpi.cronSchedules', '應用排程'), 
@@ -479,10 +500,16 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             targetId: 'application-scheduling-section'
           },
           { 
-            label: t('controlCenter.kpi.activeSessions', '執行中工作'), 
-            value: kpi.activeSessions, 
-            color: 'text-indigo-600 dark:text-indigo-400',
-            targetId: 'active-sessions-section'
+            label: t('controlCenter.kpi.crontabEntries', '系統排程'), 
+            value: kpi.crontabEntriesCount, 
+            color: 'text-amber-600 dark:text-amber-400',
+            targetId: 'system-crontab-section'
+          },
+          { 
+            label: t('controlCenter.kpi.systemServices', '系統服務'), 
+            value: kpi.systemServices.total, 
+            color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400',
+            targetId: 'system-services-section'
           },
         ].map(({ label, value, color, targetId }) => (
           <button 
@@ -499,7 +526,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
         {/* ── Active OpenClaw Sessions ── full width, pinned to bottom ── */}
-        <div id="active-sessions-section" className="xl:col-span-3 order-last bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+        <div id="active-sessions-section" className="xl:col-span-3 order-1 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
           <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(99,102,241,0.5),transparent)' }} />
           <div className="p-6 space-y-3">
 
@@ -535,11 +562,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 </div>
               ) : activeSessions.map((session, i) => {
                 const isRecent = session.ageMs < 30000; // Recent if < 30s
+                const isRunning = session.isRunning === true;
                 return (
                   <div
                     key={`session-${session.key}-${i}`}
                     className={`rounded-2xl border px-3.5 py-2.5 transition-all ${
-                      isRecent
+                      isRunning || isRecent
                         ? 'border-violet-200 dark:border-violet-800/40 bg-violet-50/30 dark:bg-violet-950/10'
                         : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
                     }`}
@@ -547,12 +575,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     <div className="flex items-center gap-2">
                       {/* Session icon with pulse indicator */}
                       <div className={`shrink-0 w-5 h-5 rounded-lg flex items-center justify-center ${
-                        isRecent 
+                        isRunning || isRecent 
                           ? 'bg-violet-100 dark:bg-violet-900/40' 
                           : 'bg-slate-100 dark:bg-slate-800/40'
                       }`}>
-                        {isRecent && <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />}
-                        {!isRecent && <Activity size={10} className="text-slate-500" />}
+                        {(isRunning || isRecent) && <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />}
+                        {!(isRunning || isRecent) && <Activity size={10} className="text-slate-500" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="block text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
@@ -578,9 +606,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </button>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2 pl-7 text-[10px] flex-wrap">
-                      <span className="flex items-center gap-0.5 font-medium text-slate-400">
-                        <Activity size={9} className="animate-pulse text-indigo-500" />
-                        {t('common.status.exec')}
+                      <span className={`flex items-center gap-0.5 font-medium ${isRunning ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                        <Activity size={9} className={isRunning ? 'animate-pulse text-emerald-500' : 'text-slate-400'} />
+                        {isRunning ? t('common.status.exec', '執行') : t('controlCenter.activeSessions.recentActivity', '近期活動')}
                       </span>
                       <span className="text-slate-300 dark:text-slate-700">·</span>
                       <span className="text-slate-500 tabular-nums">
@@ -612,7 +640,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         <div className="contents">
 
           {/* Layer 1: System services */}
-          <div id="system-services-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+          <div id="system-services-section" className="order-4 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(16,185,129,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
               <div className="flex items-center gap-2 mb-3">
@@ -762,7 +790,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           </div>
 
           {/* Layer 2: crontab */}
-          <div id="system-crontab-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+          <div id="system-crontab-section" className="order-3 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(245,158,11,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
               <div className="flex items-center gap-2 mb-3">
@@ -894,7 +922,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           </div>
 
           {/* Layer 3: OpenClaw scheduling */}
-          <div id="application-scheduling-section" className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+          <div id="application-scheduling-section" className="order-2 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(139,92,246,0.45),transparent)' }} />
             <div className="p-5 space-y-2">
               <div className="flex items-center justify-between mb-1">

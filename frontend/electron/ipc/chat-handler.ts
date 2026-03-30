@@ -374,8 +374,8 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
     };
 
     activeChatRequests.set(request.requestId, {
-      sessionKey: request.sessionKey,
-      agentId: request.agentId,
+      sessionKey: String(request.sessionKey || '').trim(),
+      agentId: String(request.agentId || '').trim(),
       aborted: false,
       startedAtMs: Date.now(),
       preview: String(request.message || '').trim().slice(0, 140),
@@ -665,8 +665,18 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       }
       const agentId = String(opts?.agentId || 'main').trim();
 
+      // Ensure gateway WS is connected so we can always attempt a direct abort.
+      if (!gwsClient?.isConnected) {
+        const wsResult = await ensureGatewayWsConnected(ctx);
+        if (!wsResult.ok) {
+          return { success: false, error: wsResult.error || 'Gateway WebSocket not connected' };
+        }
+      }
+
       for (const [reqId, state] of activeChatRequests.entries()) {
-        if (state.sessionKey === sessionKey && (!opts.agentId || state.agentId === agentId)) {
+        const stateSessionKey = String(state.sessionKey || '').trim();
+        const stateAgentId = String(state.agentId || '').trim();
+        if (stateSessionKey === sessionKey && (!opts.agentId || stateAgentId === agentId)) {
           activeChatRequests.set(reqId, { ...state, aborted: true });
           if (gwsClient?.isConnected) {
             try {
@@ -682,7 +692,15 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
         }
       }
 
-      return { success: false, error: 'no active chat request found for this session' };
+      // Fallback: session may come from scanned index/CLI instead of in-memory map.
+      try {
+        const abortParams: Record<string, unknown> = { sessionKey };
+        if (agentId) abortParams.agentId = agentId;
+        await gwsClient!.request('chat.abort', abortParams);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: (e as Error)?.message || 'no active chat request found for this session' };
+      }
     } catch (e) {
       return { success: false, error: (e as Error)?.message || 'abort session failed' };
     }
@@ -704,6 +722,8 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
         displayName?: string;
         lastMessage?: string;
         model?: string;
+        source: 'memory' | 'index';
+        isRunning: boolean;
       }>();
 
       // Source 1: track in-flight requests in memory (real running tasks started from this app)
@@ -721,6 +741,8 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           displayName: deriveSessionDisplayName(key, { sessionId: state.runId || key, updatedAt: new Date(ts).toISOString() }),
           lastMessage: state.preview || '',
           model: state.agentId || 'main',
+          source: 'memory',
+          isRunning: !state.aborted,
         });
       }
 
@@ -752,6 +774,8 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           if (ageMs > activeWindowMs) continue;
 
           const existing = byKey.get(normalizedKey);
+          // Always keep in-memory live state over indexed historical state.
+          if (existing?.source === 'memory') continue;
           if (existing && existing.ageMs <= ageMs) continue;
 
           const sessionId = String(meta?.sessionId || normalizedKey);
@@ -794,6 +818,8 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
             displayName,
             lastMessage,
             model: String(meta?.model || ''),
+            source: 'index',
+            isRunning: false,
           });
         }
       }
