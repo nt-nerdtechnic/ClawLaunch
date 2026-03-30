@@ -791,6 +791,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           // Regex for completion markers in assistant messages
           const DONE_PATTERN = /[✅☑️✔️]|完成|已完成|done|finished|completed|succeeded|成功|sprint.*完成|合併.*完成/i;
           let lastAssistantText = '';
+          let lastMessageRole = '';
           let isCompletedByContent = false;
 
           try {
@@ -805,6 +806,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
                 if (role !== 'assistant' && role !== 'user') continue;
                 const text = extractMessageText(entry.message);
                 if (!text) continue;
+                lastMessageRole = role;
                 if (!titleHint) titleHint = extractCronDisplayNameFromText(text);
                 lastMessage = text.slice(0, 160);
                 if (role === 'assistant') lastAssistantText = text;
@@ -835,6 +837,53 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
             && meta?.abortedLastRun !== true
             && !isCompletedByContent;
           const isHeartbeatFresh = ageMs <= Math.max(5_000, indexRunningHeartbeatMs);
+
+          // Persistent main daemon (agent:main:main): exclude from normal isRunning path.
+          // Instead, show as running only when it has a fresh updatedAt AND a non-empty
+          // deliveryContext target — meaning it recently processed / is processing a message.
+          if (isPersistentMain) {
+            const dc = meta?.deliveryContext as Record<string, unknown> | undefined;
+            const channel = String(dc?.channel || '').trim().toLowerCase();
+            const lastTo = String(meta?.lastTo || dc?.to || '').trim();
+            const persistentMainHasTarget = Boolean(lastTo);
+            const persistentMainHasActiveSignal = hasExplicitRunningState
+              || (isHeartbeatFresh && lastMessageRole !== 'assistant');
+            const persistentMainHasStopSignal = meta?.abortedLastRun === true
+              || (lastMessageRole === 'assistant' && (hasExplicitStoppedState || isCompletedByContent))
+              || (!isHeartbeatFresh && hasExplicitStoppedState);
+            const persistentMainIsRunning = persistentMainHasTarget
+              && persistentMainHasActiveSignal
+              && !persistentMainHasStopSignal;
+
+            // isPersistentMain is a long-lived daemon, so completion/error text in the last
+            // reply should only hide it after the heartbeat has gone stale.
+            // Keep it in the session list within activeWindowMs so the UI can show it as
+            // recently active instead of making the card disappear entirely.
+            if (persistentMainHasTarget) {
+              const normalizedTarget = channel === 'telegram'
+                ? lastTo.replace(/^telegram:/, '')
+                : lastTo;
+              const targetDisplay = channel === 'telegram'
+                ? `Telegram 私訊 ${normalizedTarget}`
+                : normalizedTarget;
+              const toDisplay = `Main Session · ${targetDisplay}`;
+              byKey.set(normalizedKey, {
+                key: normalizedKey,
+                kind: 'session',
+                updatedAt: new Date(updatedMs).toISOString(),
+                ageMs,
+                sessionId,
+                agentId,
+                displayName: toDisplay || displayName,
+                lastMessage,
+                model: String(meta?.model || ''),
+                source: 'index',
+                isRunning: persistentMainIsRunning,
+              });
+            }
+            continue;
+          }
+
           const isRunning = isRunningFromIndex && (hasExplicitRunningState || (!hasExplicitStoppedState && isHeartbeatFresh));
 
           byKey.set(normalizedKey, {

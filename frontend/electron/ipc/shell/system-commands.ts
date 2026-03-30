@@ -202,10 +202,18 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
         return { code: 1, stdout: '', stderr: 'OpenClaw runtime not configured', exitCode: 1 };
       }
 
+      const fireAndForget = payload?.fireAndForget === true;
       const timeoutMs = Math.max(1000, Number(payload?.timeoutMs || 30000));
       const expectFinal = payload?.expectFinal === true;
       const expectFinalArg = expectFinal ? ' --expect-final' : '';
       const runCmd = `${runtime.openclawPrefix} cron run ${shellQuote(jobId)} --timeout ${timeoutMs}${expectFinalArg}`;
+
+      if (fireAndForget) {
+        // Spawn detached so the IPC returns immediately and the job runs in background
+        spawn(runCmd, { shell: true, detached: true, stdio: 'ignore' }).unref();
+        return { code: 0, stdout: JSON.stringify({ ok: true, jobId, mode: 'fire-and-forget' }), stderr: '', exitCode: 0 };
+      }
+
       const res = await _ctx.runShellCommand(runCmd);
       if ((res.code ?? 1) !== 0) {
         return { code: res.code ?? 1, stdout: res.stdout || '', stderr: res.stderr || 'cron run failed', exitCode: res.code ?? 1 };

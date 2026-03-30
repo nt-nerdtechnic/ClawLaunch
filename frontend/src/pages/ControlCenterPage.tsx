@@ -57,6 +57,7 @@ interface CronState {
   consecutiveErrors?: number;
   lastError?: string;
   nextRunAtMs?: number;
+  runningAtMs?: number;
 }
 
 interface CronJob {
@@ -428,7 +429,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     try {
       setError('');
       setTriggeringJobIds((prev) => { const next = new Set(prev); next.add(jobId); return next; });
-      await execCmd(`cron:trigger ${JSON.stringify({ jobId, stateDir })}`);
+      // Fire-and-forget: cron:trigger spins up the job in background, no need to await completion.
+      window.electronAPI.exec(`cron:trigger ${JSON.stringify({ jobId, stateDir, fireAndForget: true })}`);
+      // Brief visual feedback then remove spinner
+      await new Promise(r => setTimeout(r, 800));
       await loadCron();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Trigger cron job failed');
@@ -1117,11 +1121,25 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     return true;
                   })
                   .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
-                  const hasError = (job.state?.consecutiveErrors ?? 0) > 0;
+                  const cronSessionPrefix = `agent:${job.agentId || 'main'}:cron:${job.id}`;
+                  const hasRunningCronSession = activeSessions.some((session) => {
+                    const sessionKey = String(session.key || '').trim();
+                    return session.isRunning === true && (sessionKey === cronSessionPrefix || sessionKey.startsWith(`${cronSessionPrefix}:`));
+                  });
+                  const runningAtMs = job.state?.runningAtMs ?? 0;
+                  const lastRunAtMs = job.state?.lastRunAtMs ?? 0;
+                  const hasRecentTriggerGrace = Boolean(
+                    triggeringJobIds.has(job.id)
+                    || (runningAtMs > lastRunAtMs && Date.now() - runningAtMs < 60_000)
+                  );
+                  const isCurrentlyRunning = hasRunningCronSession || hasRecentTriggerGrace;
+                  const hasError = !isCurrentlyRunning && (job.state?.consecutiveErrors ?? 0) > 0;
                   return (
                     <div key={job.id} className={`rounded-xl border px-3 py-2.5 transition-all ${
                       !job.enabled
                         ? 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
+                        : isCurrentlyRunning
+                        ? 'border-emerald-100 dark:border-emerald-900/30 bg-white dark:bg-slate-900/50'
                         : hasError
                         ? 'border-rose-100 dark:border-rose-900/30 bg-white dark:bg-slate-900/50'
                         : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
@@ -1137,8 +1155,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         </span>
                         {/* 名稱 */}
                         <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
+                        {isCurrentlyRunning && (
+                          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800/40">
+                            <Activity size={8} className="animate-pulse text-sky-500 dark:text-sky-400" />
+                            {t('common.status.exec', '執行')}
+                          </span>
+                        )}
                         {/* 上次執行結果 badge */}
-                        {job.state?.lastRunAtMs && (
+                        {!isCurrentlyRunning && job.state?.lastRunAtMs && (
                           <span className={`shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
                             job.state.lastStatus === 'ok'
                               ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
