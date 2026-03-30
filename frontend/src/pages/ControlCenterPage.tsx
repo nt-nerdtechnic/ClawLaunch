@@ -234,6 +234,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [systemLoading, setSystemLoading] = useState(false);
   const [sessionScanLoading, setSessionScanLoading] = useState(false);
   const [lastSessionsScanned, setLastSessionsScanned] = useState<Date | null>(null);
+  const [lastCronScanned, setLastCronScanned] = useState<Date | null>(null);
+  const [lastSystemScanned, setLastSystemScanned] = useState<Date | null>(null);
   const [abortingSessionKeys, setAbortingSessionKeys] = useState<Set<string>>(new Set());
   const [error, setError]             = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
@@ -264,6 +266,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       const cmd = stateDir ? `cron:list ${JSON.stringify({ stateDir })}` : 'cron:list';
       const res = await window.electronAPI.exec(cmd);
       setCronJobs(JSON.parse(res.stdout || '{}').jobs || []);
+      setLastCronScanned(new Date());
     } catch { setCronJobs([]); }
   }, [stateDir]);
 
@@ -282,6 +285,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       console.log(`[ControlCenter] loadSystem parsed ct:${ctEntries.length}, la:${laAgents.length}`);
       setCrontabEntries(ctEntries);
       setLaunchAgents(laAgents);
+      setLastSystemScanned(new Date());
     } catch (e) { 
       console.error('[ControlCenter] loadSystem failed:', e);
     }
@@ -631,7 +635,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 </div>
                 <button
                   onClick={() => void loadActiveSessions()}
-                  title={t('controlCenter.actions.refresh')}
+                  title={lastSessionsScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastSessionsScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
                   className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all"
                 >
                   <RefreshCw size={10} className={sessionScanLoading ? 'animate-spin' : ''} />
@@ -771,7 +775,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
                   <button
                     onClick={async () => { setSystemLoading(true); await loadSystem(); setSystemLoading(false); }}
-                    title={t('controlCenter.actions.refresh')}
+                    title={lastSystemScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastSystemScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
                   >
                     <RefreshCw size={9} className={systemLoading ? 'animate-spin' : ''} />
@@ -921,6 +925,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
                   <button
                     onClick={async () => { setSystemLoading(true); await loadSystem(); setSystemLoading(false); }}
+                    title={lastSystemScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastSystemScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
                   >
                     <RefreshCw size={9} className={systemLoading ? 'animate-spin' : ''} />
@@ -1055,7 +1060,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
                   <button
                     onClick={async () => { setCronLoading(true); await loadCron(); setCronLoading(false); }}
-                    title={t('controlCenter.actions.refresh')}
+                    title={lastCronScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastCronScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
                   >
                     <RefreshCw size={9} className={cronLoading ? 'animate-spin' : ''} />
