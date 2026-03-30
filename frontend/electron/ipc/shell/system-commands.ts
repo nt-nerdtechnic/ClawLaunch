@@ -4,6 +4,8 @@ import { app } from 'electron';
 import { spawn } from 'node:child_process';
 import type { CommandResult } from './types.js';
 import type { ShellExecContext } from '../shell-exec-handler.js';
+import { resolveOpenClawRuntime } from '../../services/openclaw-runtime.js';
+import { shellQuote } from '../../utils/shell-utils.js';
 
 // ── Silent runner (no renderer log) ─────────────────────────────────────────
 
@@ -194,21 +196,27 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     try {
       const payload = JSON.parse(fullCommand.replace('cron:trigger ', '').trim() || '{}');
       const jobId = String(payload?.jobId || '').trim();
-      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
       if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
-      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
-      const raw = await fs.readFile(cronPath, 'utf-8');
-      const data = JSON.parse(raw) as { jobs?: Record<string, unknown>[] };
-      let found = false;
-      data.jobs = (data.jobs || []).map((job) => {
-        if (String(job['id'] || '') !== jobId) return job;
-        found = true;
-        const prevState = (job['state'] as Record<string, unknown>) || {};
-        return { ...job, state: { ...prevState, nextRunAtMs: Date.now() - 1 } };
-      });
-      if (!found) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
-      await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
-      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+      const runtime = await resolveOpenClawRuntime();
+      if (!runtime.openclawPrefix) {
+        return { code: 1, stdout: '', stderr: 'OpenClaw runtime not configured', exitCode: 1 };
+      }
+
+      const timeoutMs = Math.max(1000, Number(payload?.timeoutMs || 30000));
+      const expectFinal = payload?.expectFinal === true;
+      const expectFinalArg = expectFinal ? ' --expect-final' : '';
+      const runCmd = `${runtime.openclawPrefix} cron run ${shellQuote(jobId)} --timeout ${timeoutMs}${expectFinalArg}`;
+      const res = await _ctx.runShellCommand(runCmd);
+      if ((res.code ?? 1) !== 0) {
+        return { code: res.code ?? 1, stdout: res.stdout || '', stderr: res.stderr || 'cron run failed', exitCode: res.code ?? 1 };
+      }
+
+      return {
+        code: 0,
+        stdout: JSON.stringify({ ok: true, jobId, mode: 'openclaw-cli', result: (res.stdout || '').trim() }),
+        stderr: (res.stderr || '').trim(),
+        exitCode: 0,
+      };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'cron trigger failed', exitCode: 1 };
     }
