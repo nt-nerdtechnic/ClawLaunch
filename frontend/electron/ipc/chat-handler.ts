@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { resolveOpenClawRuntime, isGatewayOnlineFromStatus } from '../services/openclaw-runtime.js';
 import { t } from '../utils/i18n.js';
-import { extractMessageText, deriveSessionDisplayName, extractRunIdFromSendPayload } from '../utils/chat-helpers.js';
+import { extractCronDisplayNameFromText, extractMessageText, deriveSessionDisplayName, extractRunIdFromSendPayload } from '../utils/chat-helpers.js';
 import { readLauncherConfigPaths } from '../services/activity-watcher.js';
 
 const HOME = process.env['HOME'] || '';
@@ -738,7 +738,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           ageMs: Math.max(0, now - ts),
           sessionId: state.runId || key,
           agentId: state.agentId || 'main',
-          displayName: deriveSessionDisplayName(key, { sessionId: state.runId || key, updatedAt: new Date(ts).toISOString() }),
+          displayName: extractCronDisplayNameFromText(state.preview || '') || deriveSessionDisplayName(key, { sessionId: state.runId || key, updatedAt: new Date(ts).toISOString() }),
           lastMessage: state.preview || '',
           model: state.agentId || 'main',
           source: 'memory',
@@ -779,8 +779,9 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           if (existing && existing.ageMs <= ageMs) continue;
 
           const sessionId = String(meta?.sessionId || normalizedKey);
-          const displayName = deriveSessionDisplayName(normalizedKey, meta);
+          let displayName = deriveSessionDisplayName(normalizedKey, meta);
           let lastMessage = '';
+          let titleHint = '';
 
           const sessionFile: string = (typeof meta?.sessionFile === 'string' && meta.sessionFile)
             ? String(meta.sessionFile)
@@ -789,17 +790,16 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           try {
             const content = await fs.readFile(sessionFile, 'utf-8');
             const lines = content.split(/\r?\n/).filter(Boolean);
-            for (let i = lines.length - 1; i >= 0; i--) {
+            for (let i = 0; i < lines.length; i++) {
               try {
                 const entry = JSON.parse(lines[i]);
                 if (entry?.type !== 'message') continue;
                 const role = entry?.message?.role;
                 if (role !== 'assistant' && role !== 'user') continue;
                 const text = extractMessageText(entry.message);
-                if (text) {
-                  lastMessage = text.slice(0, 160);
-                  break;
-                }
+                if (!text) continue;
+                if (!titleHint) titleHint = extractCronDisplayNameFromText(text);
+                lastMessage = text.slice(0, 160);
               } catch {
                 continue;
               }
@@ -807,6 +807,8 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           } catch {
             lastMessage = '';
           }
+
+          if (titleHint) displayName = titleHint;
 
           byKey.set(normalizedKey, {
             key: normalizedKey,

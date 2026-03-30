@@ -41,9 +41,29 @@ export const extractMessageText = (message: unknown): string => {
   return '';
 };
 
+export const extractCronDisplayNameFromText = (text: string): string => {
+  const raw = String(text || '').trim();
+  if (!raw) return '';
+  const matched = raw.match(/\[cron:([0-9a-f-]{8,})\s+([^\]]+)\]/i);
+  if (!matched) return '';
+  const rawId = String(matched[1] || '').trim();
+  const name = String(matched[2] || '').trim();
+  if (!rawId || !name) return '';
+  const shortId = rawId.replace(/-/g, '').slice(0, 8);
+  return `${name}(Cron-${shortId})`;
+};
+
 export const deriveSessionDisplayName = (sessionKey: string, meta: unknown): string => {
-  const m = meta as { displayName?: string } | null;
-  if (m?.displayName && typeof m.displayName === 'string') return m.displayName;
+  const m = meta as { displayName?: string; title?: string; name?: string; prompt?: string; summary?: string } | null;
+  const explicit = [m?.displayName, m?.title, m?.name, m?.prompt, m?.summary]
+    .find((value) => typeof value === 'string' && String(value).trim());
+  if (explicit && typeof explicit === 'string') {
+    const parsed = extractCronDisplayNameFromText(explicit);
+    if (parsed) return parsed;
+    return explicit;
+  }
+  const parsedFromKey = extractCronDisplayNameFromText(sessionKey);
+  if (parsedFromKey) return parsedFromKey;
   const parts = sessionKey.split(':');
   if (parts.length < 3) return sessionKey;
   const type = parts[2];

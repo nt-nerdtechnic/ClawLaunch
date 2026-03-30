@@ -196,6 +196,11 @@
       "lastOk": "OK",
       "lastFail": "Failed",
       "errorCount": "{{count}} error(s)"
+    },
+    "activeSessions": {
+      "filterRunning": "Running Only",
+      "emptyRunning": "No running jobs right now",
+      "emptyStopped": "No stopped jobs right now"
     }
   },
   "pixelOffice": {

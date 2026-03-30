@@ -248,5 +248,38 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     }
   }
 
+  if (fullCommand.startsWith('cron:update ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:update ', '').trim() || '{}');
+      const jobId = String(payload?.jobId || '').trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
+      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
+      const raw = await fs.readFile(cronPath, 'utf-8');
+      const data = JSON.parse(raw) as { jobs?: Record<string, unknown>[] };
+      let updated = false;
+      data.jobs = (data.jobs || []).map((job) => {
+        if (job['id'] !== jobId) return job;
+        updated = true;
+        const next: Record<string, unknown> = { ...job, updatedAtMs: Date.now() };
+        if (payload.name !== undefined) next['name'] = String(payload.name).trim();
+        if (payload.everyMs !== undefined) {
+          const everyMs = Math.max(60000, Number(payload.everyMs));
+          next['schedule'] = { ...(job['schedule'] as Record<string, unknown>), everyMs };
+        }
+        if (payload.timeoutSeconds !== undefined) {
+          const timeoutSeconds = Math.max(60, Number(payload.timeoutSeconds));
+          next['payload'] = { ...(job['payload'] as Record<string, unknown>), timeoutSeconds };
+        }
+        return next;
+      });
+      if (!updated) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
+      await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'cron update failed', exitCode: 1 };
+    }
+  }
+
   return null;
 }

@@ -196,6 +196,11 @@
       "lastOk": "成功",
       "lastFail": "失敗",
       "errorCount": "{{count}} 次錯誤"
+    },
+    "activeSessions": {
+      "filterRunning": "僅執行中",
+      "emptyRunning": "目前沒有執行中的工作",
+      "emptyStopped": "目前沒有已停止的工作"
     }
   },
   "pixelOffice": {

@@ -188,6 +188,11 @@
       "lastOk": "成功",
       "lastFail": "失败",
       "errorCount": "{{count}} 次错误"
+    },
+    "activeSessions": {
+      "filterRunning": "仅运行中",
+      "emptyRunning": "当前没有运行中的工作",
+      "emptyStopped": "当前没有已停止的工作"
     }
   },
   "pixelOffice": {

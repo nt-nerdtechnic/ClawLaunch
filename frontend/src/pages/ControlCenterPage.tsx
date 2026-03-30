@@ -5,6 +5,7 @@ import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
+  Pencil, Save, X,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
@@ -66,6 +67,7 @@ interface CronJob {
   schedule: CronSchedule;
   state: CronState;
   delivery: { mode: string; channel?: string };
+  payload?: { timeoutSeconds?: number; model?: string; kind?: string };
 }
 
 // Active OpenClaw session
@@ -128,6 +130,28 @@ function relTime(ms: number | undefined, t: TFunction): string {
   if (d < 3600000) return t('common.time.ago', { val: `${Math.floor(d / 60000)}m` });
   if (d < 86400000) return t('common.time.ago', { val: `${Math.floor(d / 3600000)}h` });
   return t('common.time.ago', { val: `${Math.floor(d / 86400000)}d` });
+}
+
+function formatActiveSessionTitle(session: ActiveSession): string {
+  const displayName = String(session.displayName || '').trim();
+  const lastMessage = String(session.lastMessage || '').trim();
+  const sessionKey = String(session.key || '').trim();
+
+  const parseCron = (text: string): { name: string; shortId: string } | null => {
+    const m = text.match(/\[cron:([0-9a-f-]{8,})\s+([^\]]+)\]/i);
+    if (!m) return null;
+    const rawId = String(m[1] || '').trim();
+    const name = String(m[2] || '').trim();
+    if (!rawId || !name) return null;
+    const shortId = rawId.replace(/-/g, '').slice(0, 8);
+    return { name, shortId };
+  };
+
+  const parsed = parseCron(lastMessage) || parseCron(displayName) || parseCron(sessionKey);
+  if (parsed) return `${parsed.name}(Cron-${parsed.shortId})`;
+
+  if (displayName && !/^cron\s+[0-9a-f]{6,}$/i.test(displayName)) return displayName;
+  return String(session.sessionId || session.key || '—');
 }
 
 function nextTime(ms: number | undefined, t: TFunction): string {
@@ -210,11 +234,15 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [systemLoading, setSystemLoading] = useState(false);
   const [sessionScanLoading, setSessionScanLoading] = useState(false);
   const [lastSessionsScanned, setLastSessionsScanned] = useState<Date | null>(null);
+  const [abortingSessionKeys, setAbortingSessionKeys] = useState<Set<string>>(new Set());
   const [error, setError]             = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
+  const [activeSessionFilter, setActiveSessionFilter] = useState<'all' | 'running' | 'stopped'>('running');
   const [agentFilter, setAgentFilter] = useState<'all' | 'running' | 'stopped'>('running');
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; intervalMin: number; timeoutMin: number | '' } | null>(null);
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -316,19 +344,35 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   }, []);
 
   const abortSession = useCallback(async (sessionKey: string, agentId?: string) => {
+    const normalizedSessionKey = String(sessionKey || '').trim();
+    if (!normalizedSessionKey) {
+      setError(t('controlCenter.activeSessions.abortMissingKey', '找不到可中止的工作識別碼'));
+      return;
+    }
     try {
       setError('');
-      const res = await window.electronAPI.abortSession({ sessionKey, agentId });
+      setAbortingSessionKeys((prev) => {
+        const next = new Set(prev);
+        next.add(normalizedSessionKey);
+        return next;
+      });
+      const res = await window.electronAPI.abortSession({ sessionKey: normalizedSessionKey, agentId });
       if (!res.success) {
         setError(res.error || 'abort session failed');
         return;
       }
-      console.log('[ControlCenter] abortSession success for', sessionKey);
+      console.log('[ControlCenter] abortSession success for', normalizedSessionKey);
       await loadActiveSessions();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'abort session failed');
+    } finally {
+      setAbortingSessionKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(normalizedSessionKey);
+        return next;
+      });
     }
-  }, [loadActiveSessions]);
+  }, [loadActiveSessions, t]);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -375,6 +419,25 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Delete cron job failed');
     }
+  };
+
+  const updateCron = async (jobId: string, updates: { name?: string; everyMs?: number; timeoutSeconds?: number }) => {
+    try {
+      setError('');
+      await execCmd(`cron:update ${JSON.stringify({ jobId, stateDir, ...updates })}`);
+      setEditingJobId(null);
+      setEditDraft(null);
+      await loadCron();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Update cron job failed');
+    }
+  };
+
+  const startEditCron = (job: CronJob) => {
+    const intervalMin = job.schedule?.everyMs ? Math.round(job.schedule.everyMs / 60000) : 10;
+    const timeoutMin = job.payload?.timeoutSeconds ? Math.round(job.payload.timeoutSeconds / 60) : '';
+    setEditDraft({ name: job.name, intervalMin, timeoutMin });
+    setEditingJobId(job.id);
   };
 
   const toggleCrontab = async (raw: string) => {
@@ -469,7 +532,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     const activeCrons = (cronJobs || []).filter(j => j.enabled).length;
     const totalAgents = (launchAgents || []).length;
     const runningAgents = (launchAgents || []).filter(a => a.running || a.loaded).length;
-    const activeSessionsCount = (activeSessions || []).length;
+    const activeSessionsCount = (activeSessions || []).filter(s => s.isRunning === true).length;
 
     return {
       activeSessions: activeSessionsCount,
@@ -478,6 +541,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       cronSchedules: { active: activeCrons, total: totalCrons },
     };
   }, [activeSessions, cronJobs, launchAgents, crontabEntries]);
+
+  const filteredActiveSessions = useMemo(() => {
+    if (activeSessionFilter === 'all') return activeSessions;
+    if (activeSessionFilter === 'running') return activeSessions.filter((session) => session.isRunning === true);
+    return activeSessions.filter((session) => session.isRunning !== true);
+  }, [activeSessionFilter, activeSessions]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -535,9 +604,32 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               <div className="flex items-center gap-2">
                 <Activity size={13} className="text-indigo-500" />
                 <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-900 dark:text-slate-100">{t('controlCenter.activeSessions.title', '執行中工作')}</h3>
-                <span className="text-[10px] text-slate-400">{t('controlCenter.timeline.count', { count: activeSessions.length })}</span>
+                <span className="text-[10px] text-slate-400">{t('controlCenter.timeline.count', { count: filteredActiveSessions.length })}</span>
               </div>
               <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  {(['all', 'running', 'stopped'] as const).map((f) => {
+                    const isActive = activeSessionFilter === f;
+                    const Icon = f === 'all' ? Activity : f === 'running' ? Play : Pause;
+                    const label = f === 'all'
+                      ? t('controlCenter.timeline.tabs.all')
+                      : f === 'running'
+                        ? t('controlCenter.services.filterRunning')
+                        : t('controlCenter.services.filterStopped');
+                    return (
+                      <button
+                        key={f}
+                        onClick={() => setActiveSessionFilter(f)}
+                        title={label}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
+                      >
+                        <Icon size={8} />
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
                 {lastSessionsScanned && (
                   <span className="text-[10px] text-slate-400 tabular-nums">
                     {lastSessionsScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -555,14 +647,23 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
 
             {/* Sessions list */}
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-0.5">
-              {activeSessions.length === 0 ? (
+              {filteredActiveSessions.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                   <Activity size={28} className="mb-2 opacity-25" />
-                  <span className="text-sm">{t('controlCenter.activeSessions.empty', '無執行中工作')}</span>
+                  <span className="text-sm">
+                    {activeSessionFilter === 'running'
+                      ? t('controlCenter.activeSessions.emptyRunning', '目前沒有執行中的工作')
+                      : activeSessionFilter === 'stopped'
+                        ? t('controlCenter.activeSessions.emptyStopped', '目前沒有已停止的工作')
+                      : t('controlCenter.activeSessions.empty', '無執行中工作')}
+                  </span>
                 </div>
-              ) : activeSessions.map((session, i) => {
+              ) : filteredActiveSessions.map((session, i) => {
                 const isRecent = session.ageMs < 30000; // Recent if < 30s
                 const isRunning = session.isRunning === true;
+                const effectiveSessionKey = String(session.key || session.sessionId || '').trim();
+                const isAborting = effectiveSessionKey ? abortingSessionKeys.has(effectiveSessionKey) : false;
+                const canAbort = !!effectiveSessionKey && (isRunning || session.source === 'memory');
                 return (
                   <div
                     key={`session-${session.key}-${i}`}
@@ -584,7 +685,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="block text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
-                          {session.displayName || session.sessionId || session.key}
+                          {formatActiveSessionTitle(session)}
                         </span>
                         {session.lastMessage ? (
                           <span className="block text-[10px] text-slate-500 truncate">{session.lastMessage}</span>
@@ -597,13 +698,20 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           <span className="block text-[10px] text-slate-400/80 truncate">{session.agentId}</span>
                         )}
                       </div>
-                      <button
-                        onClick={() => void abortSession(session.key, session.agentId)}
-                        title={t('controlCenter.actions.abort', '停止')}
-                        className="shrink-0 px-2 py-1 text-[10px] font-bold rounded-lg bg-rose-100 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white transition-all active:scale-95"
-                      >
-                        {t('controlCenter.actions.abort', '停止')}
-                      </button>
+                      {canAbort ? (
+                        <button
+                          onClick={() => void abortSession(effectiveSessionKey, session.agentId)}
+                          title={t('controlCenter.actions.abort', '停止')}
+                          disabled={isAborting}
+                          className="shrink-0 px-2 py-1 text-[10px] font-bold rounded-lg bg-rose-100 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isAborting ? t('controlCenter.actions.stopping', '停止中') : t('controlCenter.actions.abort', '停止')}
+                        </button>
+                      ) : (
+                        <span className="shrink-0 px-2 py-1 text-[10px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400">
+                          {t('controlCenter.activeSessions.notAbortable', '已停止')}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-1.5 flex items-center gap-2 pl-7 text-[10px] flex-wrap">
                       <span className={`flex items-center gap-0.5 font-medium ${isRunning ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
@@ -1015,6 +1123,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         )}
                         {/* 操作按鈕 */}
                         <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={() => editingJobId === job.id ? (setEditingJobId(null), setEditDraft(null)) : startEditCron(job)}
+                            title={editingJobId === job.id ? '取消編輯' : '編輯'}
+                            className={`p-1 rounded-lg transition-all ${editingJobId === job.id ? 'text-violet-500' : 'text-slate-300 dark:text-slate-600 hover:text-violet-500'}`}>
+                            <Pencil size={10} />
+                          </button>
                           <button onClick={() => void toggleCron(job.id)} title={job.enabled ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
                             className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}>
                             {job.enabled ? <Pause size={10} /> : <Play size={10} />}
@@ -1041,7 +1155,71 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             <span className="text-violet-400">{nextTime(job.state.nextRunAtMs, t)}</span>
                           </>
                         )}
+                        {job.payload?.timeoutSeconds && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="text-amber-400/70">timeout {Math.round(job.payload.timeoutSeconds / 60)}m</span>
+                          </>
+                        )}
                       </div>
+                      {/* 內嵌編輯表單 */}
+                      {editingJobId === job.id && editDraft && (
+                        <div className="mt-2 pt-2 border-t border-violet-100 dark:border-violet-900/30 space-y-2">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="col-span-3">
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">名稱</label>
+                              <input
+                                type="text"
+                                value={editDraft.name}
+                                onChange={e => setEditDraft(d => d ? { ...d, name: e.target.value } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                maxLength={100}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">排程（分鐘）</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={1440}
+                                value={editDraft.intervalMin}
+                                onChange={e => setEditDraft(d => d ? { ...d, intervalMin: Math.max(1, Number(e.target.value)) } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">逾時（分鐘）</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                value={editDraft.timeoutMin}
+                                placeholder="不設定"
+                                onChange={e => setEditDraft(d => d ? { ...d, timeoutMin: e.target.value === '' ? '' : Math.max(1, Number(e.target.value)) } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              />
+                            </div>
+                            <div className="flex items-end gap-1">
+                              <button
+                                onClick={() => void updateCron(job.id, {
+                                  name: editDraft.name,
+                                  everyMs: editDraft.intervalMin * 60000,
+                                  ...(editDraft.timeoutMin !== '' ? { timeoutSeconds: editDraft.timeoutMin * 60 } : {}),
+                                })}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-bold bg-violet-500 text-white hover:bg-violet-600 transition-all"
+                              >
+                                <Save size={9} />儲存
+                              </button>
+                              <button
+                                onClick={() => { setEditingJobId(null); setEditDraft(null); }}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
+                              >
+                                <X size={9} />取消
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
