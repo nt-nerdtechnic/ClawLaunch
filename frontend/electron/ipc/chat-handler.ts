@@ -1,12 +1,54 @@
 import { ipcMain, app } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import { resolveOpenClawRuntime, isGatewayOnlineFromStatus } from '../services/openclaw-runtime.js';
 import { t } from '../utils/i18n.js';
 import { extractCronDisplayNameFromText, extractMessageText, deriveSessionDisplayName, extractRunIdFromSendPayload } from '../utils/chat-helpers.js';
 import { readLauncherConfigPaths } from '../services/activity-watcher.js';
 
 const HOME = process.env['HOME'] || '';
+
+// ── Tail-read last JSONL message (reads only last TAIL_BYTES, not whole file) ─
+const TAIL_BYTES = 8192;
+async function readLastJsonlMessage(filePath: string): Promise<{ lastMessage: string; lastTimestamp: string }> {
+  let fd: fsSync.promises.FileHandle | null = null;
+  try {
+    fd = await fs.open(filePath, 'r');
+    const stat = await fd.stat();
+    const fileSize = stat.size;
+    if (fileSize === 0) return { lastMessage: '', lastTimestamp: '' };
+    const readSize = Math.min(TAIL_BYTES, fileSize);
+    const offset = fileSize - readSize;
+    const buf = Buffer.allocUnsafe(readSize);
+    await fd.read(buf, 0, readSize, offset);
+    const chunk = buf.toString('utf-8');
+    // Split into complete lines (skip the first partial line if we didn't start at byte 0)
+    const lines = chunk.split(/\n/);
+    const start = offset > 0 ? 1 : 0; // first element may be a partial line
+    let lastMessage = '';
+    let lastTimestamp = '';
+    for (let i = lines.length - 1; i >= start; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type !== 'message') continue;
+        const role = entry.message?.role;
+        if (role === 'assistant' || role === 'user') {
+          lastMessage = String(extractMessageText(entry.message) || '').slice(0, 100);
+          lastTimestamp = String(entry.timestamp || '');
+          break;
+        }
+      } catch { continue; }
+    }
+    return { lastMessage, lastTimestamp };
+  } catch {
+    return { lastMessage: '', lastTimestamp: '' };
+  } finally {
+    await fd?.close().catch(() => {});
+  }
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -485,27 +527,33 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
     return { connected: gwsClient?.isConnected ?? false };
   });
 
-  ipcMain.handle('openclaw:sessions.list', async () => {
+  ipcMain.handle('openclaw:sessions.list', async (_event, payloadRaw?: string) => {
     try {
+      const opts = payloadRaw ? (() => { try { return JSON.parse(payloadRaw); } catch { return {}; } })() : {};
+      const limit = (Number.isFinite(Number(opts?.limit)) && Number(opts.limit) > 0) ? Number(opts.limit) : 20;
+      const offset = (Number.isFinite(Number(opts?.offset)) && Number(opts.offset) >= 0) ? Number(opts.offset) : 0;
+
       const { stateDir } = await readLauncherConfigPaths();
       const base = stateDir || path.join(HOME, '.openclaw');
       const agentsDir = path.join(base, 'agents');
 
-      const sessions: Array<{
+      // ── Phase 1: fast metadata pass — read only sessions.json indexes ─────
+      type SessionMeta = {
         sessionKey: string;
         agentId: string;
         sessionId: string;
         displayName: string;
-        lastMessage: string;
-        lastTimestamp: string;
-        messageCount: number;
-      }> = [];
+        updatedAt: string;
+        sessionFile: string;
+        indexMeta: Record<string, unknown>;
+      };
+      const allMeta: SessionMeta[] = [];
 
       let agentIds: string[] = [];
       try {
         agentIds = await fs.readdir(agentsDir);
       } catch {
-        return { code: 0, stdout: JSON.stringify([]), stderr: '' };
+        return { code: 0, stdout: JSON.stringify({ sessions: [], total: 0, hasMore: false }), stderr: '' };
       }
 
       for (const agentId of agentIds) {
@@ -524,65 +572,75 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
           const meta = metaRaw as Record<string, unknown>;
           const sessionId = String(meta?.sessionId || '');
           if (!sessionId) continue;
-
           const sessionFile: string = (typeof meta?.sessionFile === 'string' && meta.sessionFile)
             ? (meta.sessionFile as string)
             : path.join(sessionsDir, `${sessionId}.jsonl`);
-
-          let content = '';
-          try {
-            content = await fs.readFile(sessionFile, 'utf-8');
-          } catch {
-            sessions.push({
-              sessionKey,
-              agentId,
-              sessionId,
-              displayName: deriveSessionDisplayName(sessionKey, meta),
-              lastMessage: '',
-              lastTimestamp: String(meta?.updatedAt || ''),
-              messageCount: 0,
-            });
-            continue;
-          }
-
-          const lines = content.split(/\r?\n/).filter(Boolean);
-          let lastMessage = '';
-          let lastTimestamp = '';
-          let messageCount = 0;
-
-          for (const line of lines) {
-            try {
-              const entry = JSON.parse(line);
-              if (entry.type !== 'message') continue;
-              messageCount++;
-              if (entry.timestamp) lastTimestamp = String(entry.timestamp);
-              const role = entry.message?.role;
-              if (role === 'assistant' || role === 'user') {
-                const text = extractMessageText(entry.message);
-                if (text) lastMessage = text.slice(0, 100);
-              }
-            } catch { /* skip malformed line */ }
-          }
-
-          sessions.push({
+          allMeta.push({
             sessionKey,
             agentId,
             sessionId,
             displayName: deriveSessionDisplayName(sessionKey, meta),
-            lastMessage,
-            lastTimestamp: lastTimestamp || String(meta?.updatedAt || ''),
-            messageCount,
+            updatedAt: String(meta?.updatedAt || ''),
+            sessionFile,
+            indexMeta: meta,
           });
         }
       }
 
-      sessions.sort((a, b) => {
-        const ta = Number(a.lastTimestamp) || new Date(a.lastTimestamp).getTime() || 0;
-        const tb = Number(b.lastTimestamp) || new Date(b.lastTimestamp).getTime() || 0;
+      // Sort descending by updatedAt
+      allMeta.sort((a, b) => {
+        const ta = Number(a.updatedAt) || new Date(a.updatedAt).getTime() || 0;
+        const tb = Number(b.updatedAt) || new Date(b.updatedAt).getTime() || 0;
         return tb - ta;
       });
 
-      return { code: 0, stdout: JSON.stringify(sessions), stderr: '' };
+      const total = allMeta.length;
+      const slice = allMeta.slice(offset, offset + limit);
+      const hasMore = offset + limit < total;
+
+      // ── Phase 2: extract metadata only (no .jsonl read) ────────────────────
+      const sessions: Array<{
+        sessionKey: string;
+        agentId: string;
+        sessionId: string;
+        displayName: string;
+        lastMessage: string;
+        lastTimestamp: string;
+        messageCount: number;
+      }> = new Array(slice.length);
+
+      // Read only the tail of each .jsonl in parallel — no full-file scan
+      await Promise.all(slice.map(async (m, idx) => {
+        // Prefer metadata fields if available (avoid file I/O entirely)
+        const metaMsg = String(m.indexMeta?.lastMessage || m.indexMeta?.preview || '').trim();
+        const metaTs  = String(m.indexMeta?.lastTimestamp || m.updatedAt || '');
+        const msgCount = Number.isFinite(Number(m.indexMeta?.messageCount))
+          ? Number(m.indexMeta.messageCount)
+          : -1;
+
+        let lastMessage = metaMsg.slice(0, 100);
+        let lastTimestamp = metaTs;
+
+        if (!lastMessage) {
+          const tail = await readLastJsonlMessage(m.sessionFile);
+          lastMessage = tail.lastMessage;
+          if (tail.lastTimestamp) lastTimestamp = tail.lastTimestamp;
+        }
+
+        sessions[idx] = {
+          sessionKey: m.sessionKey,
+          agentId: m.agentId,
+          sessionId: m.sessionId,
+          displayName: m.displayName,
+          lastMessage,
+          lastTimestamp,
+          messageCount: msgCount,
+        };
+      }));
+      // Preserve sort order (Promise.all preserves index)
+      sessions.length = slice.length;
+
+      return { code: 0, stdout: JSON.stringify({ sessions, total, hasMore }), stderr: '' };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'Unknown error' };
     }

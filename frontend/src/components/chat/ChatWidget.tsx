@@ -159,7 +159,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const requestMapRef = useRef<Record<string, string>>({});
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
   const [ocSessions, setOcSessions] = useState<OpenClawSessionEntry[]>([]);
+  const [sessionTotal, setSessionTotal] = useState(0);
+  const [sessionHasMore, setSessionHasMore] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionLoadingMore, setSessionLoadingMore] = useState(false);
   const [reconnectingGatewayWs, setReconnectingGatewayWs] = useState(false);
   const [gatewayWsReconnectError, setGatewayWsReconnectError] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -277,20 +280,26 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [activeMessages]);
 
-  // Fetch all openclaw sessions when session panel opens
-  const fetchSessions = async () => {
+  // Fetch sessions — offset=0 replaces list, offset>0 appends (Load More)
+  const fetchSessions = async (offset = 0) => {
     if (!window.electronAPI?.listChatSessions) return;
-    setSessionLoading(true);
+    const isLoadMore = offset > 0;
+    if (isLoadMore) setSessionLoadingMore(true);
+    else setSessionLoading(true);
     try {
-      const res = await window.electronAPI.listChatSessions();
+      const res = await window.electronAPI.listChatSessions({ limit: 20, offset });
       if (res.code === 0) {
-        const parsed = JSON.parse(res.stdout);
-        setOcSessions(Array.isArray(parsed) ? parsed : []);
+        const parsed = JSON.parse(res.stdout) as { sessions: OpenClawSessionEntry[]; total: number; hasMore: boolean };
+        const incoming = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+        setOcSessions((prev) => isLoadMore ? [...prev, ...incoming] : incoming);
+        setSessionTotal(typeof parsed.total === 'number' ? parsed.total : incoming.length);
+        setSessionHasMore(Boolean(parsed.hasMore));
       }
     } catch (_) {
       // ignore
     } finally {
-      setSessionLoading(false);
+      if (isLoadMore) setSessionLoadingMore(false);
+      else setSessionLoading(false);
     }
   };
 
@@ -616,7 +625,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-0.5">
                         <span className="text-[8px] text-slate-400">{formatRelativeTime(s.lastTimestamp, t)}</span>
-                        <span className="text-[8px] text-slate-300 dark:text-slate-600">{s.messageCount} {t('chat.messageSuffix', '則')}</span>
+                        <span className="text-[8px] text-slate-300 dark:text-slate-600">{s.messageCount >= 0 ? s.messageCount : '—'} {s.messageCount >= 0 && t('chat.messageSuffix', '則')}</span>
                       </div>
                     </div>
                     {s.lastMessage && (
@@ -627,6 +636,19 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                   </button>
                 );
               })}
+              {!sessionLoading && sessionHasMore && (
+                <button
+                  type="button"
+                  onClick={() => void fetchSessions(ocSessions.length)}
+                  disabled={sessionLoadingMore}
+                  className="mt-1 w-full rounded-xl border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:hover:border-sky-700 dark:hover:bg-sky-900/20 dark:hover:text-sky-300"
+                >
+                  {sessionLoadingMore
+                    ? <span className="flex items-center justify-center gap-1.5"><RefreshCw size={10} className="animate-spin" />{t('chat.sessions.loadingMore', '載入中...')}</span>
+                    : `${t('chat.sessions.loadMore', '載入更多')} (${sessionTotal - ocSessions.length})`
+                  }
+                </button>
+              )}
             </div>
           </div>
         </div>

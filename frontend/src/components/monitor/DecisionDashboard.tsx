@@ -192,7 +192,10 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
         const res = await window.electronAPI.listChatSessions();
         if (!cancelled && res.code === 0 && res.stdout) {
           const parsed = JSON.parse(res.stdout);
-          if (Array.isArray(parsed)) setChatSessionCount(parsed.length);
+          const count = Array.isArray(parsed)
+            ? parsed.length
+            : (typeof parsed?.total === 'number' ? parsed.total : (Array.isArray(parsed?.sessions) ? parsed.sessions.length : 0));
+          setChatSessionCount(count);
         }
       } catch {
         // ignore
