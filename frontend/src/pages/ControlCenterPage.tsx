@@ -5,7 +5,7 @@ import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
-  Pencil, Save, X,
+  Pencil, Save, X, Zap,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
@@ -237,6 +237,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [lastCronScanned, setLastCronScanned] = useState<Date | null>(null);
   const [lastSystemScanned, setLastSystemScanned] = useState<Date | null>(null);
   const [abortingSessionKeys, setAbortingSessionKeys] = useState<Set<string>>(new Set());
+  const [triggeringJobIds, setTriggeringJobIds] = useState<Set<string>>(new Set());
   const [error, setError]             = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
   const [activeSessionFilter, setActiveSessionFilter] = useState<'all' | 'running' | 'stopped'>('running');
@@ -420,6 +421,19 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       await loadCron();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Toggle cron job failed');
+    }
+  };
+
+  const triggerCron = async (jobId: string) => {
+    try {
+      setError('');
+      setTriggeringJobIds((prev) => { const next = new Set(prev); next.add(jobId); return next; });
+      await execCmd(`cron:trigger ${JSON.stringify({ jobId, stateDir })}`);
+      await loadCron();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Trigger cron job failed');
+    } finally {
+      setTriggeringJobIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
     }
   };
 
@@ -1145,6 +1159,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         )}
                         {/* 操作按鈕 */}
                         <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={() => void triggerCron(job.id)}
+                            title={t('controlCenter.cronJobs.triggerNow', '立即執行')}
+                            disabled={triggeringJobIds.has(job.id)}
+                            className="p-1 rounded-lg transition-all text-slate-300 dark:text-slate-600 hover:text-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <Zap size={10} className={triggeringJobIds.has(job.id) ? 'animate-pulse text-emerald-500' : ''} />
+                          </button>
                           <button
                             onClick={() => editingJobId === job.id ? (setEditingJobId(null), setEditDraft(null)) : startEditCron(job)}
                             title={editingJobId === job.id ? '取消編輯' : '編輯'}

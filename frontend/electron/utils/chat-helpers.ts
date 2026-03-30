@@ -67,27 +67,48 @@ const normalizeTelegramDisplayName = (value: string): string => {
 };
 
 export const deriveSessionDisplayName = (sessionKey: string, meta: unknown): string => {
-  const m = meta as { displayName?: string; title?: string; name?: string; prompt?: string; summary?: string; channel?: string; lastChannel?: string; chatType?: string; lastTo?: string; origin?: Record<string, unknown> } | null;
+  const m = meta as {
+    displayName?: string;
+    title?: string;
+    name?: string;
+    label?: string;
+    prompt?: string;
+    summary?: string;
+    channel?: string;
+    lastChannel?: string;
+    chatType?: string;
+    lastTo?: string;
+    spawnedBy?: string;
+    origin?: Record<string, unknown>;
+  } | null;
+
+  const parts = sessionKey.split(':');
+  const type = parts.length >= 3 ? parts[2] : '';
+  const rest = parts.slice(3).join(':');
+
+  if (type === 'subagent') {
+    const label = String(m?.label || m?.displayName || m?.title || m?.name || '').trim();
+    if (label) return `觸發任務 (${label})`;
+    const shortId = rest ? rest.replace(/-/g, '').slice(0, 8) : '';
+    return shortId ? `觸發任務 (${shortId})` : '觸發任務';
+  }
 
   // Check meta channel first — some sessions (e.g. agent:main:main) route Telegram
   // messages but use a generic key; detect them by meta.channel / lastChannel.
   const metaChannel = String(m?.channel || m?.lastChannel || '').toLowerCase();
-  if (metaChannel === 'telegram') {
+  if (metaChannel === 'telegram' && (type === 'main' || type === 'telegram' || !type)) {
     const chatType = String(m?.chatType || '').toLowerCase();
     const lastTo = String(m?.lastTo || (m?.origin as Record<string, unknown>)?.to || '');
     const targetId = lastTo.replace(/^telegram:/, '');
+    if (!targetId && type === 'main') return '直接執行';
     // negative ID = group, positive = private/direct
-    const isGroup = chatType === 'group' || (targetId.startsWith('-') );
+    const isGroup = chatType === 'group' || (targetId.startsWith('-'));
     if (isGroup) return `Telegram 群組 (${targetId || '?'})`;
     const fromId = String((m?.origin as Record<string, unknown>)?.from || lastTo).replace(/^telegram:/, '');
     return `Telegram 私訊 (${fromId || targetId || '?'})`;
   }
 
   const normalizedFromKey = (() => {
-    const parts = sessionKey.split(':');
-    if (parts.length < 4) return '';
-    const type = parts[2];
-    const rest = parts.slice(3).join(':');
     if (type === 'telegram') {
       const tg = normalizeTelegramDisplayName(`telegram:${rest}`);
       return tg || `Telegram ${rest}`;
@@ -109,13 +130,11 @@ export const deriveSessionDisplayName = (sessionKey: string, meta: unknown): str
   }
   const parsedFromKey = extractCronDisplayNameFromText(sessionKey);
   if (parsedFromKey) return parsedFromKey;
-  const parts = sessionKey.split(':');
   if (parts.length < 3) return sessionKey;
-  const type = parts[2];
-  const rest = parts.slice(3).join(':');
   if (type === 'main') return '直接執行';
   if (type === 'telegram') return `Telegram ${rest}`;
   if (type === 'cron') return rest ? `Cron ${rest.slice(0, 8)}` : 'Cron';
+  if (type === 'subagent') return rest ? `觸發任務 (${rest.slice(0, 8)})` : '觸發任務';
   return rest || sessionKey;
 };
 

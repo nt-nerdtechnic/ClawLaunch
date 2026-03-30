@@ -712,6 +712,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       const activeMinutes = Number(opts?.activeMinutes ?? 3);
       const now = Date.now();
       const activeWindowMs = Math.max(1, activeMinutes) * 60 * 1000;
+      const indexRunningHeartbeatMs = Number(opts?.runningHeartbeatMs ?? 90_000);
       const byKey = new Map<string, {
         key: string;
         kind: string;
@@ -821,7 +822,10 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
             lastMessage,
             model: String(meta?.model || ''),
             source: 'index',
-            isRunning: false,
+            // Index sessions come from persisted state; infer running when update/heartbeat is very recent
+            // and the last run wasn't explicitly aborted.
+            isRunning: ageMs <= Math.max(5_000, indexRunningHeartbeatMs)
+              && meta?.abortedLastRun !== true,
           });
         }
       }

@@ -190,6 +190,30 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     }
   }
 
+  if (fullCommand.startsWith('cron:trigger ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:trigger ', '').trim() || '{}');
+      const jobId = String(payload?.jobId || '').trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
+      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
+      const raw = await fs.readFile(cronPath, 'utf-8');
+      const data = JSON.parse(raw) as { jobs?: Record<string, unknown>[] };
+      let found = false;
+      data.jobs = (data.jobs || []).map((job) => {
+        if (String(job['id'] || '') !== jobId) return job;
+        found = true;
+        const prevState = (job['state'] as Record<string, unknown>) || {};
+        return { ...job, state: { ...prevState, nextRunAtMs: Date.now() - 1 } };
+      });
+      if (!found) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
+      await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'cron trigger failed', exitCode: 1 };
+    }
+  }
+
   if (fullCommand === 'cron:list' || fullCommand.startsWith('cron:list ')) {
     try {
       const payloadStr = fullCommand.replace('cron:list', '').trim();
