@@ -53,13 +53,43 @@ export const extractCronDisplayNameFromText = (text: string): string => {
   return `${name}(Cron-${shortId})`;
 };
 
+const normalizeTelegramDisplayName = (value: string): string => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const m = raw.match(/^telegram:(g|group|u|user|dm)-(.+)$/i);
+  if (!m) return '';
+  const kind = String(m[1] || '').toLowerCase();
+  const target = String(m[2] || '').trim();
+  if (!target) return 'Telegram';
+  if (kind === 'g' || kind === 'group') return `Telegram 群組 (${target})`;
+  if (kind === 'u' || kind === 'user' || kind === 'dm') return `Telegram 私訊 (${target})`;
+  return `Telegram (${target})`;
+};
+
 export const deriveSessionDisplayName = (sessionKey: string, meta: unknown): string => {
   const m = meta as { displayName?: string; title?: string; name?: string; prompt?: string; summary?: string } | null;
+  const normalizedFromKey = (() => {
+    const parts = sessionKey.split(':');
+    if (parts.length < 4) return '';
+    const type = parts[2];
+    const rest = parts.slice(3).join(':');
+    if (type === 'telegram') {
+      const tg = normalizeTelegramDisplayName(`telegram:${rest}`);
+      return tg || `Telegram ${rest}`;
+    }
+    if (type === 'main') return '直接執行';
+    return '';
+  })();
+
+  if (normalizedFromKey) return normalizedFromKey;
+
   const explicit = [m?.displayName, m?.title, m?.name, m?.prompt, m?.summary]
     .find((value) => typeof value === 'string' && String(value).trim());
   if (explicit && typeof explicit === 'string') {
     const parsed = extractCronDisplayNameFromText(explicit);
     if (parsed) return parsed;
+    const telegram = normalizeTelegramDisplayName(explicit);
+    if (telegram) return telegram;
     return explicit;
   }
   const parsedFromKey = extractCronDisplayNameFromText(sessionKey);
@@ -68,7 +98,7 @@ export const deriveSessionDisplayName = (sessionKey: string, meta: unknown): str
   if (parts.length < 3) return sessionKey;
   const type = parts[2];
   const rest = parts.slice(3).join(':');
-  if (type === 'main') return 'Direct';
+  if (type === 'main') return '直接執行';
   if (type === 'telegram') return `Telegram ${rest}`;
   if (type === 'cron') return rest ? `Cron ${rest.slice(0, 8)}` : 'Cron';
   return rest || sessionKey;

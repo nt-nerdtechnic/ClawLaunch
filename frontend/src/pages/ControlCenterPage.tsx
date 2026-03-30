@@ -629,12 +629,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     );
                   })}
                 </div>
-                <div className="w-px h-3 bg-slate-200 dark:bg-slate-700" />
-                {lastSessionsScanned && (
-                  <span className="text-[10px] text-slate-400 tabular-nums">
-                    {lastSessionsScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </span>
-                )}
                 <button
                   onClick={() => void loadActiveSessions()}
                   title={t('controlCenter.actions.refresh')}
@@ -1140,7 +1134,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           </button>
                         </div>
                       </div>
-                      {/* 副資訊列：排程 · timeout · 下次時間 · 上次時間 */}
+                      {/* 副資訊列：排程 · 上次時間 · 下次時間 */}
                       <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
                         <span className="font-mono text-violet-400/70">{formatInterval(job.schedule, t)}</span>
                         {job.payload?.timeoutSeconds && (
@@ -1149,16 +1143,16 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             <span className="text-amber-400/70">{t('controlCenter.cronJobs.timeout', { val: `${Math.round(job.payload.timeoutSeconds / 60)}m` })}</span>
                           </>
                         )}
+                        {job.state?.lastRunAtMs && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span>{relTime(job.state.lastRunAtMs, t)}</span>
+                          </>
+                        )}
                         {job.enabled && job.state?.nextRunAtMs && (
                           <>
                             <span className="opacity-40">·</span>
                             <span className="text-violet-400">{nextTime(job.state.nextRunAtMs, t)}</span>
-                          </>
-                        )}
-                        {job.state?.lastRunAtMs && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span>{t('controlCenter.cronJobs.lastRun', { val: relTime(job.state.lastRunAtMs, t) })}</span>
                           </>
                         )}
                       </div>
