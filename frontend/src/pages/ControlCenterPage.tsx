@@ -378,6 +378,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   }, [loadActiveSessions, t]);
 
+  const abortAllRunningSessions = useCallback(async () => {
+    const targets = activeSessions.filter(s => s.isRunning === true && (s.key || s.sessionId));
+    for (const s of targets) {
+      const key = String(s.key || s.sessionId || '').trim();
+      if (key) await abortSession(key, s.agentId);
+    }
+  }, [activeSessions, abortSession]);
+
   const refresh = useCallback(async () => {
     setError('');
     try {
@@ -739,6 +747,21 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 );
               })}
             </div>
+            {/* Bulk actions */}
+            {(() => {
+              const runningSessions = filteredActiveSessions.filter(s => s.isRunning === true);
+              if (runningSessions.length === 0) return null;
+              return (
+                <div className="flex justify-end items-center gap-1.5 pt-1">
+                  <button
+                    onClick={() => void abortAllRunningSessions()}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all"
+                  >
+                    <Pause size={8} />{t('common.stopAll', '全部停止')}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
 

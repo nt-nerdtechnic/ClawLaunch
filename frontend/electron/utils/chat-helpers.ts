@@ -67,7 +67,22 @@ const normalizeTelegramDisplayName = (value: string): string => {
 };
 
 export const deriveSessionDisplayName = (sessionKey: string, meta: unknown): string => {
-  const m = meta as { displayName?: string; title?: string; name?: string; prompt?: string; summary?: string } | null;
+  const m = meta as { displayName?: string; title?: string; name?: string; prompt?: string; summary?: string; channel?: string; lastChannel?: string; chatType?: string; lastTo?: string; origin?: Record<string, unknown> } | null;
+
+  // Check meta channel first — some sessions (e.g. agent:main:main) route Telegram
+  // messages but use a generic key; detect them by meta.channel / lastChannel.
+  const metaChannel = String(m?.channel || m?.lastChannel || '').toLowerCase();
+  if (metaChannel === 'telegram') {
+    const chatType = String(m?.chatType || '').toLowerCase();
+    const lastTo = String(m?.lastTo || (m?.origin as Record<string, unknown>)?.to || '');
+    const targetId = lastTo.replace(/^telegram:/, '');
+    // negative ID = group, positive = private/direct
+    const isGroup = chatType === 'group' || (targetId.startsWith('-') );
+    if (isGroup) return `Telegram 群組 (${targetId || '?'})`;
+    const fromId = String((m?.origin as Record<string, unknown>)?.from || lastTo).replace(/^telegram:/, '');
+    return `Telegram 私訊 (${fromId || targetId || '?'})`;
+  }
+
   const normalizedFromKey = (() => {
     const parts = sessionKey.split(':');
     if (parts.length < 4) return '';
