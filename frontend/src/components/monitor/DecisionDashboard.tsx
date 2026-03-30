@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { HeartPulse, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ReadModelSnapshot } from '../../store';
+import { PaginationControls } from '../common/PaginationControls';
+import { usePagination } from '../../hooks/usePagination';
 
 type AppConfig = { corePath: string; configPath: string; workspacePath: string };
 type AuditLogState = 'loading' | 'connected' | 'degraded' | 'unavailable';
-const AUDIT_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
 type AuditLogEntry = {
   ts: string;
@@ -42,9 +43,6 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
   const { running, config, resolvedConfigDir } = props;
   const [chatSessionCount, setChatSessionCount] = useState(0);
   const [auditFilter, setAuditFilter] = useState<'today' | 'all'>('today');
-  const [auditPage, setAuditPage] = useState(1);
-  const [auditPageSize, setAuditPageSize] = useState<number>(AUDIT_PAGE_SIZE_OPTIONS[0]);
-  const [auditJumpInput, setAuditJumpInput] = useState('1');
   const [auditLog, setAuditLog] = useState<AuditLogSummary>({
     writes: 0,
     changedPaths: 0,
@@ -171,39 +169,20 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
     };
   }, [running, auditFilter, config.configPath, config.corePath, config.workspacePath, resolvedConfigDir]);
 
-  useEffect(() => {
-    setAuditPage(1);
-    setAuditJumpInput('1');
-  }, [auditFilter, auditPageSize]);
+  const pagination = usePagination({
+    totalItems: auditLog.entries.length,
+    initialPageSize: 10,
+    pageSizeOptions: [10, 20, 50],
+  });
 
-  const auditTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(auditLog.entries.length / auditPageSize)),
-    [auditLog.entries.length, auditPageSize],
+  useEffect(() => {
+    pagination.reset();
+  }, [auditFilter, pagination.reset]);
+
+  const pagedAuditEntries = useMemo(
+    () => auditLog.entries.slice(pagination.sliceStart, pagination.sliceEnd),
+    [auditLog.entries, pagination.sliceStart, pagination.sliceEnd],
   );
-
-  useEffect(() => {
-    setAuditPage((current) => {
-      const next = Math.min(current, auditTotalPages);
-      setAuditJumpInput(String(next));
-      return next;
-    });
-  }, [auditTotalPages]);
-
-  const pagedAuditEntries = useMemo(() => {
-    const start = (auditPage - 1) * auditPageSize;
-    return auditLog.entries.slice(start, start + auditPageSize);
-  }, [auditLog.entries, auditPage, auditPageSize]);
-
-  const jumpToAuditPage = () => {
-    const target = Number.parseInt(auditJumpInput, 10);
-    if (!Number.isFinite(target)) {
-      setAuditJumpInput(String(auditPage));
-      return;
-    }
-    const next = Math.max(1, Math.min(auditTotalPages, target));
-    setAuditPage(next);
-    setAuditJumpInput(String(next));
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -359,7 +338,7 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                 <tbody>
                   {pagedAuditEntries.map((entry, i) => (
                     <tr
-                      key={`${entry.ts}-${(auditPage - 1) * auditPageSize + i}`}
+                      key={`${entry.ts}-${pagination.sliceStart + i}`}
                       className="border-b border-slate-100 dark:border-slate-800 last:border-0 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       <td className="px-3 py-2 text-slate-400 dark:text-slate-500 whitespace-nowrap font-mono text-[11px]">
@@ -389,85 +368,30 @@ export function DecisionDashboard(props: DecisionDashboardProps) {
                   ))}
                 </tbody>
               </table>
-              <div className="flex flex-col gap-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/50 px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400 md:flex-row md:items-center md:justify-between">
-                <span className="order-2 md:order-1">
-                  {t('monitor.decision.auditPageSummary', {
-                    from: (auditPage - 1) * auditPageSize + 1,
-                    to: Math.min(auditPage * auditPageSize, auditLog.entries.length),
-                    total: auditLog.entries.length,
-                  })}
-                </span>
-                <div className="order-1 flex flex-wrap items-center gap-2 md:order-2 md:justify-end">
-                  <label className="flex items-center gap-1 rounded-md border border-slate-300/70 dark:border-slate-600/70 px-2 py-1">
-                    <span>{t('monitor.decision.auditPageSize')}</span>
-                    <select
-                      value={auditPageSize}
-                      onChange={(e) => setAuditPageSize(Number(e.target.value))}
-                      className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-1.5 py-1 text-[10px] font-bold"
-                    >
-                      {AUDIT_PAGE_SIZE_OPTIONS.map((size) => (
-                        <option key={size} value={size}>{size}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuditPage((p) => {
-                        const next = Math.max(1, p - 1);
-                        setAuditJumpInput(String(next));
-                        return next;
-                      });
-                    }}
-                    disabled={auditPage <= 1}
-                    className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-800"
-                  >
-                    {t('monitor.decision.auditPagePrev')}
-                  </button>
-
-                  <span className="min-w-[86px] text-center font-bold text-slate-600 dark:text-slate-300">
-                    {t('monitor.decision.auditPageInfo', { page: auditPage, pages: auditTotalPages })}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuditPage((p) => {
-                        const next = Math.min(auditTotalPages, p + 1);
-                        setAuditJumpInput(String(next));
-                        return next;
-                      });
-                    }}
-                    disabled={auditPage >= auditTotalPages}
-                    className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-800"
-                  >
-                    {t('monitor.decision.auditPageNext')}
-                  </button>
-
-                  <div className="flex items-center gap-1 rounded-md border border-slate-300/70 dark:border-slate-600/70 px-1.5 py-1">
-                    <input
-                      type="number"
-                      min={1}
-                      max={auditTotalPages}
-                      value={auditJumpInput}
-                      onChange={(e) => setAuditJumpInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') jumpToAuditPage();
-                      }}
-                      className="w-14 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-1.5 py-1 text-[10px] font-bold"
-                      placeholder={t('monitor.decision.auditPageJumpPlaceholder')}
-                    />
-                    <button
-                      type="button"
-                      onClick={jumpToAuditPage}
-                      className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide hover:bg-white dark:hover:bg-slate-800"
-                    >
-                      {t('monitor.decision.auditPageJump')}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <PaginationControls
+                summaryText={t('monitor.decision.auditPageSummary', {
+                  from: pagination.rangeStart,
+                  to: pagination.rangeEnd,
+                  total: pagination.totalItems,
+                })}
+                pageInfoText={t('monitor.decision.auditPageInfo', { page: pagination.page, pages: pagination.totalPages })}
+                pageSizeLabel={t('monitor.decision.auditPageSize')}
+                prevLabel={t('monitor.decision.auditPagePrev')}
+                nextLabel={t('monitor.decision.auditPageNext')}
+                jumpLabel={t('monitor.decision.auditPageJump')}
+                jumpPlaceholder={t('monitor.decision.auditPageJumpPlaceholder')}
+                pageSize={pagination.pageSize}
+                pageSizeOptions={pagination.pageSizeOptions}
+                jumpInput={pagination.jumpInput}
+                maxPage={pagination.totalPages}
+                canPrev={pagination.canPrev}
+                canNext={pagination.canNext}
+                onPageSizeChange={pagination.changePageSize}
+                onPrev={pagination.prevPage}
+                onNext={pagination.nextPage}
+                onJumpInputChange={pagination.setJumpInput}
+                onJump={pagination.jumpToInputPage}
+              />
             </div>
           )}
       </section>
