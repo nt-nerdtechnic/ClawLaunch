@@ -5,6 +5,17 @@ import { t } from '../../utils/i18n.js';
 import type { CommandResult } from './types.js';
 import type { ShellExecContext } from '../shell-exec-handler.js';
 
+async function moveDirWithFallback(sourcePath: string, targetPath: string): Promise<void> {
+  try {
+    await fs.rename(sourcePath, targetPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code !== 'EXDEV') throw error;
+    await fs.cp(sourcePath, targetPath, { recursive: true });
+    await fs.rm(sourcePath, { recursive: true, force: true });
+  }
+}
+
 export async function handleSkillCommands(fullCommand: string, ctx: ShellExecContext): Promise<CommandResult | null> {
   if (!fullCommand.startsWith('skill:')) return null;
 
@@ -66,6 +77,74 @@ export async function handleSkillCommands(fullCommand: string, ctx: ShellExecCon
       return { code: 0, stdout: t('main.ipc.success.skillRemoved'), exitCode: 0 };
     } catch (e) {
       return { code: 1, stderr: (e as Error)?.message || 'skill delete failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('skill:move-core')) {
+    try {
+      const payloadRaw = fullCommand.replace('skill:move-core', '').trim();
+      let skillId = '';
+      if (payloadRaw) {
+        try {
+          const payload = JSON.parse(payloadRaw);
+          skillId = typeof payload?.skillId === 'string' ? payload.skillId.trim() : '';
+        } catch {
+          skillId = payloadRaw.trim();
+        }
+      }
+
+      if (!skillId) {
+        throw new Error(t('main.ipc.errors.missingPath'));
+      }
+      if (skillId !== path.basename(skillId) || skillId.includes('..')) {
+        throw new Error(t('main.ipc.errors.securityDenied'));
+      }
+
+      const launcherConfigPath = ctx.getClawlaunchFile();
+      let configuredWorkspacePath = '', configuredConfigPath = '', configuredCorePath = '';
+      try {
+        const launcherRaw = await fs.readFile(launcherConfigPath, 'utf-8');
+        const launcherCfg = JSON.parse(launcherRaw || '{}');
+        configuredWorkspacePath = typeof launcherCfg.workspacePath === 'string' ? launcherCfg.workspacePath.trim() : '';
+        configuredConfigPath = typeof launcherCfg.configPath === 'string' ? launcherCfg.configPath.trim() : '';
+        configuredCorePath = typeof launcherCfg.corePath === 'string' ? launcherCfg.corePath.trim() : '';
+      } catch { /* no config */ }
+
+      const targetBaseDir = configuredWorkspacePath || configuredConfigPath;
+      if (!configuredCorePath) {
+        throw new Error(t('main.ipc.errors.missingCorePath'));
+      }
+      if (!targetBaseDir) {
+        throw new Error(t('main.ipc.errors.missingPath'));
+      }
+
+      const coreSkillsRoot = path.resolve(configuredCorePath, 'skills');
+      const workspaceSkillsRoot = path.resolve(targetBaseDir, 'skills');
+      const sourcePath = path.resolve(coreSkillsRoot, skillId);
+      const targetPath = path.resolve(workspaceSkillsRoot, skillId);
+
+      const sourceAllowed = sourcePath === coreSkillsRoot || sourcePath.startsWith(`${coreSkillsRoot}${path.sep}`);
+      const targetAllowed = targetPath === workspaceSkillsRoot || targetPath.startsWith(`${workspaceSkillsRoot}${path.sep}`);
+      if (!sourceAllowed || !targetAllowed) {
+        throw new Error(t('main.ipc.errors.securityDenied'));
+      }
+
+      const sourceStats = await fs.stat(sourcePath).catch(() => null);
+      if (!sourceStats || !sourceStats.isDirectory()) {
+        throw new Error(t('main.ipc.errors.skillNotFound', { name: skillId }));
+      }
+
+      const targetStats = await fs.stat(targetPath).catch(() => null);
+      if (targetStats) {
+        throw new Error(t('main.ipc.errors.skillAlreadyExists', { name: skillId }));
+      }
+
+      await fs.mkdir(workspaceSkillsRoot, { recursive: true });
+      await moveDirWithFallback(sourcePath, targetPath);
+
+      return { code: 0, stdout: t('main.ipc.success.skillMoved', { name: skillId }), exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'skill move failed', exitCode: 1 };
     }
   }
 

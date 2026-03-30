@@ -9,10 +9,14 @@ function SkillCard({
   skill,
   isCore,
   onRemove,
+  onMoveToWorkspace,
+  actionsDisabled,
 }: {
   skill: SkillItem;
   isCore: boolean;
   onRemove?: () => void;
+  onMoveToWorkspace?: () => void;
+  actionsDisabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -38,6 +42,7 @@ function SkillCard({
              {!isCore && (
               <button
                 onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
+                disabled={actionsDisabled}
                 className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                 title={t('skillManager.actions.remove')}
               >
@@ -45,9 +50,21 @@ function SkillCard({
               </button>
             )}
             {isCore && (
-              <div className="p-2 text-slate-300 dark:text-slate-700" title={t('skillManager.status.systemRequired')}>
-                <Lock size={14} />
-              </div>
+              <>
+                {onMoveToWorkspace && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMoveToWorkspace?.(); }}
+                    disabled={actionsDisabled}
+                    className="p-2 rounded-xl text-slate-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-40"
+                    title={t('skillManager.actions.moveToWorkspace')}
+                  >
+                    <PackagePlus size={16} />
+                  </button>
+                )}
+                <div className="p-2 text-slate-300 dark:text-slate-700" title={t('skillManager.status.systemRequired')}>
+                  <Lock size={14} />
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -183,6 +200,29 @@ export function SkillManager() {
     setActing(false);
   };
 
+  const handleMoveToWorkspace = async (skill: SkillItem) => {
+    if (!window.electronAPI || acting) return;
+
+    const confirmed = confirm(t('skillManager.status.moveCoreConfirm', { name: skill.name }));
+    if (!confirmed) return;
+
+    setActing(true);
+    try {
+      const payload = JSON.stringify({ skillId: skill.id });
+      const result = await window.electronAPI.exec(`skill:move-core ${payload}`);
+      if (result?.exitCode !== 0) {
+        alert(result?.stderr || t('skillManager.status.moveCoreError'));
+        setActing(false);
+        return;
+      }
+      await rescan();
+      setActiveTab('workspace');
+    } catch (_e) {
+      alert(t('skillManager.status.moveCoreError'));
+    }
+    setActing(false);
+  };
+
   const tabs = [
     {
       id: 'workspace' as const,
@@ -271,7 +311,13 @@ export function SkillManager() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {activeTab === 'core' ? (
             coreSkills.map((skill: SkillItem) => (
-              <SkillCard key={skill.id} skill={skill} isCore={true} />
+              <SkillCard
+                key={skill.id}
+                skill={skill}
+                isCore={true}
+                onMoveToWorkspace={() => handleMoveToWorkspace(skill)}
+                actionsDisabled={acting || scanning}
+              />
             ))
           ) : (
             workspaceSkills.length === 0 ? (
@@ -297,6 +343,7 @@ export function SkillManager() {
                   skill={skill}
                   isCore={false}
                   onRemove={() => handleRemove(skill)}
+                  actionsDisabled={acting || scanning}
                 />
               ))
             )

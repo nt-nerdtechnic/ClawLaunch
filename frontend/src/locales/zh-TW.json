@@ -780,6 +780,8 @@
       "importSuccess": "技能匯入成功！",
       "importError": "匯入失敗：{{msg}}",
       "deleteConfirm": "確定要移除技能「{{name}}」嗎？這將會刪除工作區內的資料夾且無法還原。",
+      "moveCoreConfirm": "確定要將系統技能「{{name}}」移動到工作區 skills 目錄嗎？移動後該技能將不再位於核心技能目錄。",
+      "moveCoreError": "移動系統技能失敗，請稍後再試。",
       "electronUnavailable": "electronAPI 不可用，請確認 Electron 環境正確啟動。",
       "parseError": "技能資料解析失敗，請重試。",
       "scanFailed": "掃描失敗，請重試。",
@@ -790,6 +792,7 @@
     "actions": {
       "import": "匯入手邊技能",
       "remove": "移除技能",
+      "moveToWorkspace": "移到工作區",
       "viewDetails": "檢視詳情"
     },
     "installed": "目前已安裝",
@@ -1402,7 +1405,10 @@
       "errors": {
         "skillMissingMd": "錯誤：所選資料夾內缺少 SKILL.md，不是有效的技能。",
         "missingPath": "未提供路徑",
+        "missingCorePath": "缺少核心路徑，無法移動系統技能",
         "securityDenied": "安全性拒絕：該技能路徑不在允許的 skills 目錄內",
+        "skillNotFound": "找不到技能資料夾：{{name}}",
+        "skillAlreadyExists": "工作區已存在同名技能：{{name}}",
         "minimaxFormat": "MiniMax Coding Plan Token 格式異常：目前內容看起來像說明文字或無效字串，請重新貼上平台 Token。",
         "gatewayAuthMissing": "已指定 Gateway 埠號，但找不到顯式 token/password，請檢查 openclaw.json 的 gateway.auth 設定。",
         "forceGateway": "核心對話已啟用強制 Gateway 模式，請先啟動核心（Gateway）後再送出。",
@@ -1410,7 +1416,8 @@
       },
       "success": {
         "skillImported": "成功匯入技能：{{name}}",
-        "skillRemoved": "技能已成功移除"
+        "skillRemoved": "技能已成功移除",
+        "skillMoved": "已成功移動系統技能到工作區：{{name}}"
       }
     },
     "titles": {

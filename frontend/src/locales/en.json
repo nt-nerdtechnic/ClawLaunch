@@ -779,6 +779,8 @@
       "importSuccess": "Skill imported successfully!",
       "importError": "Import failed: {{msg}}",
       "deleteConfirm": "Are you sure you want to remove the skill \"{{name}}\"? This will delete the folder in the workspace and cannot be undone.",
+      "moveCoreConfirm": "Move system skill \"{{name}}\" into the workspace skills directory? After moving, it will no longer stay in the core skills directory.",
+      "moveCoreError": "Failed to move system skill. Please try again later.",
       "electronUnavailable": "electronAPI unavailable, please ensure the Electron environment is started correctly.",
       "parseError": "Failed to parse skill data, please try again.",
       "scanFailed": "Scan failed, please try again.",
@@ -811,6 +813,7 @@
     "actions": {
       "import": "Import Skill",
       "remove": "Remove Skill",
+      "moveToWorkspace": "Move to Workspace",
       "viewDetails": "View Details"
     }
   },
@@ -1394,7 +1397,10 @@
       "errors": {
         "skillMissingMd": "Error: Selected folder is missing SKILL.md, not a valid skill.",
         "missingPath": "Path not provided",
+        "missingCorePath": "Missing core path, cannot move system skill",
         "securityDenied": "Security Denied: Skill path is not in the allowed skills directory",
+        "skillNotFound": "Skill folder not found: {{name}}",
+        "skillAlreadyExists": "A skill with the same name already exists in workspace: {{name}}",
         "minimaxFormat": "MiniMax Coding Plan Token format anomaly: Content appears to be descriptive text or an invalid string.",
         "gatewayAuthMissing": "Gateway port specified but no explicit token/password found; check gateway.auth in openclaw.json.",
         "forceGateway": "Core chat has mandatory Gateway mode enabled; please start the Gateway first.",
@@ -1402,7 +1408,8 @@
       },
       "success": {
         "skillImported": "Skill imported successfully: {{name}}",
-        "skillRemoved": "Skill removed successfully"
+        "skillRemoved": "Skill removed successfully",
+        "skillMoved": "System skill moved to workspace successfully: {{name}}"
       }
     },
     "titles": {

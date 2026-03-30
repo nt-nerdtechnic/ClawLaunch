@@ -771,6 +771,8 @@
       "importSuccess": "技能导入成功！",
       "importError": "导入失败：{{msg}}",
       "deleteConfirm": "确定要移除技能「{{name}}」吗？这将会删除工作区内的文件夹且无法还原。",
+      "moveCoreConfirm": "确定要将系统技能「{{name}}」移动到工作区 skills 目录吗？移动后该技能将不再位于核心技能目录。",
+      "moveCoreError": "移动系统技能失败，请稍后再试。",
       "electronUnavailable": "electronAPI 不可用，请确认 Electron 环境正确启动。",
       "parseError": "技能资料解析失败，请重试。",
       "scanFailed": "扫描失败，请重试。",
@@ -801,6 +803,7 @@
     "actions": {
       "import": "导入手边技能",
       "remove": "移除技能",
+      "moveToWorkspace": "移到工作区",
       "viewDetails": "查看详情"
     }
   },
@@ -1157,7 +1160,10 @@
       "errors": {
         "skillMissingMd": "错误：所选文件夹内缺少 SKILL.md，不是有效的技能。",
         "missingPath": "未提供路径",
+        "missingCorePath": "缺少核心路径，无法移动系统技能",
         "securityDenied": "安全性拒绝：该技能路径不在允许的 skills 目录内",
+        "skillNotFound": "找不到技能文件夹：{{name}}",
+        "skillAlreadyExists": "工作区已存在同名技能：{{name}}",
         "minimaxFormat": "MiniMax Coding Plan Token 格式异常：目前内容看起来像说明文字或无效字符串。",
         "gatewayAuthMissing": "已指定 Gateway 端口号，但找不到显式 token/password，请检查 openclaw.json 的 gateway.auth 设置。",
         "forceGateway": "核心对话已启用强制 Gateway 模式，请先启动核心（Gateway）后再送出。",
@@ -1165,7 +1171,8 @@
       },
       "success": {
         "skillImported": "成功导入技能：{{name}}",
-        "skillRemoved": "技能已成功移除"
+        "skillRemoved": "技能已成功移除",
+        "skillMoved": "已成功将系统技能移动到工作区：{{name}}"
       }
     },
     "titles": {
