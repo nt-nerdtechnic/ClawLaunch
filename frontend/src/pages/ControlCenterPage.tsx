@@ -75,6 +75,9 @@ interface ActiveSession {
   updatedAt: string;
   ageMs: number;
   sessionId: string;
+  agentId?: string;
+  displayName?: string;
+  lastMessage?: string;
   systemSent?: number;
   inputTokens?: number;
   outputTokens?: number;
@@ -265,7 +268,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         throw new Error(res.stderr || 'scan active sessions failed');
       }
       const parsed = JSON.parse(res.stdout || '{}');
-      const sessions = parsed.sessions || [];
+      const rawSessions = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+      const dedup = new Map<string, ActiveSession>();
+      for (const raw of rawSessions) {
+        const s = raw as ActiveSession;
+        const dedupKey = `${String(s.key || '').trim()}|${String(s.sessionId || '').trim()}`;
+        if (!dedup.has(dedupKey)) dedup.set(dedupKey, s);
+      }
+      const sessions = Array.from(dedup.values());
       console.log('[ControlCenter] loadActiveSessions parsed:', parsed);
       console.log('[ControlCenter] loadActiveSessions got', sessions.length, 'sessions:', sessions);
       setActiveSessions(sessions);
@@ -546,14 +556,21 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="block text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
-                          {session.sessionId || session.key}
+                          {session.displayName || session.sessionId || session.key}
                         </span>
-                        {session.model && (
+                        {session.lastMessage ? (
+                          <span className="block text-[10px] text-slate-500 truncate">{session.lastMessage}</span>
+                        ) : session.agentId ? (
+                          <span className="block text-[10px] text-slate-400 truncate">agent: {session.agentId}</span>
+                        ) : session.model ? (
                           <span className="block text-[10px] text-slate-400 truncate">{session.model}</span>
+                        ) : null}
+                        {session.agentId && (
+                          <span className="block text-[10px] text-slate-400/80 truncate">{session.agentId}</span>
                         )}
                       </div>
                       <button
-                        onClick={() => void abortSession(session.key, session.model)}
+                        onClick={() => void abortSession(session.key, session.agentId)}
                         title={t('controlCenter.actions.abort', '停止')}
                         className="shrink-0 px-2 py-1 text-[10px] font-bold rounded-lg bg-rose-100 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white transition-all active:scale-95"
                       >

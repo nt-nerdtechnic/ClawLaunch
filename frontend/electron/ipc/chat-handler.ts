@@ -216,7 +216,7 @@ class GatewayWSClient {
 // ── Gateway WebSocket singleton ───────────────────────────────────────────────
 
 let gwsClient: GatewayWSClient | null = null;
-const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean; startedAtMs: number }>();
+const activeChatRequests = new Map<string, { sessionKey: string; runId?: string; agentId?: string; aborted: boolean; startedAtMs: number; preview?: string }>();
 
 // Concurrency lock: ensures only one connection attempt runs at a time.
 // Subsequent callers await the same Promise instead of spawning a new client.
@@ -378,6 +378,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       agentId: request.agentId,
       aborted: false,
       startedAtMs: Date.now(),
+      preview: String(request.message || '').trim().slice(0, 140),
     });
 
     const emitChunk = (payload: { delta?: string; done?: boolean; state?: string; error?: string }) => {
@@ -699,18 +700,26 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
         updatedAt: string;
         ageMs: number;
         sessionId: string;
+        agentId?: string;
+        displayName?: string;
+        lastMessage?: string;
         model?: string;
       }>();
 
       // Source 1: track in-flight requests in memory (real running tasks started from this app)
       for (const [, state] of activeChatRequests.entries()) {
         const ts = state.startedAtMs || now;
-        byKey.set(state.sessionKey, {
-          key: state.sessionKey,
+        const key = String(state.sessionKey || '').trim();
+        if (!key) continue;
+        byKey.set(key, {
+          key,
           kind: 'chat',
           updatedAt: new Date(ts).toISOString(),
           ageMs: Math.max(0, now - ts),
-          sessionId: state.runId || state.sessionKey,
+          sessionId: state.runId || key,
+          agentId: state.agentId || 'main',
+          displayName: deriveSessionDisplayName(key, { sessionId: state.runId || key, updatedAt: new Date(ts).toISOString() }),
+          lastMessage: state.preview || '',
           model: state.agentId || 'main',
         });
       }
@@ -734,22 +743,57 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
 
         for (const [sessionKey, metaRaw] of Object.entries(sessionsIndex) as [string, unknown][]) {
           const meta = metaRaw as Record<string, unknown>;
+          const normalizedKey = String(sessionKey || '').trim();
+          if (!normalizedKey) continue;
           const updatedAtRaw = String(meta?.updatedAt || '').trim();
           const updatedMs = updatedAtRaw ? (new Date(updatedAtRaw).getTime() || Number(updatedAtRaw) || 0) : 0;
           if (!updatedMs) continue;
           const ageMs = Math.max(0, now - updatedMs);
           if (ageMs > activeWindowMs) continue;
 
-          const existing = byKey.get(sessionKey);
+          const existing = byKey.get(normalizedKey);
           if (existing && existing.ageMs <= ageMs) continue;
 
-          byKey.set(sessionKey, {
-            key: sessionKey,
+          const sessionId = String(meta?.sessionId || normalizedKey);
+          const displayName = deriveSessionDisplayName(normalizedKey, meta);
+          let lastMessage = '';
+
+          const sessionFile: string = (typeof meta?.sessionFile === 'string' && meta.sessionFile)
+            ? String(meta.sessionFile)
+            : path.join(agentsDir, agentId, 'sessions', `${sessionId}.jsonl`);
+
+          try {
+            const content = await fs.readFile(sessionFile, 'utf-8');
+            const lines = content.split(/\r?\n/).filter(Boolean);
+            for (let i = lines.length - 1; i >= 0; i--) {
+              try {
+                const entry = JSON.parse(lines[i]);
+                if (entry?.type !== 'message') continue;
+                const role = entry?.message?.role;
+                if (role !== 'assistant' && role !== 'user') continue;
+                const text = extractMessageText(entry.message);
+                if (text) {
+                  lastMessage = text.slice(0, 160);
+                  break;
+                }
+              } catch {
+                continue;
+              }
+            }
+          } catch {
+            lastMessage = '';
+          }
+
+          byKey.set(normalizedKey, {
+            key: normalizedKey,
             kind: 'session',
             updatedAt: new Date(updatedMs).toISOString(),
             ageMs,
-            sessionId: String(meta?.sessionId || sessionKey),
-            model: agentId,
+            sessionId,
+            agentId,
+            displayName,
+            lastMessage,
+            model: String(meta?.model || ''),
           });
         }
       }
