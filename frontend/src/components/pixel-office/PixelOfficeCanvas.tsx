@@ -15,9 +15,10 @@ import { useTranslation } from 'react-i18next';
 
 interface PixelOfficeCanvasProps {
   paused: boolean;
+  onAgentClick?: (agentId: string, displayName: string) => void;
 }
 
-export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
+export default function PixelOfficeCanvas({ paused, onAgentClick }: PixelOfficeCanvasProps) {
   const { t } = useTranslation();
   const theme = useStore(s => s.theme);
   const dark = theme === 'dark';
@@ -158,6 +159,22 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
     setTooltipData(null);
   }, []);
 
+  const handleClick = useCallback((e: ReactMouseEvent<HTMLCanvasElement>) => {
+    if (!onAgentClick) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = CANVAS_W / rect.width;
+    const scaleY = CANVAS_H / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top) * scaleY;
+    const hit = hitTestAgent(cx, cy, agentsRef.current, SPRITE_DRAW_W, SPRITE_DRAW_H);
+    if (hit) {
+      const summary = summaries.find(s => s.id === hit.id);
+      onAgentClick(hit.id, summary?.displayName ?? hit.id);
+    }
+  }, [summaries, onAgentClick]);
+
   return (
     <div className="relative w-full h-full">
       <canvas
@@ -165,9 +182,10 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
         width={CANVAS_W}
         height={CANVAS_H}
         className="w-full h-full"
-        style={{ imageRendering: 'pixelated' }}
+        style={{ imageRendering: 'pixelated', cursor: hoveredAgentId ? 'pointer' : 'default' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
       />
 
       {/* Tooltip overlay */}
@@ -199,6 +217,11 @@ export default function PixelOfficeCanvas({ paused }: PixelOfficeCanvasProps) {
             {t('pixelOffice.sessions')}: {tooltipData.agent.sessionCount}
             {tooltipData.agent.cost > 0 && ` · $${tooltipData.agent.cost.toFixed(4)}`}
           </div>
+          {onAgentClick && (
+            <div className="mt-1 text-[8px] font-medium text-sky-500 dark:text-sky-400">
+              {t('pixelOffice.clickToChat', '點擊開啟對話')}
+            </div>
+          )}
         </div>
       )}
 

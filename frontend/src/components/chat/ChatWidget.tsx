@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X } from 'lucide-react';
+import { Bot, Check, ChevronDown, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { marked } from 'marked';
 import { useStore } from '../../store';
 import type { ChatMessage } from '../../store';
+import { usePixelOfficeAgents } from '../pixel-office/hooks/usePixelOfficeAgents';
 
 // Configure marked for chat rendering
 marked.setOptions({ breaks: true, gfm: true });
@@ -165,6 +166,28 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [sessionLoadingMore, setSessionLoadingMore] = useState(false);
   const [reconnectingGatewayWs, setReconnectingGatewayWs] = useState(false);
   const [gatewayWsReconnectError, setGatewayWsReconnectError] = useState('');
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const agentPickerRef = useRef<HTMLDivElement>(null);
+  const knownAgents = usePixelOfficeAgents();
+
+  // Ensure current agent is always present in picker, even if not in snapshot
+  const agentOptions = useMemo(() => {
+    const has = knownAgents.some(a => a.id === chat.activeAgentId);
+    if (has) return knownAgents;
+    return [{ id: chat.activeAgentId, displayName: chat.activeAgentId, color: '#94a3b8', snapshotState: 'idle' as const, tokensIn: 0, tokensOut: 0, cost: 0, sessionCount: 0 }, ...knownAgents];
+  }, [knownAgents, chat.activeAgentId]);
+
+  // Close agent picker on outside click
+  useEffect(() => {
+    if (!agentPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) {
+        setAgentPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [agentPickerOpen]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
@@ -596,6 +619,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               )}
               {!sessionLoading && ocSessions.map((s) => {
                 const isActive = s.sessionKey === chat.activeSessionKey && s.agentId === chat.activeAgentId;
+                const agentColor = agentOptions.find(a => a.id === s.agentId)?.color ?? '#94a3b8';
                 return (
                   <button
                     key={`${s.agentId}/${s.sessionKey}`}
@@ -609,19 +633,18 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
                   >
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className={`inline-flex shrink-0 items-center rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
-                            isActive
-                              ? 'bg-sky-100 text-sky-700 dark:bg-sky-800/60 dark:text-sky-300'
-                              : 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300'
-                          }`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: agentColor }} />
+                          <span className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-200">
                             {s.displayName || s.agentId}
                           </span>
                           {isActive && (
                             <span className="inline-flex items-center rounded bg-sky-500 px-1 py-0.5 text-[8px] font-bold text-white">✓</span>
                           )}
                         </div>
-                        <p className="mt-0.5 truncate font-mono text-[9px] text-slate-400 dark:text-slate-500" title={s.sessionKey}>{s.sessionKey}</p>
+                        <span className="mt-0.5 inline-flex max-w-full items-center rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[8px] text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500" title={s.sessionKey}>
+                          <span className="truncate">{s.sessionKey}</span>
+                        </span>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-0.5">
                         <span className="text-[8px] text-slate-400">{formatRelativeTime(s.lastTimestamp, t)}</span>
@@ -722,24 +745,77 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           </div>
 
           {/* Compact session indicator bar */}
-          <button
-            type="button"
-            onClick={() => setSessionPanelOpen((v) => !v)}
-            className={`flex w-full items-center gap-1.5 border-b border-slate-200 px-4 py-1.5 text-left transition-colors ${
-              sessionPanelOpen
-                ? 'bg-sky-50/80 dark:bg-sky-900/20'
-                : 'bg-slate-50/60 hover:bg-sky-50/60 dark:bg-slate-900/40 dark:hover:bg-sky-900/20'
-            } dark:border-slate-800`}
-          >
-            <span className="inline-flex shrink-0 items-center rounded-md bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-orange-600 dark:bg-orange-900/40 dark:text-orange-300">
-              {chat.activeAgentId}
-            </span>
-            <span className="text-[9px] text-slate-300 dark:text-slate-600">›</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">
-              {chat.activeSessionKey}
-            </span>
-            <MessagesSquare size={10} className={`shrink-0 ${sessionPanelOpen ? 'text-sky-400' : 'text-slate-300 dark:text-slate-600'}`} />
-          </button>
+          <div className="flex w-full items-center gap-0 border-b border-slate-200 dark:border-slate-800">
+            {/* Agent picker */}
+            <div ref={agentPickerRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setAgentPickerOpen(v => !v)}
+                className={`flex items-center gap-1 pl-4 pr-2 py-1.5 transition-colors hover:bg-orange-50 dark:hover:bg-orange-900/20 ${
+                  agentPickerOpen ? 'bg-orange-50 dark:bg-orange-900/20' : ''
+                }`}
+                title={t('chat.switchAgent', '切換 Agent')}
+              >
+                <span className="inline-flex shrink-0 items-center rounded-md bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-orange-600 dark:bg-orange-900/40 dark:text-orange-300">
+                  {chat.activeAgentId}
+                </span>
+                <ChevronDown size={9} className={`text-orange-400 transition-transform duration-150 ${agentPickerOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {/* Agent dropdown */}
+              {agentPickerOpen && (
+                <div className="absolute top-full left-0 z-30 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                  <div className="border-b border-slate-100 px-3 py-1.5 dark:border-slate-800">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                      {t('chat.selectAgent', 'Agent')}
+                    </span>
+                  </div>
+                  {agentOptions.map(agent => {
+                    const isActive = agent.id === chat.activeAgentId;
+                    return (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveChatAgent(agent.id);
+                          setAgentDraft(agent.id);
+                          setAgentPickerOpen(false);
+                        }}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                          isActive ? 'bg-sky-50 dark:bg-sky-900/30' : ''
+                        }`}
+                      >
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: agent.color ?? '#94a3b8' }}
+                        />
+                        <span className={`flex-1 truncate font-medium ${isActive ? 'text-sky-700 dark:text-sky-300' : 'text-slate-700 dark:text-slate-200'}`}>
+                          {agent.displayName}
+                        </span>
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${agent.snapshotState === 'active' ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                        {isActive && <Check size={10} className="shrink-0 text-sky-500" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {/* Session trigger */}
+            <button
+              type="button"
+              onClick={() => setSessionPanelOpen((v) => !v)}
+              className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-4 text-left transition-colors ${
+                sessionPanelOpen
+                  ? 'bg-sky-50/80 dark:bg-sky-900/20'
+                  : 'bg-slate-50/60 hover:bg-sky-50/60 dark:bg-slate-900/40 dark:hover:bg-sky-900/20'
+              }`}
+            >
+              <span className="text-[9px] text-slate-300 dark:text-slate-600">›</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                {chat.activeSessionKey}
+              </span>
+              <MessagesSquare size={10} className={`shrink-0 ${sessionPanelOpen ? 'text-sky-400' : 'text-slate-300 dark:text-slate-600'}`} />
+            </button>
+          </div>
 
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">
             {activeMessages.length === 0 && (

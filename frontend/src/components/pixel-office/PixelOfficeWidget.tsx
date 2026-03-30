@@ -3,6 +3,7 @@ import { Building2, X, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import PixelOfficeCanvas from './PixelOfficeCanvas';
 import { usePixelOfficeAgents } from './hooks/usePixelOfficeAgents';
+import { useStore } from '../../store';
 
 interface PixelOfficeWidgetProps {
   compact?: boolean;
@@ -13,6 +14,13 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
   const [isOpen, setIsOpen] = useState(false);
   const summaries = usePixelOfficeAgents();
   const activeCount = summaries.filter(s => s.snapshotState === 'active').length;
+  const { setChatOpen, setActiveChatAgent } = useStore();
+
+  const handleAgentClick = useCallback((agentId: string) => {
+    setActiveChatAgent(agentId);
+    setChatOpen(true);
+    setIsOpen(false);
+  }, [setActiveChatAgent, setChatOpen]);
 
   // Escape to close
   useEffect(() => {
@@ -69,7 +77,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
 
           {/* Canvas area */}
           <div className="min-h-0 flex-1">
-            <PixelOfficeCanvas paused={!isOpen} />
+            <PixelOfficeCanvas paused={!isOpen} onAgentClick={handleAgentClick} />
           </div>
         </div>
       )}
