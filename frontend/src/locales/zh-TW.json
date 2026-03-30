@@ -195,7 +195,9 @@
       "filterDisabled": "已停止",
       "lastOk": "成功",
       "lastFail": "失敗",
-      "errorCount": "{{count}} 次錯誤"
+      "errorCount": "{{count}} 次錯誤",
+      "timeout": "逾時 {{val}}",
+      "lastRun": "最後執行 {{val}}"
     },
     "activeSessions": {
       "filterRunning": "僅執行中",
@@ -237,6 +239,8 @@
     "inputHint": "Enter 送出，Shift+Enter 換行",
     "commandHint": "/stop 停止 · /new 新對話",
     "wsDisconnected": "WebSocket 未連線",
+    "retryWsConnect": "重試連線",
+    "wsReconnectFailed": "重連失敗：{{msg}}",
     "queuedMessages": "已佇列 {{count}} 則訊息",
     "sessions": {
       "title": "對話紀錄",

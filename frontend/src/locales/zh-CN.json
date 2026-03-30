@@ -187,7 +187,9 @@
       "filterDisabled": "已停止",
       "lastOk": "成功",
       "lastFail": "失败",
-      "errorCount": "{{count}} 次错误"
+      "errorCount": "{{count}} 次错误",
+      "timeout": "超时 {{val}}",
+      "lastRun": "最后执行 {{val}}"
     },
     "activeSessions": {
       "filterRunning": "仅运行中",
@@ -229,6 +231,8 @@
     "inputHint": "Enter 发送，Shift+Enter 换行",
     "commandHint": "/stop 停止 · /new 新对话",
     "wsDisconnected": "WebSocket 未连线",
+    "retryWsConnect": "重试连线",
+    "wsReconnectFailed": "重连失败：{{msg}}",
     "queuedMessages": "已排队 {{count}} 则",
     "sessions": {
       "title": "对话记录",

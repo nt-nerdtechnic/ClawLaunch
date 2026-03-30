@@ -1140,13 +1140,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           </button>
                         </div>
                       </div>
-                      {/* 副資訊列：排程 · 上次時間 · 下次時間 */}
+                      {/* 副資訊列：排程 · timeout · 下次時間 · 上次時間 */}
                       <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
                         <span className="font-mono text-violet-400/70">{formatInterval(job.schedule, t)}</span>
-                        {job.state?.lastRunAtMs && (
+                        {job.payload?.timeoutSeconds && (
                           <>
                             <span className="opacity-40">·</span>
-                            <span>{relTime(job.state.lastRunAtMs, t)}</span>
+                            <span className="text-amber-400/70">{t('controlCenter.cronJobs.timeout', { val: `${Math.round(job.payload.timeoutSeconds / 60)}m` })}</span>
                           </>
                         )}
                         {job.enabled && job.state?.nextRunAtMs && (
@@ -1155,10 +1155,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             <span className="text-violet-400">{nextTime(job.state.nextRunAtMs, t)}</span>
                           </>
                         )}
-                        {job.payload?.timeoutSeconds && (
+                        {job.state?.lastRunAtMs && (
                           <>
                             <span className="opacity-40">·</span>
-                            <span className="text-amber-400/70">timeout {Math.round(job.payload.timeoutSeconds / 60)}m</span>
+                            <span>{t('controlCenter.cronJobs.lastRun', { val: relTime(job.state.lastRunAtMs, t) })}</span>
                           </>
                         )}
                       </div>

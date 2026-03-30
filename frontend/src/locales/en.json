@@ -195,7 +195,9 @@
       "filterDisabled": "Stopped",
       "lastOk": "OK",
       "lastFail": "Failed",
-      "errorCount": "{{count}} error(s)"
+      "errorCount": "{{count}} error(s)",
+      "timeout": "timeout {{val}}",
+      "lastRun": "last run {{val}}"
     },
     "activeSessions": {
       "filterRunning": "Running Only",
@@ -237,6 +239,8 @@
     "inputHint": "Enter to send, Shift+Enter for newline",
     "commandHint": "/stop abort \u00b7 /new session",
     "wsDisconnected": "WebSocket disconnected",
+    "retryWsConnect": "Retry connection",
+    "wsReconnectFailed": "Reconnect failed: {{msg}}",
     "queuedMessages": "{{count}} queued",
     "sessions": {
       "title": "Chat History",

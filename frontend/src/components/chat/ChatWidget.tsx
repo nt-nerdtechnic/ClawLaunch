@@ -160,6 +160,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
   const [ocSessions, setOcSessions] = useState<OpenClawSessionEntry[]>([]);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [reconnectingGatewayWs, setReconnectingGatewayWs] = useState(false);
+  const [gatewayWsReconnectError, setGatewayWsReconnectError] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
@@ -250,6 +252,12 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     clearChatUnread();
   }, [chat.isOpen, clearChatUnread]);
 
+  useEffect(() => {
+    if (chat.gatewayWsConnected) {
+      setGatewayWsReconnectError('');
+    }
+  }, [chat.gatewayWsConnected]);
+
   // Request desktop notification permission once
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -336,6 +344,27 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       // ignore
     }
   };
+
+  const handleManualReconnectGatewayWs = useCallback(async () => {
+    if (!window.electronAPI?.ensureGatewayWs) {
+      setGatewayWsReconnectError(t('chat.unavailable'));
+      return;
+    }
+
+    setReconnectingGatewayWs(true);
+    setGatewayWsReconnectError('');
+    try {
+      const result = await window.electronAPI.ensureGatewayWs();
+      setGatewayWsConnected(result.connected);
+      if (!result.connected) {
+        setGatewayWsReconnectError(result.error || t('chat.wsDisconnected'));
+      }
+    } catch (e) {
+      setGatewayWsReconnectError(e instanceof Error ? e.message : t('chat.errorGeneric'));
+    } finally {
+      setReconnectingGatewayWs(false);
+    }
+  }, [setGatewayWsConnected, t]);
 
   // Switch to the selected session and load its history
   const handleSelectSession = (session: OpenClawSessionEntry) => {
@@ -715,9 +744,27 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               </div>
             )}
             {running && !chat.gatewayWsConnected && (
-              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
-                <WifiOff size={12} />
-                {t('chat.wsDisconnected', 'WebSocket 未連線')}
+              <div className="mb-2 space-y-1">
+                <div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+                  <WifiOff size={12} />
+                  <span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span>
+                  <button
+                    type="button"
+                    onClick={() => void handleManualReconnectGatewayWs()}
+                    disabled={reconnectingGatewayWs}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300"
+                    title={t('chat.retryWsConnect', '重試連線')}
+                    aria-label={t('chat.retryWsConnect', '重試連線')}
+                  >
+                    <RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />
+                    {t('chat.retryWsConnect', '重試連線')}
+                  </button>
+                </div>
+                {gatewayWsReconnectError && (
+                  <div className="text-[10px] text-rose-600 dark:text-rose-400">
+                    {t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}
+                  </div>
+                )}
               </div>
             )}
             {!running && (
