@@ -474,16 +474,43 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       updateTmpPath = '';
 
       // ── Auto-rollback helper (used by steps 6 & 7) ───────────────────────
-      const autoRollback = async (reason: string): Promise<void> => {
+      // Returns true if rollback succeeded and was verified, false otherwise.
+      const autoRollback = async (reason: string): Promise<boolean> => {
         ctx.emitShellStdout(`>>> ${reason} — auto-rolling back to pre-update state...\n`, 'stderr');
         try {
           await fs.cp(backupPath, corePath, { recursive: true, force: true });
-          ctx.emitShellStdout(`>>> Rolled back to ${backupPath}\n`, 'stdout');
+
+          // Verify: package.json must exist and version must match backup
+          const readPkg = async (dir: string) => {
+            const raw = await fs.readFile(path.join(dir, 'package.json'), 'utf-8').catch(() => null);
+            if (!raw) return null;
+            try { return JSON.parse(raw) as { version?: string }; } catch { return null; }
+          };
+          const [restoredPkg, backupPkg] = await Promise.all([readPkg(corePath), readPkg(backupPath)]);
+
+          if (!restoredPkg) {
+            ctx.emitShellStdout(
+              `>>> Rollback verification failed: package.json missing after restore.\nManually restore from: ${backupPath}\n`,
+              'stderr'
+            );
+            return false;
+          }
+          if (backupPkg?.version && restoredPkg.version !== backupPkg.version) {
+            ctx.emitShellStdout(
+              `>>> Rollback verification failed: version mismatch (expected ${backupPkg.version}, got ${restoredPkg.version ?? 'unknown'}).\nManually restore from: ${backupPath}\n`,
+              'stderr'
+            );
+            return false;
+          }
+
+          ctx.emitShellStdout(`>>> Rolled back to v${restoredPkg.version ?? 'unknown'} ✓\n`, 'stdout');
+          return true;
         } catch (rbErr) {
           ctx.emitShellStdout(
             `>>> Auto-rollback failed: ${(rbErr as Error).message}\nManually restore from: ${backupPath}\n`,
             'stderr'
           );
+          return false;
         }
       };
 
@@ -494,8 +521,9 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       );
       if (installRes.code !== 0) {
         const detail = [String(installRes.stderr || '').trim(), String(installRes.stdout || '').trim()].filter(Boolean).join('\n');
-        await autoRollback('Dependency installation failed');
-        return { code: 1, stderr: detail || `Dependency installation failed (exit code ${installRes.code}).`, exitCode: 1 };
+        const rolledBack = await autoRollback('Dependency installation failed');
+        const suffix = rolledBack ? '' : ` Rollback also failed — manually restore from: ${backupPath}`;
+        return { code: 1, stderr: (detail || `Dependency installation failed (exit code ${installRes.code}).`) + suffix, exitCode: 1 };
       }
 
       // ── Step 7: warmup to verify runtime is operational ──────────────────
@@ -504,13 +532,16 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
         'Prebuilding OpenClaw runtime...'
       );
       if (warmupRes.code !== 0) {
-        await autoRollback('Runtime warm-up failed');
-        // node_modules was updated by the successful pnpm install; reinstall against restored source
-        await runCmd(
-          'zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile',
-          'Reinstalling dependencies after rollback...'
-        ).catch(() => {});
-        return { code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 };
+        const rolledBack = await autoRollback('Runtime warm-up failed');
+        if (rolledBack) {
+          // node_modules was updated by the successful pnpm install; reinstall against restored source
+          await runCmd(
+            'zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile',
+            'Reinstalling dependencies after rollback...'
+          ).catch(() => {});
+        }
+        const suffix = rolledBack ? '' : ` Rollback also failed — manually restore from: ${backupPath}`;
+        return { code: 1, stderr: (warmupRes.stderr || 'OpenClaw runtime warm-up failed.') + suffix, exitCode: 1 };
       }
 
       ctx.emitShellStdout(`>>> Update to ${targetVersion} complete!\n`, 'stdout');

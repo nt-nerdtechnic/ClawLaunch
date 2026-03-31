@@ -257,7 +257,6 @@ export function useGatewayActions({
         startCmd = runCmd;
         const payload = {
           command: runCmd,
-          autoRestart: false,
         };
         const resRaw = await window.electronAPI.exec(`gateway:start-bg-json ${JSON.stringify(payload)}`);
         const code = resRaw.code;

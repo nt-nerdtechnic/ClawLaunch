@@ -92,6 +92,8 @@ declare global {
       scanSessions: (payload?: string) => Promise<{ code: number; stdout: string; stderr: string }>;
       listActivityEvents: (options: { limit?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;
       scanActivityNow: () => Promise<{ code: number; stdout: string }>;
+      launchChromeDebug: (port: number) => Promise<{ success: boolean; port?: number; error?: string }>;
+      checkChromeDebug: (port: number) => Promise<{ running: boolean; port?: number }>;
     };
   }
 }

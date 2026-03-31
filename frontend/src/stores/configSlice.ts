@@ -18,6 +18,7 @@ export interface Config {
   theme?: 'light' | 'dark';
   language?: string;
   appVersion?: string;
+  chromeDebugPort?: number;
 }
 
 export interface DetectedConfig {
@@ -61,6 +62,7 @@ export const createConfigSlice: StateCreator<ConfigSlice> = (set) => ({
     workspacePath: '',
     language: localStorage.getItem('i18nextLng') || 'zh-TW',
     appVersion: '',
+    chromeDebugPort: 9222,
   },
   detectedConfig: null,
   detectingPaths: false,

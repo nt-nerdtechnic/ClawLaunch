@@ -2,6 +2,7 @@ import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import net from 'node:net';
+import { spawn } from 'node:child_process';
 import { sleep } from '../utils/shell-utils.js';
 
 export interface WindowHandlerContext {
@@ -290,5 +291,56 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
     } catch (e: unknown) {
       return { success: false, dataUrl: '', error: (e as Error).message };
     }
+  });
+
+  ipcMain.handle('browser:launch-chrome-debug', async (_event, port: number) => {
+    const portNum = Math.max(1024, Math.min(65535, Number(port) || 9222));
+    const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    const home = app.getPath('home');
+    // Chrome forbids --remote-debugging-port with the default profile dir.
+    // Use a dedicated non-default dir so DevTools is allowed.
+    const userDataDir = `${home}/Library/Application Support/Google/ChromeDebugging`;
+
+    try {
+      // Step 1: Force-kill all Chrome processes (SIGKILL)
+      await ctx.runShellCommand('pkill -9 -f "Google Chrome" 2>/dev/null; true');
+
+      // Step 2: Fixed wait then poll until Chrome is gone (max 5s)
+      await sleep(1500);
+      for (let i = 0; i < 7; i++) {
+        const check = await ctx.runShellCommand('pgrep -f "Google Chrome" 2>/dev/null; true');
+        if (!check.stdout.trim()) break;
+        await sleep(500);
+      }
+
+      // Step 3: Remove SingletonLock/Cookie so Chrome won't skip debug flags
+      await ctx.runShellCommand(
+        `rm -f '${userDataDir}/SingletonLock' '${userDataDir}/SingletonCookie' 2>/dev/null; true`
+      );
+      await sleep(300);
+
+      // Step 4: Relaunch Chrome with remote debugging and original user data dir
+      const child = spawn(chromePath, [
+        `--remote-debugging-port=${portNum}`,
+        `--user-data-dir=${userDataDir}`,
+        '--no-first-run',
+      ], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+
+      return { success: true, port: portNum };
+    } catch (e) {
+      return { success: false, port: portNum, error: (e as Error).message };
+    }
+  });
+
+  ipcMain.handle('browser:check-chrome-debug', async (_event, port: number) => {
+    const portNum = Math.max(1024, Math.min(65535, Number(port) || 9222));
+    // lsof requires elevated perms on macOS 15; use curl against the DevTools endpoint instead
+    const res = await ctx.runShellCommand(`curl -s --max-time 2 http://localhost:${portNum}/json/version`);
+    const running = res.code === 0 && res.stdout.trim().length > 0;
+    return { running, port: portNum };
   });
 }

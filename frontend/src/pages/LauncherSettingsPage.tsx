@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download, Globe, Play, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import type { Config } from '../store';
@@ -45,6 +45,53 @@ export const LauncherSettingsPage: React.FC = () => {
     return null;
   });
   const [updateError, setUpdateError] = useState<string>('');
+
+  const [chromeRunning, setChromeRunning] = useState(false);
+  const [chromeLaunching, setChromeLaunching] = useState(false);
+  const [chromeChecking, setChromeChecking] = useState(false);
+
+  const handleCheckChromeStatus = async () => {
+    setChromeChecking(true);
+    try {
+      const res = await window.electronAPI.checkChromeDebug(config.chromeDebugPort ?? 9222);
+      setChromeRunning(res.running);
+    } finally {
+      setChromeChecking(false);
+    }
+  };
+
+  const handleLaunchChrome = async () => {
+    setChromeLaunching(true);
+    try {
+      addLog(`[Browser] 正在關閉 Chrome 並以除錯模式重新啟動（port ${config.chromeDebugPort ?? 9222}）…`);
+      const res = await window.electronAPI.launchChromeDebug(config.chromeDebugPort ?? 9222);
+      if (!res.success) {
+        addLog(`[Browser] Chrome 啟動失敗: ${res.error}`);
+      } else {
+        addLog(`[Browser] Chrome 已重新啟動，--remote-debugging-port=${config.chromeDebugPort ?? 9222}`);
+        // Poll until port is bound (Chrome needs a few seconds after spawn)
+        let retries = 0;
+        const pollStatus = async () => {
+          const r = await window.electronAPI.checkChromeDebug(config.chromeDebugPort ?? 9222);
+          setChromeRunning(r.running);
+          if (!r.running && retries < 5) {
+            retries++;
+            setTimeout(pollStatus, 2000);
+          }
+        };
+        setTimeout(pollStatus, 3000);
+      }
+    } finally {
+      setChromeLaunching(false);
+    }
+  };
+
+  useEffect(() => {
+    handleCheckChromeStatus();
+    const timer = setInterval(handleCheckChromeStatus, 10000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveButtonLabel =
     launcherSaveState === 'saving'
@@ -261,6 +308,80 @@ export const LauncherSettingsPage: React.FC = () => {
             >
               <span className="mx-1 h-5 w-5 rounded-full bg-white shadow-sm" />
             </button>
+          </div>
+        </div>
+
+        {/* Browser Control Section */}
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4 flex items-center gap-1.5">
+            <Globe size={11} />
+            Browser Control
+          </div>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Chrome 遠端除錯模式</span>
+                  <div className="relative group">
+                    <Info size={12} className="text-slate-400 dark:text-slate-500 cursor-help" />
+                    <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                      <div className="bg-slate-900 dark:bg-slate-800 text-slate-100 text-[10px] font-mono rounded-xl px-3 py-2.5 shadow-xl space-y-0.5">
+                        <div className="text-[9px] uppercase tracking-widest text-slate-400 font-sans font-bold mb-1.5">執行步驟</div>
+                        <div>1. pkill -9 -f "Google Chrome"</div>
+                        <div>2. pgrep 確認已關閉</div>
+                        <div>3. rm SingletonLock / SingletonCookie</div>
+                        <div>4. "/Applications/…/Google Chrome" \</div>
+                        <div className="pl-3 text-slate-300">--remote-debugging-port=9222 \</div>
+                        <div className="pl-3 text-slate-300">--user-data-dir="~/Library/…/Chrome" \</div>
+                        <div className="pl-3 text-slate-300">--no-first-run</div>
+                      </div>
+                      <div className="w-2 h-2 bg-slate-900 dark:bg-slate-800 rotate-45 mx-auto -mt-1" />
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  自動關閉現有 Chrome → 確認完全關閉 → 以 <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">--remote-debugging-port</code> 重新啟動，讓 OpenClaw 控制你的瀏覽器
+                </div>
+              </div>
+              <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg ${
+                chromeRunning
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              }`}>
+                {chromeRunning ? '運行中' : '未啟動'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-bold text-slate-500 shrink-0">Port</label>
+              <input
+                type="number"
+                value={config.chromeDebugPort ?? 9222}
+                onChange={(e) => setConfig({ chromeDebugPort: Number(e.target.value) })}
+                className="w-24 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                min={1024}
+                max={65535}
+              />
+              <button
+                type="button"
+                onClick={handleCheckChromeStatus}
+                disabled={chromeChecking}
+                title="檢查狀態"
+                className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-60"
+              >
+                <RefreshCw size={12} className={`text-slate-500 dark:text-slate-400 ${chromeChecking ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                type="button"
+                onClick={handleLaunchChrome}
+                disabled={chromeLaunching}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              >
+                <Play size={12} />
+                {chromeLaunching ? '重新啟動中…' : '重新啟動 Chrome（除錯模式）'}
+              </button>
+            </div>
+
           </div>
         </div>
 

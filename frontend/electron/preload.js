@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listActivityEvents: (payload) => ipcRenderer.invoke('activity:events:list', payload ? JSON.stringify(payload) : undefined),
   scanActivityNow: (payload) => ipcRenderer.invoke('activity:scan:now', payload ? JSON.stringify(payload) : undefined),
   restartActivityWatcher: (payload) => ipcRenderer.invoke('activity:watch:restart', payload ? JSON.stringify(payload) : undefined),
+  launchChromeDebug: (port) => ipcRenderer.invoke('browser:launch-chrome-debug', port),
+  checkChromeDebug: (port) => ipcRenderer.invoke('browser:check-chrome-debug', port),
   writeFile: (filePath, content) => ipcRenderer.invoke('fs:write-file', filePath, content),
   readFileEncoded: (filePath, encoding) => ipcRenderer.invoke('fs:read-file-encoded', filePath, encoding),
   detectEncoding: (filePath) => ipcRenderer.invoke('fs:detect-encoding', filePath),

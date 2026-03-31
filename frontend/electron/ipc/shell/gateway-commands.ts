@@ -39,31 +39,12 @@ export async function handleGatewayCommands(fullCommand: string, ctx: ShellExecC
       ctx.gatewayWatchdog['command'] = actualCmd;
       ctx.gatewayWatchdog['stopRequested'] = false;
       ctx.gatewayWatchdog['restartAttempts'] = 0;
-      ctx.gatewayWatchdog['options'] = {
-        autoRestart: Boolean(payload?.autoRestart),
-        maxRestarts: Number.isInteger(payload?.maxRestarts) ? Math.max(1, Number(payload.maxRestarts)) : 5,
-        baseBackoffMs: Number.isInteger(payload?.baseBackoffMs) ? Math.max(200, Number(payload.baseBackoffMs)) : 1000,
-      };
+      ctx.gatewayWatchdog['options'] = { ...ctx.defaultGatewayOptions };
       const child = ctx.spawnWatchedGatewayProcess(actualCmd);
       return { code: 0, stdout: String(child.pid ?? ''), exitCode: 0 };
     } catch (e) {
       return { code: 1, stderr: (e as Error)?.message || 'Invalid gateway:start-bg-json payload', exitCode: 1 };
     }
-  }
-
-  if (fullCommand.startsWith('gateway:start-bg ')) {
-    const actualCmd = fullCommand.replace(/^gateway:start-bg\s+/, '').trim();
-    if (!actualCmd) {
-      return { code: 1, stderr: 'Missing command for gateway:start-bg', exitCode: 1 };
-    }
-    ctx.stopGatewayWatchdog('replace previous gateway process');
-    ctx.stopGatewayHttpWatchdog('replace previous watchdog');
-    ctx.gatewayWatchdog['command'] = actualCmd;
-    ctx.gatewayWatchdog['stopRequested'] = false;
-    ctx.gatewayWatchdog['restartAttempts'] = 0;
-    ctx.gatewayWatchdog['options'] = { ...ctx.defaultGatewayOptions };
-    const child = ctx.spawnWatchedGatewayProcess(actualCmd);
-    return { code: 0, stdout: String(child.pid ?? ''), exitCode: 0 };
   }
 
   return null;
