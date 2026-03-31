@@ -8,6 +8,7 @@ import { useAppComputedValues } from '../hooks/useAppComputedValues';
 import { useRuntimeActions } from '../hooks/useRuntimeActions';
 import { AuthManagementPanel } from '../components/AuthManagementPanel';
 import { TelegramPairingSection } from '../components/TelegramPairingSection';
+import TerminalLog from '../components/common/TerminalLog';
 
 interface ChannelOption {
   id: string;
@@ -55,6 +56,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const detectedConfig = useStore((s) => s.detectedConfig);
   const setRuntimeProfile = useStore((s) => s.setRuntimeProfile);
   const addLog = useStore((s) => s.addLog);
+  const logs = useStore((s) => s.logs);
   const resolvedConfigDir = ConfigService.normalizeConfigDir(config.configPath);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
   const { authProfiles, loadAuthProfiles } = useAuthProfiles(resolvedConfigDir, 'runtimeSettings');
@@ -145,21 +147,28 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const [channelSaving, setChannelSaving] = useState('');
   const [channelSaved, setChannelSaved] = useState('');
 
-  // OpenClaw core version
+  // OpenClaw core version — read package.json directly (instant, no runtime boot)
   const [openClawVersion, setOpenClawVersion] = useState<string>('');
-  useEffect(() => {
+  const refreshOpenClawVersion = React.useCallback(async () => {
     if (!config.corePath?.trim()) return;
-    void (async () => {
-      const envPrefix = buildOpenClawEnvPrefix();
-      const res = await window.electronAPI.exec(
-        `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw --version`
-      );
-      if (res.code === 0 && res.stdout?.trim()) {
-        const match = res.stdout.match(/\d{4}\.\d+\.\d+/);
+    const res = await window.electronAPI.exec(
+      `cat ${shellQuote(config.corePath + '/package.json')}`
+    );
+    if (res.code === 0 && res.stdout?.trim()) {
+      try {
+        const pkg = JSON.parse(res.stdout);
+        const match = String(pkg.version || '').match(/\d{4}\.\d+\.\d+/);
         if (match) setOpenClawVersion('v' + match[0]);
-      }
-    })();
-  }, [config.corePath]);
+      } catch { /* ignore parse errors */ }
+    }
+  }, [config.corePath, shellQuote]);
+  useEffect(() => { void refreshOpenClawVersion(); }, [refreshOpenClawVersion]);
+  // Re-read version after update completes
+  const prevIsUpdating = useRef(false);
+  useEffect(() => {
+    if (prevIsUpdating.current && !isUpdating) void refreshOpenClawVersion();
+    prevIsUpdating.current = isUpdating;
+  }, [isUpdating, refreshOpenClawVersion]);
 
   // Available versions for update
   const [availableVersions, setAvailableVersions] = useState<string[]>(['main']);
@@ -188,6 +197,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const wasUpdatingRef = useRef(false);
+  const updateLogStartRef = useRef<number>(-1);
 
   const fetchBackups = async () => {
     if (!config.corePath?.trim()) return;
@@ -207,6 +217,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   useEffect(() => {
     if (isUpdating) {
       wasUpdatingRef.current = true;
+      updateLogStartRef.current = logs.length;
     } else if (wasUpdatingRef.current) {
       wasUpdatingRef.current = false;
       // Update just completed, auto-open rollback section and load backups
@@ -371,6 +382,13 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             )}
           </button>
         </div>
+        {(isUpdating || logs.length > updateLogStartRef.current) && updateLogStartRef.current >= 0 && (
+          <TerminalLog
+            logs={logs.slice(updateLogStartRef.current)}
+            height="h-52"
+            title="Update Output"
+          />
+        )}
       </div>
 
       {/* Rollback Section */}

@@ -1,6 +1,6 @@
 import { sleep } from '../utils/shell-utils.js';
 import { isGatewayOnlineFromStatus } from '../services/openclaw-runtime.js';
-import { launchGatewayViaTerminal } from './watchdog.js';
+import { launchGatewayViaTerminal, spawnWatchedGatewayProcess, stopGatewayWatchdog } from './watchdog.js';
 
 export interface GatewayHttpWatchdogOptions {
   enabled: boolean;
@@ -11,6 +11,7 @@ export interface GatewayHttpWatchdogOptions {
   maxRestarts: number;
   startupGraceMs: number;
   restartCooldownMs: number;
+  restartMode: 'terminal' | 'spawn';
 }
 
 export interface GatewayHttpWatchdogState {
@@ -31,6 +32,7 @@ export const DEFAULT_GATEWAY_HTTP_WATCHDOG_OPTIONS: GatewayHttpWatchdogOptions =
   maxRestarts: 5,
   startupGraceMs: 20000,
   restartCooldownMs: 20000,
+  restartMode: 'terminal',
 };
 
 export const gatewayHttpWatchdog: GatewayHttpWatchdogState = {
@@ -124,16 +126,23 @@ export const runGatewayHttpWatchdogCheck = async (): Promise<void> => {
 
     gatewayHttpWatchdog.restartAttempts += 1;
     _emit(
-      `[gateway-http-watchdog] restart attempt ${gatewayHttpWatchdog.restartAttempts}/${gatewayHttpWatchdog.options.maxRestarts} via macOS Terminal\n`,
+      `[gateway-http-watchdog] restart attempt ${gatewayHttpWatchdog.restartAttempts}/${gatewayHttpWatchdog.options.maxRestarts} via ${gatewayHttpWatchdog.options.restartMode === 'spawn' ? 'background spawn' : 'macOS Terminal'}\n`,
       'stdout',
     );
 
-    const ok = await launchGatewayViaTerminal(restartCommand);
-    if (ok) {
+    if (gatewayHttpWatchdog.options.restartMode === 'spawn') {
+      stopGatewayWatchdog('pre-restart by http-watchdog');
+      spawnWatchedGatewayProcess(restartCommand);
       gatewayHttpWatchdog.suppressChecksUntil = Date.now() + gatewayHttpWatchdog.options.restartCooldownMs;
-      _emit('[gateway-http-watchdog] restart command sent to Terminal\n', 'stdout');
+      _emit('[gateway-http-watchdog] restart command sent (background spawn)\n', 'stdout');
     } else {
-      _emit('[gateway-http-watchdog] failed to open Terminal for restart\n', 'stderr');
+      const ok = await launchGatewayViaTerminal(restartCommand);
+      if (ok) {
+        gatewayHttpWatchdog.suppressChecksUntil = Date.now() + gatewayHttpWatchdog.options.restartCooldownMs;
+        _emit('[gateway-http-watchdog] restart command sent to Terminal\n', 'stdout');
+      } else {
+        _emit('[gateway-http-watchdog] failed to open Terminal for restart\n', 'stderr');
+      }
     }
   } catch (e) {
     _emit(`[gateway-http-watchdog] check error: ${String((e as Error)?.message || e)}\n`, 'stderr');
@@ -152,6 +161,7 @@ export const startGatewayHttpWatchdog = (options: Partial<GatewayHttpWatchdogOpt
     maxRestarts: Number.isFinite(Number(options.maxRestarts)) ? Math.max(1, Number(options.maxRestarts)) : 5,
     startupGraceMs: Number.isFinite(Number(options.startupGraceMs)) ? Math.max(3000, Number(options.startupGraceMs)) : 20000,
     restartCooldownMs: Number.isFinite(Number(options.restartCooldownMs)) ? Math.max(3000, Number(options.restartCooldownMs)) : 20000,
+    restartMode: options.restartMode === 'spawn' ? 'spawn' : 'terminal',
   };
 
   if (!nextOptions.enabled || !nextOptions.healthCheckCommand || !nextOptions.restartCommand) {

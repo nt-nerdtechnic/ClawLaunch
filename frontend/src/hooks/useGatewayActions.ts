@@ -254,9 +254,10 @@ export function useGatewayActions({
       } else {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
         const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
+        startCmd = runCmd;
         const payload = {
           command: runCmd,
-          autoRestart: !!config.autoRestartGateway,
+          autoRestart: false,
         };
         const resRaw = await window.electronAPI.exec(`gateway:start-bg-json ${JSON.stringify(payload)}`);
         const code = resRaw.code;
@@ -273,7 +274,7 @@ export function useGatewayActions({
         setRunning(true);
         addLog(t('logs.gatewayStarted'), 'system');
 
-        if (useExternalTerminal && !config.installDaemon) {
+        if (!config.installDaemon) {
           const healthCheckCommand = port ? `lsof -nP -iTCP:${port} -sTCP:LISTEN` : '';
           const watchdogPayload = {
             enabled: !!config.autoRestartGateway,
@@ -284,6 +285,7 @@ export function useGatewayActions({
             maxRestarts: 5,
             startupGraceMs: 20000,
             restartCooldownMs: 20000,
+            restartMode: useExternalTerminal ? 'terminal' : 'spawn',
           };
           const wdRes = await window.electronAPI.exec(`gateway:http-watchdog-start-json ${JSON.stringify(watchdogPayload)}`);
           const wdCode = wdRes.code ?? wdRes.exitCode;

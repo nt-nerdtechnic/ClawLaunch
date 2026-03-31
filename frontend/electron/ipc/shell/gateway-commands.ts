@@ -35,7 +35,7 @@ export async function handleGatewayCommands(fullCommand: string, ctx: ShellExecC
         return { code: 1, stderr: 'Missing command for gateway:start-bg-json', exitCode: 1 };
       }
       ctx.stopGatewayWatchdog('replace previous gateway process');
-      ctx.stopGatewayHttpWatchdog('switch to process watchdog mode');
+      ctx.stopGatewayHttpWatchdog('replace previous watchdog');
       ctx.gatewayWatchdog['command'] = actualCmd;
       ctx.gatewayWatchdog['stopRequested'] = false;
       ctx.gatewayWatchdog['restartAttempts'] = 0;
@@ -57,7 +57,7 @@ export async function handleGatewayCommands(fullCommand: string, ctx: ShellExecC
       return { code: 1, stderr: 'Missing command for gateway:start-bg', exitCode: 1 };
     }
     ctx.stopGatewayWatchdog('replace previous gateway process');
-    ctx.stopGatewayHttpWatchdog('switch to process watchdog mode');
+    ctx.stopGatewayHttpWatchdog('replace previous watchdog');
     ctx.gatewayWatchdog['command'] = actualCmd;
     ctx.gatewayWatchdog['stopRequested'] = false;
     ctx.gatewayWatchdog['restartAttempts'] = 0;

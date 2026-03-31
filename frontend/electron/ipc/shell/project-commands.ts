@@ -505,6 +505,11 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       );
       if (warmupRes.code !== 0) {
         await autoRollback('Runtime warm-up failed');
+        // node_modules was updated by the successful pnpm install; reinstall against restored source
+        await runCmd(
+          'zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile',
+          'Reinstalling dependencies after rollback...'
+        ).catch(() => {});
         return { code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 };
       }
 
