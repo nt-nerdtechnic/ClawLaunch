@@ -44,12 +44,12 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
           clearTimeout(timeoutHandle);
           
           if (timedOut) {
-            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0, warning: 'Version list timed out, using fallback' });
+            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0 });
             return;
           }
           
           if (code !== 0) {
-            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0, error: stderr || `git ls-remote failed (code ${code})` });
+            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0 });
             return;
           }
           
