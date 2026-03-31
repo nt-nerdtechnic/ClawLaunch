@@ -1172,7 +1172,8 @@
       "securityAuditFailed": "Failed to launch security audit: {{msg}}",
       "missingCorePathToken": "Missing Core Path, cannot update channel token.",
       "missingConfigPathToken": "Missing Config Path, cannot update channel token.",
-      "updateChannelTokenFailed": "Failed to update {{channel}} token: {{msg}}"
+      "updateChannelTokenFailed": "Failed to update {{channel}} token: {{msg}}",
+      "updateCronMaxConcurrentRunsFailed": "Failed to update cron.maxConcurrentRuns"
     },
     "auth": {
       "management": "Auth Management",
@@ -1209,10 +1210,26 @@
       "success": "Update complete!",
       "restartingGateway": "Restarting Gateway...",
       "gatewayRestarted": "Gateway restarted.",
+      "gatewayRetrying": "Gateway not yet up, retrying status check...",
       "gatewayWarning": "Gateway may not have fully restarted. Please verify: {{msg}}",
       "failed": "Update failed: {{msg}}",
       "missingCore": "Core path not set",
       "installedLabel": "installed"
+    },
+    "rollback": {
+      "title": "Version Rollback",
+      "desc": "Select a backup snapshot to restore the core to that version. Current state is saved automatically before rollback.",
+      "selectBackup": "Select Backup",
+      "noBackups": "No backups yet. A backup is created automatically on each update.",
+      "rollbackBtn": "Rollback to This Version",
+      "rollingBack": "Rolling back...",
+      "success": "Successfully rolled back to {{path}}",
+      "failed": "Rollback failed: {{msg}}"
+    },
+    "cron": {
+      "title": "Cron Settings",
+      "maxConcurrentRuns": "Max Concurrent Runs",
+      "maxConcurrentRunsHelp": "Maximum number of cron jobs that can run simultaneously (cron.maxConcurrentRuns in openclaw.json). At 4 concurrent jobs running, load is approximately 4 / maxConcurrentRuns × 100%."
     },
     "providers": {
       "telegram": {
@@ -1610,7 +1627,8 @@
     "sections": {
       "soul": "Soul Management",
       "docs": "Document Management",
-      "uncategorized": "Uncategorized"
+      "uncategorized": "Uncategorized",
+      "images": "Images"
     },
     "refresh": "Re-scan",
     "files": "files",
@@ -1643,6 +1661,9 @@
     "cancelEdit": "Cancel",
     "saved": "Saved ✓",
     "revealInFinder": "Reveal in Finder",
+    "imgClearBtn": "Clear images in this folder",
+    "imgClearConfirm": "Confirm",
+    "imgClearCancel": "Cancel",
     "groups": {
       "memory": "MEMORY (Long-term)",
       "memoryDaily": "memory (Daily Log)",

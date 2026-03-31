@@ -1209,7 +1209,8 @@
       "securityAuditFailed": "啟動資安稽核失敗：{{msg}}",
       "missingCorePathToken": "缺少 Core Path，無法更新通道 Token。",
       "missingConfigPathToken": "缺少 Config Path，無法更新通道 Token。",
-      "updateChannelTokenFailed": "更新 {{channel}} Token 失敗：{{msg}}"
+      "updateChannelTokenFailed": "更新 {{channel}} Token 失敗：{{msg}}",
+      "updateCronMaxConcurrentRunsFailed": "更新 cron.maxConcurrentRuns 失敗"
     },
     "auth": {
       "management": "認證管理",
@@ -1246,10 +1247,26 @@
       "success": "更新完成！",
       "restartingGateway": "正在重新啟動 Gateway...",
       "gatewayRestarted": "Gateway 已重新啟動。",
+      "gatewayRetrying": "Gateway 尚未啟動，正在重新確認狀態...",
       "gatewayWarning": "Gateway 可能未完全重啟，請檢查：{{msg}}",
       "failed": "更新失敗：{{msg}}",
       "missingCore": "未設定核心路徑",
       "installedLabel": "已安裝"
+    },
+    "rollback": {
+      "title": "版本回滾",
+      "desc": "選擇一個備份快照，將核心還原到該版本。回滾前會自動儲存目前狀態。",
+      "selectBackup": "選擇備份",
+      "noBackups": "尚無備份記錄，執行一次更新後即會自動建立。",
+      "rollbackBtn": "回滾至此版本",
+      "rollingBack": "回滾中...",
+      "success": "已成功回滾至 {{path}}",
+      "failed": "回滾失敗：{{msg}}"
+    },
+    "cron": {
+      "title": "Cron 排程設定",
+      "maxConcurrentRuns": "最大同時執行數",
+      "maxConcurrentRunsHelp": "同時最多可執行的 cron job 數量（對應 openclaw.json 的 cron.maxConcurrentRuns）。例如目前有 4 個 job 在跑，系統負擔約為 4 / maxConcurrentRuns × 100%。"
     },
     "providers": {
       "telegram": {
@@ -1618,7 +1635,8 @@
     "sections": {
       "soul": "靈魂管理區",
       "docs": "文件管理區",
-      "uncategorized": "未分類"
+      "uncategorized": "未分類",
+      "images": "圖片管理區"
     },
     "groups": {
       "memory": "MEMORY（長期記憶）",
@@ -1685,6 +1703,9 @@
     "cancelEdit": "取消",
     "saved": "已儲存 ✓",
     "revealInFinder": "在 Finder 中顯示",
+    "imgClearBtn": "清除此資料夾的圖片",
+    "imgClearConfirm": "確認清除",
+    "imgClearCancel": "取消",
     "errors": {
       "readFailed": "讀取檔案失敗",
       "saveFailed": "儲存檔案失敗",

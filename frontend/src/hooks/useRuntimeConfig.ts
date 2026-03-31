@@ -21,6 +21,7 @@ export function useRuntimeConfig(
   const [runtimeDraftModel, setRuntimeDraftModel] = useState('');
   const [runtimeDraftBotToken, setRuntimeDraftBotToken] = useState('');
   const [runtimeDraftGatewayPort, setRuntimeDraftGatewayPort] = useState('');
+  const [runtimeDraftCronMaxConcurrentRuns, setRuntimeDraftCronMaxConcurrentRuns] = useState(8);
   const [dynamicModelOptions, setDynamicModelOptions] = useState<Array<{ provider: string; group: string; models: string[] }>>([]);
   const [dynamicModelSource, setDynamicModelSource] = useState('');
   const [dynamicModelLoading, setDynamicModelLoading] = useState(false);
@@ -76,9 +77,11 @@ export function useRuntimeConfig(
     const nextModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
     const nextBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
     const nextGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
+    const nextCronMaxConcurrentRuns = Number((runtimeProfile?.cron as Record<string, unknown> | null | undefined)?.maxConcurrentRuns ?? 8) || 8;
     setRuntimeDraftModel(nextModel);
     setRuntimeDraftBotToken(nextBotToken);
     setRuntimeDraftGatewayPort(nextGatewayPort);
+    setRuntimeDraftCronMaxConcurrentRuns(nextCronMaxConcurrentRuns);
   }, [activeTab, runtimeProfile, detectedConfig]);
 
   // Load dynamic model options
@@ -136,6 +139,8 @@ export function useRuntimeConfig(
     setRuntimeDraftBotToken,
     runtimeDraftGatewayPort,
     setRuntimeDraftGatewayPort,
+    runtimeDraftCronMaxConcurrentRuns,
+    setRuntimeDraftCronMaxConcurrentRuns,
     dynamicModelOptions,
     setDynamicModelOptions,
     dynamicModelSource,

@@ -904,8 +904,14 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
             const channel = String(dc?.channel || '').trim().toLowerCase();
             const lastTo = String(meta?.lastTo || dc?.to || '').trim();
             const persistentMainHasTarget = Boolean(lastTo);
+            const lastAssistantTrimmed = lastAssistantText.trim();
+            const isNoReply = lastAssistantTrimmed === 'NO_REPLY';
+            const isHeartbeatAck = lastAssistantTrimmed === 'HEARTBEAT_OK';
             const persistentMainHasActiveSignal = hasExplicitRunningState
-              || (isHeartbeatFresh && lastMessageRole !== 'assistant');
+              || isNoReply
+              || isHeartbeatAck
+              || (isHeartbeatFresh && lastMessageRole !== 'assistant')
+              || (isHeartbeatFresh && !isCompletedByContent);
             const persistentMainHasStopSignal = meta?.abortedLastRun === true
               || (lastMessageRole === 'assistant' && (hasExplicitStoppedState || isCompletedByContent))
               || (!isHeartbeatFresh && hasExplicitStoppedState);

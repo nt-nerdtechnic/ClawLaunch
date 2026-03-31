@@ -3,7 +3,7 @@ import {
   Brain, RefreshCw, FolderOpen, FileText, FileJson, ChevronRight,
   ChevronDown, AlertCircle, Loader2, Eye, Database,
   HardDrive, Clock, Search, X, Pencil, PencilOff, Save, Info, CalendarDays,
-  FileCode, Settings2,
+  FileCode, Settings2, Image as ImageIcon, Trash2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ConfigService } from '../services/configService';
@@ -31,7 +31,7 @@ interface MemoryGroup {
   error: string;
   exists: boolean;
   description: string;
-  section: 'soul' | 'docs' | 'uncategorized';
+  section: 'soul' | 'docs' | 'uncategorized' | 'images';
 }
 
 interface MemoryPageProps {
@@ -252,6 +252,10 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
   // ── Image state ───────────────────────────────────────────────────────────
   const [isImageFile, setIsImageFile] = useState(false);
   const [imageDataUrl, setImageDataUrl] = useState<string>('');
+
+  // ── Image group delete state ──────────────────────────────────────────────
+  const [imgDeleteConfirm, setImgDeleteConfirm] = useState<string | null>(null);
+  const [imgDeleting, setImgDeleting] = useState<string | null>(null);
 
   // ── Build group definitions from config ──────────────────────────────────
 
@@ -497,6 +501,76 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     return { exists: false, files: [], error: '' };
   }, []);
 
+  // ── Scan for image files across workspace (grouped by directory) ──────────
+
+  const IMAGE_SCAN_EXTS = [
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'tif',
+    'webp', 'ico', 'icns', 'svg', 'avif', 'heic',
+  ];
+
+  const scanImageGroups = useCallback(async (): Promise<MemoryGroup[]> => {
+    if (!workspacePath) return [];
+    try {
+      const nameChecks = IMAGE_SCAN_EXTS.map(e => `-iname "*.${e}"`).join(' -o ');
+      const findCmd = [
+        `find ${shellQuote(workspacePath)} -maxdepth 6 -type f`,
+        `\\( ${nameChecks} \\)`,
+        `! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/__pycache__/*"`,
+        `! -name ".DS_Store"`,
+        `2>/dev/null | head -400`,
+      ].join(' ');
+      const findRes = await window.electronAPI.exec(findCmd);
+      const paths = findRes.stdout.trim().split('\n').filter(Boolean);
+      if (paths.length === 0) return [];
+
+      const statCmd = `stat -f '%z\t%Sm\t%N' -t '%Y-%m-%d %H:%M' ${paths.map(p => shellQuote(p)).join(' ')} 2>/dev/null`;
+      const statRes = await window.electronAPI.exec(statCmd);
+      const statLines = statRes.stdout.trim().split('\n').filter(Boolean);
+
+      const allFiles: MemoryFile[] = statLines.map(line => {
+        const parts = line.split('\t');
+        const sz = parseInt(parts[0] || '0', 10);
+        const mod = parts[1] || '';
+        const fp = parts[2] || '';
+        const name = fp.split('/').pop() || fp;
+        return { name, fullPath: fp, size: isNaN(sz) ? 0 : sz, modified: mod, type: 'image' as const };
+      }).filter(f => f.fullPath);
+
+      // Group by parent directory
+      const byDir = new Map<string, MemoryFile[]>();
+      for (const file of allFiles) {
+        const dir = file.fullPath.split('/').slice(0, -1).join('/');
+        if (!byDir.has(dir)) byDir.set(dir, []);
+        byDir.get(dir)!.push(file);
+      }
+
+      const result: MemoryGroup[] = [];
+      for (const [dirPath, dirFiles] of byDir) {
+        dirFiles.sort((a, b) => a.name.localeCompare(b.name));
+        const relativeName = dirPath.startsWith(workspacePath + '/')
+          ? dirPath.slice(workspacePath.length + 1)
+          : (dirPath.split('/').pop() || dirPath);
+        result.push({
+          label: relativeName,
+          dirPath: `__img__:${dirPath}`,
+          icon: <ImageIcon size={15} />,
+          accent: 'text-pink-400',
+          description: dirPath,
+          section: 'images',
+          files: dirFiles,
+          loading: false,
+          error: '',
+          exists: true,
+        });
+      }
+      result.sort((a, b) => a.label.localeCompare(b.label));
+      return result;
+    } catch {
+      return [];
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspacePath]);
+
   // ── Full scan ─────────────────────────────────────────────────────────────
 
   const runScan = useCallback(async () => {
@@ -544,10 +618,11 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
       }
     }
 
-    setGroups([...standardResults, ...uncategorizedResults]);
+    const imageGroupResults = await scanImageGroups();
+    setGroups([...standardResults, ...uncategorizedResults, ...imageGroupResults]);
     setLastScanAt(new Date().toLocaleTimeString());
     setTotalScanning(false);
-  }, [buildGroupDefs, scanDir, workspacePath]);
+  }, [buildGroupDefs, scanDir, workspacePath, scanImageGroups]);
 
   useEffect(() => {
     if (workspacePath || configPath) {
@@ -725,17 +800,43 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     });
   };
 
+  // ── Delete image group files ──────────────────────────────────────────────
+
+  const deleteImageGroup = useCallback(async (group: MemoryGroup) => {
+    const filePaths = group.files.map(f => f.fullPath);
+    if (filePaths.length === 0) return;
+    setImgDeleting(group.dirPath);
+    setImgDeleteConfirm(null);
+    try {
+      const rmCmd = `rm -f ${filePaths.map(p => shellQuote(p)).join(' ')}`;
+      await window.electronAPI.exec(rmCmd);
+      if (selectedFile && group.files.some(f => f.fullPath === selectedFile.fullPath)) {
+        setSelectedFile(null);
+        setFileContent('');
+        setIsImageFile(false);
+        setImageDataUrl('');
+      }
+      await runScan();
+    } finally {
+      setImgDeleting(null);
+    }
+  }, [selectedFile, runScan]);
+
   const renderGroup = (group: MemoryGroup) => {
     const filtered = filterFiles(group.files);
     const isExpanded = expandedGroups.has(group.dirPath);
+    const isImgGroup = group.section === 'images';
+    const isPendingDelete = imgDeleteConfirm === group.dirPath;
+    const isDeletingNow = imgDeleting === group.dirPath;
 
     return (
       <div key={group.dirPath} className="border-b border-slate-100 dark:border-slate-800/50 last:border-0">
         {/* Group header */}
+        <div className="relative">
         <button
           type="button"
           onClick={() => toggleGroup(group.dirPath)}
-          className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors text-left"
+          className={`w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors text-left${isImgGroup ? ' pr-16' : ''}`}
         >
           {isExpanded
             ? <ChevronDown size={12} className="text-slate-400 flex-shrink-0" />
@@ -756,14 +857,50 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
             </CustomTooltip>
           </div>
           <span className="text-[10px] font-mono text-slate-400 ml-auto flex-shrink-0">
-            {group.loading
+            {!isPendingDelete && (group.loading
               ? <Loader2 size={10} className="animate-spin" />
               : group.exists
                 ? group.files.length
                 : '—'
-            }
+            )}
           </span>
         </button>
+        {isImgGroup && (
+          <div className="absolute right-3 top-0 bottom-0 flex items-center gap-1 pointer-events-none">
+            {!isPendingDelete && !isDeletingNow && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setImgDeleteConfirm(group.dirPath); }}
+                className="pointer-events-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/40 text-slate-300 dark:text-slate-600 hover:text-red-400 transition-colors"
+                title={t('memory.imgClearBtn')}
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
+            {isPendingDelete && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); void deleteImageGroup(group); }}
+                  className="pointer-events-auto px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors"
+                >
+                  {t('memory.imgClearConfirm')}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setImgDeleteConfirm(null); }}
+                  className="pointer-events-auto px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  {t('memory.imgClearCancel')}
+                </button>
+              </>
+            )}
+            {isDeletingNow && (
+              <Loader2 size={10} className="pointer-events-auto animate-spin text-red-400" />
+            )}
+          </div>
+        )}
+        </div>
 
         {/* Files list */}
         {isExpanded && (
@@ -925,6 +1062,25 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
                   {t('memory.sections.uncategorized')}
                 </div>
                 {uncatGroups.map(renderGroup)}
+              </>
+            );
+          })()}
+
+          {/* Images Section — all image files grouped by folder */}
+          {(() => {
+            const imgGroups = groups.filter(g => g.section === 'images');
+            if (imgGroups.length === 0) return null;
+            const totalImgFiles = imgGroups.reduce((n, g) => n + g.files.length, 0);
+            return (
+              <>
+                <div className="px-4 py-2 mt-4 bg-pink-50/80 dark:bg-pink-950/20 text-[10px] font-bold uppercase tracking-widest text-pink-400 dark:text-pink-500 border-t border-b border-pink-100 dark:border-pink-900/40 sticky top-0 z-10 backdrop-blur-sm flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <ImageIcon size={10} />
+                    <span>{t('memory.sections.images')}</span>
+                  </div>
+                  <span className="font-mono text-pink-300 dark:text-pink-600">{totalImgFiles}</span>
+                </div>
+                {imgGroups.map(renderGroup)}
               </>
             );
           })()}

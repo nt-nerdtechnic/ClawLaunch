@@ -52,6 +52,8 @@ function App() {
     setRuntimeDraftBotToken,
     runtimeDraftGatewayPort,
     setRuntimeDraftGatewayPort,
+    runtimeDraftCronMaxConcurrentRuns,
+    setRuntimeDraftCronMaxConcurrentRuns,
     dynamicModelOptions,
     dynamicModelLoading,
     syncSnapshot,
@@ -189,6 +191,8 @@ function App() {
               setRuntimeDraftBotToken={setRuntimeDraftBotToken}
               runtimeDraftGatewayPort={runtimeDraftGatewayPort}
               setRuntimeDraftGatewayPort={setRuntimeDraftGatewayPort}
+              runtimeDraftCronMaxConcurrentRuns={runtimeDraftCronMaxConcurrentRuns}
+              setRuntimeDraftCronMaxConcurrentRuns={setRuntimeDraftCronMaxConcurrentRuns}
               dynamicModelOptions={dynamicModelOptions}
               dynamicModelLoading={dynamicModelLoading}
               loadDynamicModelOptions={loadDynamicModelOptions}

@@ -53,12 +53,22 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
             return;
           }
           
+          const compareVersions = (a: string, b: string) => {
+            const pa = a.split('.').map(n => parseInt(n, 10) || 0);
+            const pb = b.split('.').map(n => parseInt(n, 10) || 0);
+            const len = Math.max(pa.length, pb.length);
+            for (let i = 0; i < len; i++) {
+              const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+              if (diff !== 0) return diff;
+            }
+            return b.localeCompare(a);
+          };
           const tags = stdout
             .split('\n')
             .filter(line => line.includes('refs/tags/'))
             .map(line => line.split('refs/tags/')[1].replace('^{}', ''))
             .filter((v, i, a) => a.indexOf(v) === i)
-            .reverse();
+            .sort(compareVersions);
           resolve({ code: 0, stdout: JSON.stringify(['main', ...tags]), exitCode: 0 });
         });
       });
@@ -298,14 +308,99 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
     }
   }
 
+  if (fullCommand.startsWith('project:list-backups')) {
+    try {
+      const payloadStr = fullCommand.replace('project:list-backups', '').trim();
+      const { corePath } = JSON.parse(payloadStr || '{}');
+      if (!corePath) return { code: 1, stderr: 'corePath required', exitCode: 1 };
+      const backupsRoot = path.join(path.dirname(corePath), '.openclaw-backups');
+      let entries: { name: string; path: string; mtime: number }[] = [];
+      try {
+        const dirs = await fs.readdir(backupsRoot);
+        const stats = await Promise.all(
+          dirs.map(async (name) => {
+            const fullPath = path.join(backupsRoot, name);
+            try {
+              const s = await fs.stat(fullPath);
+              return s.isDirectory() ? { name, path: fullPath, mtime: s.mtimeMs } : null;
+            } catch { return null; }
+          })
+        );
+        entries = (stats.filter(Boolean) as { name: string; path: string; mtime: number }[])
+          .sort((a, b) => b.mtime - a.mtime);
+      } catch { /* backupsRoot doesn't exist yet */ }
+      return { code: 0, stdout: JSON.stringify(entries), exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'list-backups failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('project:rollback')) {
+    let rollbackTmpPath = '';
+    try {
+      const payloadStr = fullCommand.replace('project:rollback ', '').trim();
+      const { corePath, backupPath } = JSON.parse(payloadStr);
+      if (!corePath || !backupPath) return { code: 1, stderr: 'corePath and backupPath required', exitCode: 1 };
+
+      // Verify backup exists
+      try { await fs.stat(backupPath); } catch {
+        return { code: 1, stderr: `Backup not found: ${backupPath}`, exitCode: 1 };
+      }
+
+      // Safety: snapshot current state before rollback
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const backupsRoot = path.join(path.dirname(corePath), '.openclaw-backups');
+      rollbackTmpPath = path.join(backupsRoot, `${timestamp}_pre-rollback`);
+      await fs.mkdir(rollbackTmpPath, { recursive: true });
+      ctx.emitShellStdout(`>>> Saving pre-rollback snapshot to ${rollbackTmpPath}...\n`, 'stdout');
+      await fs.cp(corePath, rollbackTmpPath, {
+        recursive: true, force: true,
+        filter: (src) => {
+          const rel = path.relative(corePath, src);
+          return !rel.startsWith('node_modules') && !rel.startsWith('.update-tmp');
+        },
+      });
+
+      // Restore backup → corePath
+      ctx.emitShellStdout(`>>> Restoring from ${backupPath}...\n`, 'stdout');
+      await fs.cp(backupPath, corePath, { recursive: true, force: true });
+
+      // Re-install dependencies
+      ctx.emitShellStdout('>>> Reinstalling dependencies...\n', 'stdout');
+      const runCmd = (cmd: string) =>
+        new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
+          const proc = spawn(cmd, { shell: true, cwd: corePath });
+          ctx.activeProcesses.add(proc);
+          let stdout = '', stderr = '';
+          proc.stdout.on('data', (data: Buffer) => { const chunk = data.toString(); stdout += chunk; ctx.emitShellStdout(chunk, 'stdout'); });
+          proc.stderr.on('data', (data: Buffer) => { const chunk = data.toString(); stderr += chunk; ctx.emitShellStdout(chunk, 'stderr'); });
+          proc.on('error', (err) => { ctx.activeProcesses.delete(proc); resolveStep({ code: 1, stdout, stderr: err.message }); });
+          proc.on('close', (code: number) => { ctx.activeProcesses.delete(proc); resolveStep({ code: code ?? 0, stdout, stderr }); });
+        });
+
+      const installRes = await runCmd('zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile');
+      if (installRes.code !== 0) {
+        const detail = [String(installRes.stderr || '').trim(), String(installRes.stdout || '').trim()].filter(Boolean).join('\n');
+        return { code: 1, stderr: detail || 'Dependency reinstall failed during rollback.', exitCode: 1 };
+      }
+
+      ctx.emitShellStdout('>>> Rollback complete!\n', 'stdout');
+      return { code: 0, stdout: JSON.stringify({ restoredFrom: backupPath }), exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'rollback failed', exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('project:update')) {
+    let updateTmpPath = '';
     try {
       const payloadStr = fullCommand.replace('project:update ', '').trim();
       const { corePath, version } = JSON.parse(payloadStr);
       const targetVersion = ctx.validateVersionRef(version || 'main');
       const tarballUrl = `https://github.com/openclaw/openclaw/tarball/${encodeURIComponent(targetVersion)}`;
+      updateTmpPath = path.join(corePath, '.update-tmp');
 
-      const runCommandWithStreaming = (cmd: string, title: string) =>
+      const runCmd = (cmd: string, title: string) =>
         new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
           ctx.emitShellStdout(`>>> ${title}\n`, 'stdout');
           const proc = spawn(cmd, { shell: true, cwd: corePath });
@@ -317,27 +412,108 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
           proc.on('close', (code: number) => { ctx.activeProcesses.delete(proc); resolveStep({ code: code ?? 0, stdout, stderr }); });
         });
 
-      ctx.emitShellStdout(`>>> Updating OpenClaw to ${targetVersion}...\n`, 'stdout');
-
-      const downloadCmd = `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(corePath)}`;
-      const downloadRes = await runCommandWithStreaming(downloadCmd, `Downloading ${targetVersion}...`);
-      if (downloadRes.code !== 0) {
-        return { code: 1, stderr: downloadRes.stderr || `Download failed (code ${downloadRes.code})`, exitCode: 1 };
+      // ── Step 0: verify corePath exists ───────────────────────────────────
+      try { await fs.stat(corePath); } catch {
+        return { code: 1, stderr: `corePath does not exist: ${corePath}`, exitCode: 1 };
       }
 
-      const installRes = await runCommandWithStreaming(
+      // ── Step 1: check pnpm availability ──────────────────────────────────
+      const pnpmCheck = await runCmd('zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version', 'Checking pnpm availability...');
+      if (pnpmCheck.code !== 0) {
+        const detail = [String(pnpmCheck.stderr || '').trim(), String(pnpmCheck.stdout || '').trim()].filter(Boolean).join('\n');
+        return { code: 1, stderr: detail || 'pnpm is unavailable. Please install pnpm (https://pnpm.io/) and ensure it is in your PATH.', exitCode: 1 };
+      }
+
+      // ── Step 2: snapshot current version label (best-effort) ─────────────
+      let currentVersionLabel = 'unknown';
+      try {
+        const verRes = await runCmd('zsh -ilc "pnpm openclaw --version" 2>/dev/null || pnpm openclaw --version', 'Detecting current version...');
+        const match = (verRes.stdout || '').match(/\d{4}\.\d+\.\d+/);
+        if (match) currentVersionLabel = match[0];
+      } catch { /* non-fatal */ }
+
+      // ── Step 3: backup entire corePath → sibling .openclaw-backups/{ts}-{ver} ─
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const backupLabel = `${timestamp}_v${currentVersionLabel}`;
+      const backupsRoot = path.join(path.dirname(corePath), '.openclaw-backups');
+      const backupPath = path.join(backupsRoot, backupLabel);
+      await fs.mkdir(backupPath, { recursive: true });
+      ctx.emitShellStdout(`>>> Backing up current installation to ${backupPath}...\n`, 'stdout');
+      await fs.cp(corePath, backupPath, {
+        recursive: true,
+        force: true,
+        filter: (src) => {
+          const rel = path.relative(corePath, src);
+          // Skip node_modules and hidden update dirs to keep backup lean
+          return !rel.startsWith('node_modules') && !rel.startsWith('.update-tmp') && !rel.startsWith('.update-backup');
+        },
+      });
+      ctx.emitShellStdout(`>>> Backup complete. To rollback: replace ${corePath} with ${backupPath}\n`, 'stdout');
+
+      // ── Step 4: download tarball to temp dir ─────────────────────────────
+      await fs.rm(updateTmpPath, { recursive: true, force: true });
+      await fs.mkdir(updateTmpPath, { recursive: true });
+
+      const dlRes = await runCmd(
+        `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(updateTmpPath)}`,
+        `Downloading ${targetVersion}...`
+      );
+      if (dlRes.code !== 0) {
+        return { code: 1, stderr: dlRes.stderr || `Download failed (code ${dlRes.code}). Check your network connection.`, exitCode: 1 };
+      }
+
+      // Verify tarball has content
+      try { await fs.stat(path.join(updateTmpPath, 'package.json')); } catch {
+        return { code: 1, stderr: 'Downloaded tarball appears invalid (package.json not found).', exitCode: 1 };
+      }
+
+      // ── Step 5: overlay temp dir onto corePath ───────────────────────────
+      ctx.emitShellStdout('>>> Applying update files...\n', 'stdout');
+      await fs.cp(updateTmpPath, corePath, { recursive: true, force: true });
+      await fs.rm(updateTmpPath, { recursive: true, force: true });
+      updateTmpPath = '';
+
+      // ── Auto-rollback helper (used by steps 6 & 7) ───────────────────────
+      const autoRollback = async (reason: string): Promise<void> => {
+        ctx.emitShellStdout(`>>> ${reason} — auto-rolling back to pre-update state...\n`, 'stderr');
+        try {
+          await fs.cp(backupPath, corePath, { recursive: true, force: true });
+          ctx.emitShellStdout(`>>> Rolled back to ${backupPath}\n`, 'stdout');
+        } catch (rbErr) {
+          ctx.emitShellStdout(
+            `>>> Auto-rollback failed: ${(rbErr as Error).message}\nManually restore from: ${backupPath}\n`,
+            'stderr'
+          );
+        }
+      };
+
+      // ── Step 6: install dependencies ─────────────────────────────────────
+      const installRes = await runCmd(
         'zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile',
-        'Installing dependencies...'
+        'Installing OpenClaw dependencies...'
       );
       if (installRes.code !== 0) {
         const detail = [String(installRes.stderr || '').trim(), String(installRes.stdout || '').trim()].filter(Boolean).join('\n');
-        return { code: 1, stderr: detail || `Dependency installation failed (exit code ${installRes.code})`, exitCode: 1 };
+        await autoRollback('Dependency installation failed');
+        return { code: 1, stderr: detail || `Dependency installation failed (exit code ${installRes.code}).`, exitCode: 1 };
+      }
+
+      // ── Step 7: warmup to verify runtime is operational ──────────────────
+      const warmupRes = await runCmd(
+        'zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version',
+        'Prebuilding OpenClaw runtime...'
+      );
+      if (warmupRes.code !== 0) {
+        await autoRollback('Runtime warm-up failed');
+        return { code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 };
       }
 
       ctx.emitShellStdout(`>>> Update to ${targetVersion} complete!\n`, 'stdout');
-      return { code: 0, stdout: JSON.stringify({ version: targetVersion }), exitCode: 0 };
+      return { code: 0, stdout: JSON.stringify({ version: targetVersion, backupPath }), exitCode: 0 };
     } catch (e) {
       return { code: 1, stderr: (e as Error)?.message || 'project update failed', exitCode: 1 };
+    } finally {
+      if (updateTmpPath) fs.rm(updateTmpPath, { recursive: true, force: true }).catch(() => {});
     }
   }
 

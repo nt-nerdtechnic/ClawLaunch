@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { ConfigService } from '../services/configService';
@@ -26,6 +26,8 @@ interface RuntimeSettingsPageProps {
   setRuntimeDraftBotToken: (token: string) => void;
   runtimeDraftGatewayPort: string;
   setRuntimeDraftGatewayPort: (port: string) => void;
+  runtimeDraftCronMaxConcurrentRuns: number;
+  setRuntimeDraftCronMaxConcurrentRuns: (n: number) => void;
   dynamicModelOptions: Array<{ provider: string; group: string; models: string[] }>;
   dynamicModelLoading: boolean;
   loadDynamicModelOptions: (corePath: string, effectiveAuthorizedProviders: string[]) => Promise<void>;
@@ -39,6 +41,8 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   setRuntimeDraftBotToken,
   runtimeDraftGatewayPort,
   setRuntimeDraftGatewayPort,
+  runtimeDraftCronMaxConcurrentRuns,
+  setRuntimeDraftCronMaxConcurrentRuns,
   dynamicModelOptions,
   dynamicModelLoading,
   loadDynamicModelOptions,
@@ -79,6 +83,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const effectiveRuntimeModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
   const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
   const effectiveRuntimeGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
+  const effectiveRuntimeCronMaxConcurrentRuns = Number((runtimeProfile?.cron as Record<string, unknown> | null | undefined)?.maxConcurrentRuns ?? 8) || 8;
   const {
     handleSaveConfig,
     runtimeSaveState,
@@ -93,9 +98,11 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     runtimeDraftModel,
     runtimeDraftBotToken,
     runtimeDraftGatewayPort,
+    runtimeDraftCronMaxConcurrentRuns,
     effectiveRuntimeModel,
     effectiveRuntimeBotToken,
     effectiveRuntimeGatewayPort,
+    effectiveRuntimeCronMaxConcurrentRuns,
     shellQuote,
     buildOpenClawEnvPrefix,
     isModelAuthorizedByProvider,
@@ -172,6 +179,45 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     setVersionsLoading(false);
   };
   useEffect(() => { void fetchAvailableVersions(); }, []);
+
+  // Rollback
+  interface BackupEntry { name: string; path: string; mtime: number; }
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
+  const [backupsExpanded, setBackupsExpanded] = useState(false);
+  const [selectedBackup, setSelectedBackup] = useState('');
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [isRollingBack, setIsRollingBack] = useState(false);
+  const wasUpdatingRef = useRef(false);
+
+  const fetchBackups = async () => {
+    if (!config.corePath?.trim()) return;
+    setBackupsLoading(true);
+    const res = await window.electronAPI.exec(`project:list-backups ${JSON.stringify({ corePath: config.corePath })}`);
+    if (res.code === 0 && res.stdout?.trim()) {
+      try {
+        const parsed: BackupEntry[] = JSON.parse(res.stdout);
+        setBackups(parsed);
+        if (parsed.length > 0 && !selectedBackup) setSelectedBackup(parsed[0].path);
+      } catch { /* keep */ }
+    }
+    setBackupsLoading(false);
+  };
+
+  // Auto-expand & fetch backups when update completes
+  useEffect(() => {
+    if (isUpdating) {
+      wasUpdatingRef.current = true;
+    } else if (wasUpdatingRef.current) {
+      wasUpdatingRef.current = false;
+      // Update just completed, auto-open rollback section and load backups
+      setBackupsExpanded(true);
+      void fetchBackups();
+    }
+  }, [isUpdating]);
+
+  useEffect(() => {
+    if (backupsExpanded && !wasUpdatingRef.current) void fetchBackups();
+  }, [backupsExpanded, config.corePath]);
 
   // Sync channel tokens from runtimeProfile (excluding telegram, handled by runtimeDraftBotToken)
   useEffect(() => {
@@ -327,6 +373,92 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
         </div>
       </div>
 
+      {/* Rollback Section */}
+      <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setBackupsExpanded(v => !v)}
+          className="w-full flex items-center justify-between px-8 py-5 hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <RotateCcw size={14} className="text-amber-500" />
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+              {t('runtime.rollback.title')}
+            </span>
+            {backups.length > 0 && (
+              <span className="text-[9px] font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-full px-2 py-0.5">
+                {backups.length}
+              </span>
+            )}
+          </div>
+          {backupsExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+        </button>
+
+        {backupsExpanded && (
+          <div className="px-8 pb-8 space-y-4 border-t border-slate-200 dark:border-slate-800 pt-5">
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('runtime.rollback.desc')}</p>
+
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                {t('runtime.rollback.selectBackup')}
+              </span>
+              <button
+                type="button"
+                onClick={() => void fetchBackups()}
+                disabled={backupsLoading}
+                className="text-[10px] font-bold text-sky-500 hover:text-sky-600 disabled:opacity-40 transition-colors flex items-center gap-1"
+              >
+                {backupsLoading && <Loader2 size={9} className="animate-spin" />}
+                {t('runtime.update.refreshVersions')}
+              </button>
+            </div>
+
+            {backups.length === 0 && !backupsLoading ? (
+              <p className="text-[11px] text-slate-400 italic px-1">{t('runtime.rollback.noBackups')}</p>
+            ) : (
+              <select
+                value={selectedBackup}
+                onChange={(e) => setSelectedBackup(e.target.value)}
+                className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-amber-400 dark:focus:border-amber-500/50 transition-colors"
+              >
+                {backups.map((b) => (
+                  <option key={b.path} value={b.path}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <button
+              type="button"
+              disabled={!selectedBackup || isRollingBack || isUpdating}
+              onClick={async () => {
+                if (!selectedBackup || !config.corePath?.trim()) return;
+                setIsRollingBack(true);
+                try {
+                  const payload = { corePath: config.corePath, backupPath: selectedBackup };
+                  const res = await window.electronAPI.exec(`project:rollback ${JSON.stringify(payload)}`);
+                  if ((res.code ?? res.exitCode) !== 0) {
+                    addLog(t('runtime.rollback.failed', { msg: res.stderr || `exit ${res.code}` }), 'stderr');
+                  } else {
+                    addLog(t('runtime.rollback.success', { path: selectedBackup }), 'system');
+                  }
+                } finally {
+                  setIsRollingBack(false);
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:text-amber-300"
+            >
+              {isRollingBack ? (
+                <><Loader2 size={14} className="animate-spin" /><span>{t('runtime.rollback.rollingBack')}</span></>
+              ) : (
+                <><RotateCcw size={14} /><span>{t('runtime.rollback.rollbackBtn')}</span></>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Gateway Port Section */}
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div>
@@ -355,6 +487,41 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           )}
           <div className="text-[10px] text-slate-400 dark:text-slate-500">
             {t('settings.gateway.portHelp')}
+          </div>
+        </div>
+      </div>
+
+      {/* Cron Settings Section */}
+      <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+            {t('runtime.cron.title')}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+            {t('runtime.cron.maxConcurrentRuns')}
+          </label>
+          <div className="flex items-stretch gap-2">
+            <input
+              type="number"
+              min={1}
+              max={64}
+              value={runtimeDraftCronMaxConcurrentRuns}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (!isNaN(n) && n >= 1) setRuntimeDraftCronMaxConcurrentRuns(n);
+              }}
+              className="w-32 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+            />
+          </div>
+          {runtimeDraftCronMaxConcurrentRuns !== effectiveRuntimeCronMaxConcurrentRuns && (
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-amber-500 dark:text-amber-400 font-bold">
+              <span>({t('settings.modifiedUnsaved')})</span>
+            </div>
+          )}
+          <div className="text-[10px] text-slate-400 dark:text-slate-500">
+            {t('runtime.cron.maxConcurrentRunsHelp')}
           </div>
         </div>
       </div>

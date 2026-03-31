@@ -12,9 +12,11 @@ interface UseRuntimeActionsParams {
   runtimeDraftModel: string;
   runtimeDraftBotToken: string;
   runtimeDraftGatewayPort: string;
+  runtimeDraftCronMaxConcurrentRuns: number;
   effectiveRuntimeModel: string;
   effectiveRuntimeBotToken: string;
   effectiveRuntimeGatewayPort: string;
+  effectiveRuntimeCronMaxConcurrentRuns: number;
   shellQuote: (value: string) => string;
   buildOpenClawEnvPrefix: (cfg?: Partial<Config>) => string;
   isModelAuthorizedByProvider: (modelRef: string) => boolean;
@@ -30,9 +32,11 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     runtimeDraftModel,
     runtimeDraftBotToken,
     runtimeDraftGatewayPort,
+    runtimeDraftCronMaxConcurrentRuns,
     effectiveRuntimeModel,
     effectiveRuntimeBotToken,
     effectiveRuntimeGatewayPort,
+    effectiveRuntimeCronMaxConcurrentRuns,
     shellQuote,
     buildOpenClawEnvPrefix,
     isModelAuthorizedByProvider,
@@ -133,12 +137,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       const tokenChanged = runtimeDraftBotToken !== effectiveRuntimeBotToken;
       const portDraft = runtimeDraftGatewayPort.trim();
       const portChanged = portDraft !== effectiveRuntimeGatewayPort;
+      const cronMaxConcurrentRunsChanged = runtimeDraftCronMaxConcurrentRuns !== effectiveRuntimeCronMaxConcurrentRuns;
 
       if (portDraft && !/^\d+$/.test(portDraft)) {
         throw new Error(t('runtime.errors.invalidPort'));
       }
 
-      if (modelChanged || tokenChanged || portChanged) {
+      if (modelChanged || tokenChanged || portChanged || cronMaxConcurrentRunsChanged) {
         const corePath = String(config.corePath || '').trim();
         if (!corePath) {
           throw new Error(t('runtime.errors.missingCorePathAction'));
@@ -186,6 +191,15 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
             if ((delPortRes.code ?? delPortRes.exitCode) !== 0) {
               throw new Error(delPortRes.stderr || t('runtime.errors.updatePortFailed'));
             }
+          }
+        }
+
+        if (cronMaxConcurrentRunsChanged) {
+          const maxRuns = Math.max(1, Math.floor(runtimeDraftCronMaxConcurrentRuns));
+          const setCronCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set cron.maxConcurrentRuns ${maxRuns} --json`;
+          const setCronRes = await window.electronAPI.exec(setCronCmd);
+          if ((setCronRes.code ?? setCronRes.exitCode) !== 0) {
+            throw new Error(setCronRes.stderr || t('runtime.errors.updateCronMaxConcurrentRunsFailed'));
           }
         }
 
@@ -280,9 +294,10 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       ).catch(() => {});
 
       // Wait for gateway to fully stop (max 10 seconds)
+      const gatewayPort = effectiveRuntimeGatewayPort?.trim() || '18789';
       let waited = 0;
       const checkGatewayDown = async (): Promise<boolean> => {
-        const res = await window.electronAPI.exec(`lsof -nP -iTCP:18789 -sTCP:LISTEN 2>/dev/null | wc -l`).catch(() => ({ stdout: '0' }));
+        const res = await window.electronAPI.exec(`lsof -nP -iTCP:${gatewayPort} -sTCP:LISTEN 2>/dev/null | wc -l`).catch(() => ({ stdout: '0' }));
         return String(res.stdout || '0').trim() === '0';
       };
       while (waited < 10000 && !(await checkGatewayDown())) {
@@ -309,7 +324,17 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       ).catch(() => ({ code: 1, stderr: 'status check failed' }));
 
       if ((statusRes?.code ?? 1) !== 0) {
-        addLog(t('runtime.update.gatewayWarning', { msg: 'Please manually verify Gateway startup' }), 'stderr');
+        // Retry once after an additional wait
+        addLog(t('runtime.update.gatewayRetrying'), 'system');
+        await new Promise<void>((r) => setTimeout(r, 4000));
+        const retryRes = await window.electronAPI.exec(
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway status`
+        ).catch(() => ({ code: 1 }));
+        if ((retryRes?.code ?? 1) !== 0) {
+          addLog(t('runtime.update.gatewayWarning', { msg: 'Please manually verify Gateway startup' }), 'stderr');
+        } else {
+          addLog(t('runtime.update.gatewayRestarted'), 'system');
+        }
       } else {
         addLog(t('runtime.update.gatewayRestarted'), 'system');
       }

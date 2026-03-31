@@ -972,9 +972,21 @@
       "success": "更新完成！",
       "restartingGateway": "正在重新启动 Gateway...",
       "gatewayRestarted": "Gateway 已重新启动。",
+      "gatewayRetrying": "Gateway 尚未启动，正在重新确认状态...",
+      "gatewayWarning": "Gateway 可能未完全重启，请检查：{{msg}}",
       "failed": "更新失败：{{msg}}",
       "missingCore": "未设置核心路径",
       "installedLabel": "已安装"
+    },
+    "rollback": {
+      "title": "版本回滚",
+      "desc": "选择一个备份快照，将核心还原到该版本。回滚前会自动保存当前状态。",
+      "selectBackup": "选择备份",
+      "noBackups": "暂无备份记录，执行一次更新后即会自动创建。",
+      "rollbackBtn": "回滚至此版本",
+      "rollingBack": "回滚中...",
+      "success": "已成功回滚至 {{path}}",
+      "failed": "回滚失败：{{msg}}"
     },
     "providers": {
       "telegram": {
