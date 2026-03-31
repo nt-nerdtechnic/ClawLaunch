@@ -171,4 +171,124 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
       return { success: false, error: (e as Error).message };
     }
   });
+
+  ipcMain.handle('fs:read-file-encoded', async (_event, filePath: string, encoding: string) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        return { success: false, content: '', error: 'Missing file path' };
+      }
+      const resolved = filePath.startsWith('~/')
+        ? path.join(app.getPath('home'), filePath.slice(2))
+        : filePath;
+      const buf = await fs.readFile(resolved);
+      const decoder = new TextDecoder(encoding || 'utf-8', { fatal: false });
+      return { success: true, content: decoder.decode(buf) };
+    } catch (e) {
+      return { success: false, content: '', error: (e as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:detect-encoding', async (_event, filePath: string) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        return { encoding: 'utf-8', confidence: 'low', method: 'error' };
+      }
+      const resolved = filePath.startsWith('~/')
+        ? path.join(app.getPath('home'), filePath.slice(2))
+        : filePath;
+
+      const SAMPLE = 8192;
+      const fh = await fs.open(resolved, 'r');
+      const buf = Buffer.alloc(SAMPLE);
+      const { bytesRead } = await fh.read(buf, 0, SAMPLE, 0);
+      await fh.close();
+
+      if (bytesRead === 0) return { encoding: 'utf-8', confidence: 'high', method: 'empty' };
+      const s = buf.subarray(0, bytesRead);
+
+      // ── 1. BOM ───────────────────────────────────────────────────────────────
+      if (bytesRead >= 3 && s[0] === 0xEF && s[1] === 0xBB && s[2] === 0xBF)
+        return { encoding: 'utf-8',    confidence: 'high', method: 'bom' };
+      if (bytesRead >= 4 && s[0] === 0xFF && s[1] === 0xFE && s[2] === 0x00 && s[3] === 0x00)
+        return { encoding: 'utf-32le', confidence: 'high', method: 'bom' };
+      if (bytesRead >= 4 && s[0] === 0x00 && s[1] === 0x00 && s[2] === 0xFE && s[3] === 0xFF)
+        return { encoding: 'utf-32be', confidence: 'high', method: 'bom' };
+      if (bytesRead >= 2 && s[0] === 0xFF && s[1] === 0xFE)
+        return { encoding: 'utf-16le', confidence: 'high', method: 'bom' };
+      if (bytesRead >= 2 && s[0] === 0xFE && s[1] === 0xFF)
+        return { encoding: 'utf-16be', confidence: 'high', method: 'bom' };
+
+      // ── 2. Null-byte → binary or UTF-16 without BOM ───────────────────────
+      const probe = Math.min(bytesRead, 512);
+      let nulls = 0;
+      for (let i = 0; i < probe; i++) if (s[i] === 0) nulls++;
+      if (nulls / probe > 0.05) return { encoding: 'binary', confidence: 'high', method: 'null-bytes' };
+
+      // ── 3. Valid UTF-8 structural check ───────────────────────────────────
+      try {
+        new TextDecoder('utf-8', { fatal: true }).decode(s);
+        return { encoding: 'utf-8', confidence: 'high', method: 'utf8-valid' };
+      } catch { /* fall through to CJK heuristics */ }
+
+      // ── 4. CJK byte-pattern scoring ───────────────────────────────────────
+      let gbkOnly = 0; // lead 0x81–0xA0 — GBK exclusive range
+      let big5    = 0; // Big5-valid pairs (lead 0xA1–0xFE, trail in Big5 range)
+      let sjis    = 0; // Shift-JIS valid pairs
+      let euc     = 0; // EUC-JP / EUC-KR pairs (lead 0xA1–0xFE, trail 0xA1–0xFE)
+
+      for (let i = 0; i < bytesRead - 1; i++) {
+        const b1 = s[i], b2 = s[i + 1];
+        if (b1 < 0x80) continue;
+
+        // Shift-JIS: lead 0x81–0x9F or 0xE0–0xFC; trail 0x40–0x7E or 0x80–0xFC
+        if ((b1 >= 0x81 && b1 <= 0x9F) || (b1 >= 0xE0 && b1 <= 0xFC)) {
+          if ((b2 >= 0x40 && b2 <= 0x7E) || (b2 >= 0x80 && b2 <= 0xFC)) { sjis++; i++; continue; }
+        }
+        // EUC: lead 0xA1–0xFE, trail 0xA1–0xFE
+        if (b1 >= 0xA1 && b1 <= 0xFE && b2 >= 0xA1 && b2 <= 0xFE) { euc++; i++; continue; }
+        // GBK: lead 0x81–0xFE, trail 0x40–0xFE (excl 0x7F)
+        if (b1 >= 0x81 && b1 <= 0xFE && b2 >= 0x40 && b2 <= 0xFE && b2 !== 0x7F) {
+          if (b1 <= 0xA0) { gbkOnly++; }
+          // Big5-compatible trail: 0x40–0x7E or 0xA1–0xFE; lead must be ≥0xA1
+          else if (b1 >= 0xA1 && ((b2 >= 0x40 && b2 <= 0x7E) || (b2 >= 0xA1 && b2 <= 0xFE))) { big5++; }
+          i++; continue;
+        }
+      }
+
+      const total = gbkOnly + big5 + sjis + euc;
+      if (total > 0) {
+        if (sjis > gbkOnly + big5 + euc)    return { encoding: 'shift-jis', confidence: 'medium', method: 'heuristic' };
+        if (gbkOnly > 0)                    return { encoding: 'gb18030',   confidence: 'medium', method: 'heuristic' };
+        if (big5 > euc)                     return { encoding: 'big5',      confidence: 'medium', method: 'heuristic' };
+        return { encoding: 'euc-jp', confidence: 'low', method: 'heuristic' };
+      }
+
+      // ── 5. 8-bit fallback ─────────────────────────────────────────────────
+      return { encoding: 'windows-1252', confidence: 'low', method: 'fallback' };
+    } catch (e) {
+      return { encoding: 'utf-8', confidence: 'low', method: 'error', error: (e as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:read-file-base64', async (_event, filePath: string) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        return { success: false, dataUrl: '', error: 'Missing file path' };
+      }
+      const resolved = filePath.startsWith('~/')
+        ? path.join(app.getPath('home'), filePath.slice(2))
+        : filePath;
+      const data = await fs.readFile(resolved);
+      const ext = path.extname(resolved).toLowerCase().slice(1);
+      const mimeMap: Record<string, string> = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+        ico: 'image/x-icon', bmp: 'image/bmp', avif: 'image/avif',
+      };
+      const mime = mimeMap[ext] ?? 'image/png';
+      return { success: true, dataUrl: `data:${mime};base64,${data.toString('base64')}` };
+    } catch (e: unknown) {
+      return { success: false, dataUrl: '', error: (e as Error).message };
+    }
+  });
 }

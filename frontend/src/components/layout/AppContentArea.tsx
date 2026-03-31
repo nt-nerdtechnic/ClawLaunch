@@ -43,8 +43,10 @@ export function AppContentArea({
   launcherSettingsContent,
   runtimeSettingsContent,
 }: AppContentAreaProps) {
+  const isFullBleed = activeTab === 'memory';
+
   return (
-    <div className="flex-1 p-10 overflow-y-auto relative">
+    <div className="flex-1 flex flex-col overflow-hidden relative">
       <WorkspaceStatusBanner
         activeTab={activeTab}
         onboardingFinished={onboardingFinished}
@@ -58,13 +60,18 @@ export function AppContentArea({
         onDismiss={onDismissWorkspaceBanner}
         t={t}
       />
-      {activeTab === 'controlCenter' && controlCenterContent}
-      {activeTab === 'skills' && skillsContent}
-      {activeTab === 'memory' && memoryContent}
-      {activeTab === 'analytics' && analyticsContent}
-      {activeTab === 'monitor' && monitorContent}
-      {activeTab === 'launcherSettings' && launcherSettingsContent}
-      {activeTab === 'runtimeSettings' && runtimeSettingsContent}
+      {isFullBleed ? (
+        memoryContent
+      ) : (
+        <div className="flex-1 p-10 overflow-y-auto">
+          {activeTab === 'controlCenter' && controlCenterContent}
+          {activeTab === 'skills' && skillsContent}
+          {activeTab === 'analytics' && analyticsContent}
+          {activeTab === 'monitor' && monitorContent}
+          {activeTab === 'launcherSettings' && launcherSettingsContent}
+          {activeTab === 'runtimeSettings' && runtimeSettingsContent}
+        </div>
+      )}
     </div>
   );
 }

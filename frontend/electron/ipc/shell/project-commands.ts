@@ -27,14 +27,32 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
     try {
       const repoUrl = 'https://github.com/openclaw/openclaw.git';
       return new Promise<CommandResult>((resolve) => {
-        const gitProcess = spawn(`git ls-remote --tags ${repoUrl}`, { shell: true });
+        const gitProcess = spawn(`git ls-remote --tags ${repoUrl}`, { shell: true, timeout: 30000 });
         let stdout = '';
-        gitProcess.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+        let stderr = '';
+        let timedOut = false;
+        
+        const timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          gitProcess.kill();
+        }, 30000);
+        
+        gitProcess.stdout?.on('data', (data: Buffer) => { stdout += data.toString(); });
+        gitProcess.stderr?.on('data', (data: Buffer) => { stderr += data.toString(); });
+        
         gitProcess.on('close', (code) => {
-          if (code !== 0) {
-            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0 });
+          clearTimeout(timeoutHandle);
+          
+          if (timedOut) {
+            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0, warning: 'Version list timed out, using fallback' });
             return;
           }
+          
+          if (code !== 0) {
+            resolve({ code: 0, stdout: JSON.stringify(['main']), exitCode: 0, error: stderr || `git ls-remote failed (code ${code})` });
+            return;
+          }
+          
           const tags = stdout
             .split('\n')
             .filter(line => line.includes('refs/tags/'))
@@ -277,6 +295,49 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       });
     } catch (e) {
       return { code: 1, stderr: (e as Error)?.message || 'project initialize failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('project:update')) {
+    try {
+      const payloadStr = fullCommand.replace('project:update ', '').trim();
+      const { corePath, version } = JSON.parse(payloadStr);
+      const targetVersion = ctx.validateVersionRef(version || 'main');
+      const tarballUrl = `https://github.com/openclaw/openclaw/tarball/${encodeURIComponent(targetVersion)}`;
+
+      const runCommandWithStreaming = (cmd: string, title: string) =>
+        new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
+          ctx.emitShellStdout(`>>> ${title}\n`, 'stdout');
+          const proc = spawn(cmd, { shell: true, cwd: corePath });
+          ctx.activeProcesses.add(proc);
+          let stdout = '', stderr = '';
+          proc.stdout.on('data', (data: Buffer) => { const chunk = data.toString(); stdout += chunk; ctx.emitShellStdout(chunk, 'stdout'); });
+          proc.stderr.on('data', (data: Buffer) => { const chunk = data.toString(); stderr += chunk; ctx.emitShellStdout(chunk, 'stderr'); });
+          proc.on('error', (err) => { ctx.activeProcesses.delete(proc); resolveStep({ code: 1, stdout, stderr: stderr || err.message }); });
+          proc.on('close', (code: number) => { ctx.activeProcesses.delete(proc); resolveStep({ code: code ?? 0, stdout, stderr }); });
+        });
+
+      ctx.emitShellStdout(`>>> Updating OpenClaw to ${targetVersion}...\n`, 'stdout');
+
+      const downloadCmd = `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(corePath)}`;
+      const downloadRes = await runCommandWithStreaming(downloadCmd, `Downloading ${targetVersion}...`);
+      if (downloadRes.code !== 0) {
+        return { code: 1, stderr: downloadRes.stderr || `Download failed (code ${downloadRes.code})`, exitCode: 1 };
+      }
+
+      const installRes = await runCommandWithStreaming(
+        'zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile',
+        'Installing dependencies...'
+      );
+      if (installRes.code !== 0) {
+        const detail = [String(installRes.stderr || '').trim(), String(installRes.stdout || '').trim()].filter(Boolean).join('\n');
+        return { code: 1, stderr: detail || `Dependency installation failed (exit code ${installRes.code})`, exitCode: 1 };
+      }
+
+      ctx.emitShellStdout(`>>> Update to ${targetVersion} complete!\n`, 'stdout');
+      return { code: 0, stdout: JSON.stringify({ version: targetVersion }), exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'project update failed', exitCode: 1 };
     }
   }
 

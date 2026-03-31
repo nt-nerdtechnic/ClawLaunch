@@ -84,6 +84,8 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     runtimeSaveState,
     handleOpenClawDoctor,
     handleSecurityCheck,
+    handleUpdateOpenClaw,
+    isUpdating,
     handleSaveChannelToken,
   } = useRuntimeActions({
     config,
@@ -135,6 +137,41 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const [localChannelTokens, setLocalChannelTokens] = useState<Record<string, string>>({});
   const [channelSaving, setChannelSaving] = useState('');
   const [channelSaved, setChannelSaved] = useState('');
+
+  // OpenClaw core version
+  const [openClawVersion, setOpenClawVersion] = useState<string>('');
+  useEffect(() => {
+    if (!config.corePath?.trim()) return;
+    void (async () => {
+      const envPrefix = buildOpenClawEnvPrefix();
+      const res = await window.electronAPI.exec(
+        `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw --version`
+      );
+      if (res.code === 0 && res.stdout?.trim()) {
+        const match = res.stdout.match(/\d{4}\.\d+\.\d+/);
+        if (match) setOpenClawVersion('v' + match[0]);
+      }
+    })();
+  }, [config.corePath]);
+
+  // Available versions for update
+  const [availableVersions, setAvailableVersions] = useState<string[]>(['main']);
+  const [selectedVersion, setSelectedVersion] = useState('main');
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const fetchAvailableVersions = async () => {
+    setVersionsLoading(true);
+    const res = await window.electronAPI.exec('project:get-versions');
+    if (res.code === 0 && res.stdout?.trim()) {
+      try {
+        const parsed = JSON.parse(res.stdout);
+        if (Array.isArray(parsed) && parsed.every((v) => typeof v === 'string')) {
+          setAvailableVersions(parsed);
+        }
+      } catch { /* keep default */ }
+    }
+    setVersionsLoading(false);
+  };
+  useEffect(() => { void fetchAvailableVersions(); }, []);
 
   // Sync channel tokens from runtimeProfile (excluding telegram, handled by runtimeDraftBotToken)
   useEffect(() => {
@@ -210,6 +247,82 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           >
             <span>🔍</span>
             <span>{t('runtime.diag.securityAudit')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* OpenClaw Core Version & Update Section */}
+      <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+          {t('runtime.update.title')}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {t('runtime.update.currentVersion')}
+          </span>
+          {openClawVersion ? (
+            <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2 py-0.5">
+              {openClawVersion}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400 italic">
+              {config.corePath?.trim() ? t('runtime.update.versionLoading') : t('runtime.update.versionUnavailable')}
+            </span>
+          )}
+        </div>
+        {/* Version selector */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+              {t('runtime.update.selectVersion')}
+            </span>
+            <div className="flex items-center gap-1.5">
+              {versionsLoading && <Loader2 size={11} className="animate-spin text-slate-400" />}
+              <button
+                type="button"
+                onClick={() => void fetchAvailableVersions()}
+                disabled={versionsLoading}
+                className="text-[10px] font-bold text-sky-500 hover:text-sky-600 disabled:opacity-40 transition-colors"
+              >
+                {t('runtime.update.refreshVersions')}
+              </button>
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5">
+                {t('setupInitialize.versionSource')}
+              </span>
+            </div>
+          </div>
+          <select
+            value={selectedVersion}
+            onChange={(e) => setSelectedVersion(e.target.value)}
+            className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+          >
+          {availableVersions.map((v) => {
+              const isCurrent = !!openClawVersion && v === openClawVersion;
+              const label = isCurrent
+                ? `${v}  ✓ ${t('runtime.update.installedLabel')}`
+                : v === 'main'
+                  ? `${v} ${t('setupInitialize.latestSuffix')}`
+                  : v;
+              return (
+                <option key={v} value={v} disabled={isCurrent}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <div className="grid grid-cols-1 gap-3">
+          <button
+            type="button"
+            onClick={() => void handleUpdateOpenClaw(selectedVersion)}
+            disabled={!config?.corePath?.trim() || isUpdating}
+            className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-emerald-700 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:text-emerald-300"
+          >
+            {isUpdating ? (
+              <><Loader2 size={14} className="animate-spin" /><span>{t('runtime.update.updating')}</span></>
+            ) : (
+              <><span>🔄</span><span>{t('runtime.update.updateBtn')}</span></>
+            )}
           </button>
         </div>
       </div>

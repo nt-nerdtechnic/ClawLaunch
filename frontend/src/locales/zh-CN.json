@@ -959,6 +959,23 @@
       "desc": "以下指令将在独立 Terminal 窗口中执行, 完成后按 Enter 关闭。",
       "securityAudit": "资安稽核（自动修复）"
     },
+    "update": {
+      "title": "OpenClaw 核心更新",
+      "currentVersion": "当前版本：",
+      "versionLoading": "加载中...",
+      "versionUnavailable": "—",
+      "selectVersion": "目标版本",
+      "refreshVersions": "刷新",
+      "updateBtn": "更新 OpenClaw",
+      "updating": "更新中...",
+      "started": "开始更新至 {{version}}...",
+      "success": "更新完成！",
+      "restartingGateway": "正在重新启动 Gateway...",
+      "gatewayRestarted": "Gateway 已重新启动。",
+      "failed": "更新失败：{{msg}}",
+      "missingCore": "未设置核心路径",
+      "installedLabel": "已安装"
+    },
     "providers": {
       "telegram": {
         "desc": "通过 Bot 接收与发送消息",
@@ -1377,6 +1394,18 @@
     "empty": "目录为空",
     "noMatch": "无匹配结果",
     "revealInFinder": "在 Finder 中显示",
+    "encoding": "文件编码",
+    "binaryFile": "二进制文件 — 无法以文字模式显示",
+    "binaryFileHint": "此文件为二进制格式，强制以文字模式读取可能会显示乱码。",
+    "forceReadAsText": "强制以文字模式读取",
+    "unknownFormatHint": "未识别的文件格式 — 尝试以纯文字显示，内容可能无法正确呈现。",
+    "excludedTitle": "不在浏览器中显示",
+    "excludedImages": "图片",
+    "excludedMedia": "音频 / 视频",
+    "excludedArchives": "压缩档",
+    "excludedDocs": "Office 文档",
+    "excludedBinaries": "执行档与编译产物",
+    "excludedDatabases": "数据库",
     "edit": "编辑",
     "save": "保存",
     "saving": "保存中...",
@@ -1419,7 +1448,8 @@
     },
     "errors": {
       "readFailed": "读取文件失败",
-      "saveFailed": "保存文件失败"
+      "saveFailed": "保存文件失败",
+      "encodingFailed": "编码转换失败，显示原始内容"
     }
   }
 }

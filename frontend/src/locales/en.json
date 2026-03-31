@@ -1196,6 +1196,24 @@
       "desc": "Commands will run in a separate terminal. Press Enter to close.",
       "securityAudit": "Security Audit (Autofix)"
     },
+    "update": {
+      "title": "OpenClaw Core Update",
+      "currentVersion": "Current Version:",
+      "versionLoading": "Loading...",
+      "versionUnavailable": "—",
+      "selectVersion": "Target Version",
+      "refreshVersions": "Refresh",
+      "updateBtn": "Update OpenClaw",
+      "updating": "Updating...",
+      "started": "Starting update to {{version}}...",
+      "success": "Update complete!",
+      "restartingGateway": "Restarting Gateway...",
+      "gatewayRestarted": "Gateway restarted.",
+      "gatewayWarning": "Gateway may not have fully restarted. Please verify: {{msg}}",
+      "failed": "Update failed: {{msg}}",
+      "missingCore": "Core path not set",
+      "installedLabel": "installed"
+    },
     "providers": {
       "telegram": {
         "desc": "Send/Receive via Bot",
@@ -1607,11 +1625,24 @@
     "empty": "Directory is empty",
     "noMatch": "No matching files",
     "revealInFinder": "Reveal in Finder",
+    "encoding": "Encoding",
+    "binaryFile": "Binary file — cannot display as text",
+    "binaryFileHint": "This file appears to be in a binary format. Forcing text mode may show garbled content.",
+    "forceReadAsText": "Force read as text",
+    "unknownFormatHint": "Unrecognized file format — attempting to display as plain text. Content may not render correctly.",
+    "excludedTitle": "Not shown in browser",
+    "excludedFonts": "Font files",
+    "excludedMedia": "Audio / Video",
+    "excludedArchives": "Archives",
+    "excludedDocs": "Office documents",
+    "excludedBinaries": "Executables & compiled",
+    "excludedDatabases": "Databases",
     "edit": "Edit",
     "save": "Save",
     "saving": "Saving...",
     "cancelEdit": "Cancel",
     "saved": "Saved ✓",
+    "revealInFinder": "Reveal in Finder",
     "groups": {
       "memory": "MEMORY (Long-term)",
       "memoryDaily": "memory (Daily Log)",
@@ -1649,7 +1680,8 @@
     },
     "errors": {
       "readFailed": "Failed to read file",
-      "saveFailed": "Failed to save file"
+      "saveFailed": "Failed to save file",
+      "encodingFailed": "Encoding conversion failed, showing raw content"
     }
   }
 }

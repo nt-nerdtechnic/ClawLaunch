@@ -43,6 +43,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
   const [launcherSaveState, setLauncherSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [runtimeSaveState, setRuntimeSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [isUpdating, setIsUpdating] = useState(false);
   const launcherResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runtimeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -243,6 +244,83 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     }
   };
 
+  const handleUpdateOpenClaw = async (targetVersion: string) => {
+    if (!config.corePath?.trim()) {
+      addLog(t('runtime.update.missingCore'), 'stderr');
+      return;
+    }
+    const version = targetVersion.trim() || 'main';
+    setIsUpdating(true);
+    addLog(t('runtime.update.started', { version }), 'system');
+
+    const unlisten = window.electronAPI.onLog?.((payload) => {
+      const text = payload.data.replace(/\n$/, '');
+      if (text) addLog(text, payload.source);
+    });
+
+    try {
+      const payload = { corePath: config.corePath, version };
+      const res = await window.electronAPI.exec(`project:update ${JSON.stringify(payload)}`);
+
+      if ((res.code ?? res.exitCode) !== 0) {
+        addLog(t('runtime.update.failed', { msg: res.stderr || `exit ${res.code}` }), 'stderr');
+        return;
+      }
+
+      addLog(t('runtime.update.success'), 'system');
+
+      // Auto-restart gateway with verification
+      addLog(t('runtime.update.restartingGateway'), 'system');
+      const envPrefix = buildOpenClawEnvPrefix();
+      const corePath = config.corePath;
+
+      // Stop gateway
+      await window.electronAPI.exec(
+        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway stop`
+      ).catch(() => {});
+
+      // Wait for gateway to fully stop (max 10 seconds)
+      let waited = 0;
+      const checkGatewayDown = async (): Promise<boolean> => {
+        const res = await window.electronAPI.exec(`lsof -nP -iTCP:18789 -sTCP:LISTEN 2>/dev/null | wc -l`).catch(() => ({ stdout: '0' }));
+        return String(res.stdout || '0').trim() === '0';
+      };
+      while (waited < 10000 && !(await checkGatewayDown())) {
+        await new Promise<void>((r) => setTimeout(r, 500));
+        waited += 500;
+      }
+
+      // Start gateway
+      if (config.installDaemon) {
+        await window.electronAPI.exec(
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway start`
+        ).catch(() => {});
+      } else {
+        await execInTerminal(
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`,
+          { title: 'OpenClaw Gateway', holdOpen: false, cwd: corePath }
+        );
+      }
+
+      // Verify gateway restarted successfully
+      await new Promise<void>((r) => setTimeout(r, 3000));
+      const statusRes = await window.electronAPI.exec(
+        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway status`
+      ).catch(() => ({ code: 1, stderr: 'status check failed' }));
+
+      if ((statusRes?.code ?? 1) !== 0) {
+        addLog(t('runtime.update.gatewayWarning', { msg: 'Please manually verify Gateway startup' }), 'stderr');
+      } else {
+        addLog(t('runtime.update.gatewayRestarted'), 'system');
+      }
+    } catch (e: unknown) {
+      addLog(t('runtime.update.failed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
+    } finally {
+      unlisten?.();
+      setIsUpdating(false);
+    }
+  };
+
   const handleSaveChannelToken = async (channelId: string, token: string) => {
     if (!window.electronAPI) return;
     const corePath = String(config.corePath || '').trim();
@@ -279,6 +357,8 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     runtimeSaveState,
     handleOpenClawDoctor,
     handleSecurityCheck,
+    handleUpdateOpenClaw,
+    isUpdating,
     handleSaveChannelToken,
   };
 }

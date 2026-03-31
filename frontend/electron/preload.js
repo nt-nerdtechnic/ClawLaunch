@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanActivityNow: (payload) => ipcRenderer.invoke('activity:scan:now', payload ? JSON.stringify(payload) : undefined),
   restartActivityWatcher: (payload) => ipcRenderer.invoke('activity:watch:restart', payload ? JSON.stringify(payload) : undefined),
   writeFile: (filePath, content) => ipcRenderer.invoke('fs:write-file', filePath, content),
+  readFileEncoded: (filePath, encoding) => ipcRenderer.invoke('fs:read-file-encoded', filePath, encoding),
+  detectEncoding: (filePath) => ipcRenderer.invoke('fs:detect-encoding', filePath),
+  readFileBase64: (filePath) => ipcRenderer.invoke('fs:read-file-base64', filePath),
   onChatChunk: (callback) => {
     const listener = (_event, value) => callback(value);
     ipcRenderer.on('openclaw:chat.chunk', listener);

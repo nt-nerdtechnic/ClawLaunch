@@ -46,6 +46,9 @@ declare global {
     electronAPI: {
       exec: (command: string, args?: string[]) => Promise<{ code: number; stdout: string; stderr: string; exitCode?: number }>;
       writeFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
+      readFileEncoded: (filePath: string, encoding: string) => Promise<{ success: boolean; content: string; error?: string }>;
+      readFileBase64: (filePath: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
+      detectEncoding: (filePath: string) => Promise<{ encoding: string; confidence: 'high' | 'medium' | 'low'; method: string; error?: string }>;
       onLog: (callback: (payload: { data: string; source: 'stdout' | 'stderr' | 'system' }) => void) => () => void;
       resize: (mode: 'mini' | 'expanded') => void;
       getWindowMode: () => Promise<'mini' | 'expanded'>;

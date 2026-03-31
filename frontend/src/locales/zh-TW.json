@@ -1108,7 +1108,7 @@
     "subtitle": "請指定三個關鍵目錄來存放您的核心、配置與工作空間。",
     "selectVersion": "核心版本 (OpenClaw Branch / Tag)",
     "versionSource": "GITHUB CLAW",
-    "latestSuffix": "(Latest)",
+    "latestSuffix": "最新版",
     "downloadMethod": "下載與部署方式 (推薦網路環境較弱時使用 ZIP)",
     "corePath": "主核心資料夾 (Core)",
     "configPath": "設定資料夾 (Config)",
@@ -1232,6 +1232,24 @@
       "title": "快捷診斷工具",
       "desc": "以下指令將在獨立 Terminal 視窗中執行，完成後按 Enter 關閉。",
       "securityAudit": "資安稽核（自動修復）"
+    },
+    "update": {
+      "title": "OpenClaw 核心更新",
+      "currentVersion": "目前版本：",
+      "versionLoading": "載入中...",
+      "versionUnavailable": "—",
+      "selectVersion": "目標版本",
+      "refreshVersions": "重新整理",
+      "updateBtn": "更新 OpenClaw",
+      "updating": "更新中...",
+      "started": "開始更新至 {{version}}...",
+      "success": "更新完成！",
+      "restartingGateway": "正在重新啟動 Gateway...",
+      "gatewayRestarted": "Gateway 已重新啟動。",
+      "gatewayWarning": "Gateway 可能未完全重啟，請檢查：{{msg}}",
+      "failed": "更新失敗：{{msg}}",
+      "missingCore": "未設定核心路徑",
+      "installedLabel": "已安裝"
     },
     "providers": {
       "telegram": {
@@ -1649,14 +1667,28 @@
     "empty": "目錄為空",
     "noMatch": "無符合結果",
     "revealInFinder": "在 Finder 中顯示",
+    "encoding": "檔案編碼",
+    "binaryFile": "二進位檔案 — 無法以文字模式顯示",
+    "binaryFileHint": "此檔案為二進位格式，強制以文字模式讀取可能會顯示亂碼。",
+    "forceReadAsText": "強制以文字模式讀取",
+    "unknownFormatHint": "未識別的檔案格式 — 嘗試以純文字顯示，內容可能無法正確呈現。",
+    "excludedTitle": "不在瀏覽器中顯示",
+    "excludedFonts": "字型檔案",
+    "excludedMedia": "音訊 / 影片",
+    "excludedArchives": "壓縮檔",
+    "excludedDocs": "Office 文件",
+    "excludedBinaries": "執行檔與編譯產物",
+    "excludedDatabases": "資料庫",
     "edit": "編輯",
     "save": "儲存",
     "saving": "儲存中...",
     "cancelEdit": "取消",
     "saved": "已儲存 ✓",
+    "revealInFinder": "在 Finder 中顯示",
     "errors": {
       "readFailed": "讀取檔案失敗",
-      "saveFailed": "儲存檔案失敗"
+      "saveFailed": "儲存檔案失敗",
+      "encodingFailed": "編碼轉換失敗，顯示原始內容"
     }
   }
 }
