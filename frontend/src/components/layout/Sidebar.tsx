@@ -34,7 +34,7 @@ export function Sidebar({ activeTab, onChangeTab, onToggleViewMode, appVersion, 
           <Layout size={20} className="text-white" />
         </div>
         <div>
-          <div className="font-bold text-lg leading-none tracking-tight">Openclaw</div>
+          <div className="font-bold text-lg leading-none tracking-tight">ClawLaunch</div>
           <div className="text-[10px] text-blue-500 font-mono uppercase tracking-widest">{t('app.version', { version: appVersion || '...' })}</div>
         </div>
       </div>
