@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderOpen, Settings, Zap } from 'lucide-react';
+import { FolderOpen, Settings, Zap, RotateCcw, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DecisionDashboard } from '../components/monitor/DecisionDashboard';
 import TerminalLog from '../components/common/TerminalLog';
@@ -9,7 +9,8 @@ import type { Config, LogEntry, AuditTimelineItem, ReadModelSnapshot } from '../
 
 interface MonitorPageProps {
   running: boolean;
-  onToggleGateway: () => void;
+  onToggleGateway: () => Promise<void>;
+  onRestartGateway?: () => Promise<void>;
   onNavigate?: (path: string) => void;
   config: Config;
   resolvedConfigDir: string;
@@ -24,6 +25,7 @@ interface MonitorPageProps {
 export const MonitorPage: React.FC<MonitorPageProps> = ({
   running,
   onToggleGateway,
+  onRestartGateway,
   onNavigate,
   config,
   resolvedConfigDir,
@@ -37,6 +39,35 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
   const setRunning = useStore((s) => s.setRunning);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
   const [forceReleasing, setForceReleasing] = React.useState(false);
+  const [restarting, setRestarting] = React.useState(false);
+  const [toggling, setToggling] = React.useState(false);
+
+  // Clear loading if running state resolves from an external source (watchdog, auto-sync, etc.)
+  React.useEffect(() => {
+    if (running) setToggling(false);
+  }, [running]);
+
+  const TOGGLE_TIMEOUT_MS = 35_000;
+
+  const handleToggle = async () => {
+    if (running) {
+      // Stop path: opens a confirmation modal, no loading on this button
+      await onToggleGateway();
+      return;
+    }
+    if (toggling) return;
+    setToggling(true);
+    const timeoutPromise = new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), TOGGLE_TIMEOUT_MS),
+    );
+    try {
+      await Promise.race([onToggleGateway(), timeoutPromise]);
+    } catch {
+      // timeout or unexpected error — just clear loading
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const handleForceRelease = async () => {
     if (!window.electronAPI) return;
@@ -185,15 +216,42 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
           </div>
           <button
             type="button"
-            onClick={onToggleGateway}
-            className={`mt-4 w-full rounded-xl px-4 py-2 text-xs font-bold text-white transition-colors ${
+            onClick={() => void handleToggle()}
+            disabled={toggling}
+            className={`mt-4 w-full flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-white transition-colors disabled:cursor-wait ${
               running
                 ? 'bg-rose-600 hover:bg-rose-500'
-                : 'bg-emerald-600 hover:bg-emerald-500'
+                : toggling
+                  ? 'bg-emerald-600 opacity-75'
+                  : 'bg-emerald-600 hover:bg-emerald-500'
             }`}
           >
-            {running ? t('monitor.disconnect') : t('monitor.startService')}
+            {toggling && <Loader2 size={12} className="animate-spin" />}
+            {running
+              ? t('monitor.disconnect')
+              : toggling
+                ? t('monitor.starting')
+                : t('monitor.startService')}
           </button>
+          {onRestartGateway && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (restarting) return;
+                setRestarting(true);
+                try {
+                  await onRestartGateway();
+                } finally {
+                  setRestarting(false);
+                }
+              }}
+              disabled={restarting}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold bg-slate-600 text-white hover:bg-slate-500 transition-colors disabled:opacity-60 disabled:cursor-wait"
+            >
+              <RotateCcw size={12} className={restarting ? 'animate-spin' : ''} />
+              {restarting ? t('monitor.restarting') : t('monitor.restart')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void handleForceRelease()}

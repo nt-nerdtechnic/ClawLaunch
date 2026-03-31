@@ -122,6 +122,7 @@ export function useAppOrchestrator() {
     stopGateway,
     syncGatewayStatus,
     handleKillGatewayPortHolder,
+    restartGateway,
   } = useGatewayActions({
     config,
     runtimeProfile,
@@ -220,6 +221,7 @@ export function useAppOrchestrator() {
     syncSnapshot,
     loadDynamicModelOptions,
     handleKillGatewayPortHolder,
+    restartGateway,
     toggleViewMode,
     handleToggleGatewayWithStopModal,
     handleConfirmStopService,

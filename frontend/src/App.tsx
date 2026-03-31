@@ -59,6 +59,7 @@ function App() {
     syncSnapshot,
     loadDynamicModelOptions,
     handleKillGatewayPortHolder,
+    restartGateway,
     toggleViewMode,
     handleToggleGatewayWithStopModal,
     handleConfirmStopService,
@@ -171,6 +172,7 @@ function App() {
             <MonitorPage
               running={running}
               onToggleGateway={handleToggleGatewayWithStopModal}
+              onRestartGateway={restartGateway}
               onNavigate={(p: string) => setActiveTab(p)}
               config={config}
               resolvedConfigDir={resolvedConfigDir}
@@ -181,7 +183,7 @@ function App() {
             />
           )}
           launcherSettingsContent={(
-            <LauncherSettingsPage />
+            <LauncherSettingsPage restartGateway={restartGateway} />
           )}
           runtimeSettingsContent={(
             <RuntimeSettingsPage

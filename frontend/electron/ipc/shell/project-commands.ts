@@ -313,7 +313,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       const payloadStr = fullCommand.replace('project:list-backups', '').trim();
       const { corePath } = JSON.parse(payloadStr || '{}');
       if (!corePath) return { code: 1, stderr: 'corePath required', exitCode: 1 };
-      const backupsRoot = path.join(path.dirname(corePath), '.openclaw-backups');
+      const backupsRoot = path.join(corePath, '.openclaw-backups');
       let entries: { name: string; path: string; mtime: number }[] = [];
       try {
         const dirs = await fs.readdir(backupsRoot);
@@ -349,7 +349,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
 
       // Safety: snapshot current state before rollback
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const backupsRoot = path.join(path.dirname(corePath), '.openclaw-backups');
+      const backupsRoot = path.join(corePath, '.openclaw-backups');
       rollbackTmpPath = path.join(backupsRoot, `${timestamp}_pre-rollback`);
       await fs.mkdir(rollbackTmpPath, { recursive: true });
       ctx.emitShellStdout(`>>> Saving pre-rollback snapshot to ${rollbackTmpPath}...\n`, 'stdout');
@@ -357,7 +357,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
         recursive: true, force: true,
         filter: (src) => {
           const rel = path.relative(corePath, src);
-          return !rel.startsWith('node_modules') && !rel.startsWith('.update-tmp');
+          return !rel.startsWith('node_modules') && !rel.startsWith('.update-tmp') && !rel.startsWith('.openclaw-backups');
         },
       });
 
@@ -432,10 +432,10 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
         if (match) currentVersionLabel = match[0];
       } catch { /* non-fatal */ }
 
-      // ── Step 3: backup entire corePath → sibling .openclaw-backups/{ts}-{ver} ─
+      // ── Step 3: backup entire corePath → {corePath}/.openclaw-backups/{ts}-{ver} ─
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const backupLabel = `${timestamp}_v${currentVersionLabel}`;
-      const backupsRoot = path.join(path.dirname(corePath), '.openclaw-backups');
+      const backupsRoot = path.join(corePath, '.openclaw-backups');
       const backupPath = path.join(backupsRoot, backupLabel);
       await fs.mkdir(backupPath, { recursive: true });
       ctx.emitShellStdout(`>>> Backing up current installation to ${backupPath}...\n`, 'stdout');
@@ -444,8 +444,8 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
         force: true,
         filter: (src) => {
           const rel = path.relative(corePath, src);
-          // Skip node_modules and hidden update dirs to keep backup lean
-          return !rel.startsWith('node_modules') && !rel.startsWith('.update-tmp') && !rel.startsWith('.update-backup');
+          // Skip node_modules, hidden update dirs, and backups dir to keep backup lean
+          return !rel.startsWith('node_modules') && !rel.startsWith('.update-tmp') && !rel.startsWith('.update-backup') && !rel.startsWith('.openclaw-backups');
         },
       });
       ctx.emitShellStdout(`>>> Backup complete. To rollback: replace ${corePath} with ${backupPath}\n`, 'stdout');

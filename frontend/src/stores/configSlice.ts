@@ -19,6 +19,7 @@ export interface Config {
   language?: string;
   appVersion?: string;
   chromeDebugPort?: number;
+  browserDriver?: 'existing-session' | 'raw-cdp';
 }
 
 export interface DetectedConfig {
@@ -63,6 +64,7 @@ export const createConfigSlice: StateCreator<ConfigSlice> = (set) => ({
     language: localStorage.getItem('i18nextLng') || 'zh-TW',
     appVersion: '',
     chromeDebugPort: 9222,
+    browserDriver: 'existing-session',
   },
   detectedConfig: null,
   detectingPaths: false,

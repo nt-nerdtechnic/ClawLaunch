@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download, Globe, Play, Info } from 'lucide-react';
+import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download, Globe, Play, Info, Wifi } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import type { Config } from '../store';
@@ -17,7 +17,11 @@ interface UpdateInfo {
   noReleases?: boolean;
 }
 
-export const LauncherSettingsPage: React.FC = () => {
+interface LauncherSettingsPageProps {
+  restartGateway?: () => Promise<void>;
+}
+
+export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({ restartGateway }) => {
   const { t } = useTranslation();
   const config = useStore((s) => s.config);
   const setConfig = useStore((s) => s.setConfig);
@@ -49,6 +53,49 @@ export const LauncherSettingsPage: React.FC = () => {
   const [chromeRunning, setChromeRunning] = useState(false);
   const [chromeLaunching, setChromeLaunching] = useState(false);
   const [chromeChecking, setChromeChecking] = useState(false);
+  const [ocVersion, setOcVersion] = useState<string | null>(null);
+  const [ocVersionChecking, setOcVersionChecking] = useState(false);
+  const [gatewayRestarting, setGatewayRestarting] = useState(false);
+
+  // Version comparison helpers
+  const parseVer = (v: string) => v.split(/[.\-]/g).slice(0, 3).map(Number) as [number, number, number];
+  const versionGte = (v: string, min: string) => {
+    const [a1, a2, a3] = parseVer(v);
+    const [b1, b2, b3] = parseVer(min);
+    if (a1 !== b1) return a1 > b1;
+    if (a2 !== b2) return a2 > b2;
+    return a3 >= b3;
+  };
+  const supportsExistingSession = ocVersion ? versionGte(ocVersion, '2026.3.13') : null;
+
+  const handleRestartGateway = async () => {
+    if (!restartGateway) {
+      addLog(t('logs.commFailed', { msg: 'Restart function not available' }), 'stderr');
+      return;
+    }
+    setGatewayRestarting(true);
+    try {
+      await restartGateway();
+    } finally {
+      setGatewayRestarting(false);
+    }
+  };
+
+  const handleCheckOcVersion = async () => {
+    if (!config.corePath) return;
+    setOcVersionChecking(true);
+    try {
+      const res = await window.electronAPI.exec(
+        `cd ${JSON.stringify(config.corePath)} && zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version 2>&1`
+      );
+      const match = (res.stdout || '').match(/\d{4}\.\d+\.\d+/);
+      setOcVersion(match ? match[0] : null);
+    } catch {
+      setOcVersion(null);
+    } finally {
+      setOcVersionChecking(false);
+    }
+  };
 
   const handleCheckChromeStatus = async () => {
     setChromeChecking(true);
@@ -88,6 +135,7 @@ export const LauncherSettingsPage: React.FC = () => {
 
   useEffect(() => {
     handleCheckChromeStatus();
+    detectOcVersion();
     const timer = setInterval(handleCheckChromeStatus, 10000);
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -311,6 +359,35 @@ export const LauncherSettingsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Gateway Communication Hub Section */}
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4 flex items-center gap-1.5">
+            <Wifi size={11} />
+            Gateway Communication Hub
+          </div>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                  重新啟動通訊中樞 (Hot Restart)
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  暫停後立即重新啟動 Gateway，保持通訊鏈路穩定性
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleRestartGateway}
+                disabled={gatewayRestarting}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              >
+                <RefreshCw size={12} className={gatewayRestarting ? 'animate-spin' : ''} />
+                {gatewayRestarting ? '重新啟動中…' : '重新啟動'}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Browser Control Section */}
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4 flex items-center gap-1.5">
@@ -318,69 +395,125 @@ export const LauncherSettingsPage: React.FC = () => {
             Browser Control
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Chrome 遠端除錯模式</span>
-                  <div className="relative group">
-                    <Info size={12} className="text-slate-400 dark:text-slate-500 cursor-help" />
-                    <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 opacity-0 group-hover:opacity-100 transition-opacity z-50">
-                      <div className="bg-slate-900 dark:bg-slate-800 text-slate-100 text-[10px] font-mono rounded-xl px-3 py-2.5 shadow-xl space-y-0.5">
-                        <div className="text-[9px] uppercase tracking-widest text-slate-400 font-sans font-bold mb-1.5">執行步驟</div>
-                        <div>1. pkill -9 -f "Google Chrome"</div>
-                        <div>2. pgrep 確認已關閉</div>
-                        <div>3. rm SingletonLock / SingletonCookie</div>
-                        <div>4. "/Applications/…/Google Chrome" \</div>
-                        <div className="pl-3 text-slate-300">--remote-debugging-port=9222 \</div>
-                        <div className="pl-3 text-slate-300">--user-data-dir="~/Library/…/Chrome" \</div>
-                        <div className="pl-3 text-slate-300">--no-first-run</div>
-                      </div>
-                      <div className="w-2 h-2 bg-slate-900 dark:bg-slate-800 rotate-45 mx-auto -mt-1" />
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                  自動關閉現有 Chrome → 確認完全關閉 → 以 <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">--remote-debugging-port</code> 重新啟動，讓 OpenClaw 控制你的瀏覽器
-                </div>
+
+            {/* Version detection row */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-500">OpenClaw 版本</span>
+                {ocVersion ? (
+                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg ${
+                    supportsExistingSession
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                  }`}>
+                    v{ocVersion}
+                  </span>
+                ) : ocVersionChecking ? (
+                  <span className="text-[11px] text-slate-400">偵測中…</span>
+                ) : (
+                  <span className="text-[11px] text-slate-400">未偵測</span>
+                )}
+                {ocVersion && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${
+                    supportsExistingSession
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                  }`}>
+                    {supportsExistingSession ? '✓ 支援瀏覽器控制' : '需升級至 2026.3.13+'}
+                  </span>
+                )}
               </div>
-              <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg ${
-                chromeRunning
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-              }`}>
-                {chromeRunning ? '運行中' : '未啟動'}
-              </span>
+              <button
+                type="button"
+                onClick={detectOcVersion}
+                disabled={ocVersionChecking || !config.corePath}
+                title="重新偵測版本"
+                className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={`text-slate-500 dark:text-slate-400 ${ocVersionChecking ? 'animate-spin' : ''}`} />
+              </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <label className="text-[11px] font-bold text-slate-500 shrink-0">Port</label>
-              <input
-                type="number"
-                value={config.chromeDebugPort ?? 9222}
-                onChange={(e) => setConfig({ chromeDebugPort: Number(e.target.value) })}
-                className="w-24 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-                min={1024}
-                max={65535}
-              />
-              <button
-                type="button"
-                onClick={handleCheckChromeStatus}
-                disabled={chromeChecking}
-                title="檢查狀態"
-                className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-60"
-              >
-                <RefreshCw size={12} className={`text-slate-500 dark:text-slate-400 ${chromeChecking ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                type="button"
-                onClick={handleLaunchChrome}
-                disabled={chromeLaunching}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-wait"
-              >
-                <Play size={12} />
-                {chromeLaunching ? '重新啟動中…' : '重新啟動 Chrome（除錯模式）'}
-              </button>
-            </div>
+            {/* Version too old: show upgrade notice */}
+            {supportsExistingSession === false && (
+              <div className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 px-3 py-2.5">
+                <AlertCircle size={13} className="text-amber-500 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                  <span className="font-bold">版本過舊，不支援瀏覽器控制。</span>
+                  <br />
+                  2026.3.13 以前需透過 Chrome 擴充功能連線（現已移除）。請升級 OpenClaw 後再使用此功能。
+                </div>
+              </div>
+            )}
+
+            {/* Chrome launch controls — only when version supports or unknown */}
+            {supportsExistingSession !== false && (
+              <div className={supportsExistingSession === null ? '' : 'pt-1 border-t border-slate-100 dark:border-slate-800'}>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Chrome 遠端除錯模式</span>
+                      <div className="relative group">
+                        <Info size={12} className="text-slate-400 dark:text-slate-500 cursor-help" />
+                        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                          <div className="bg-slate-900 dark:bg-slate-800 text-slate-100 text-[10px] font-mono rounded-xl px-3 py-2.5 shadow-xl space-y-0.5">
+                            <div className="text-[9px] uppercase tracking-widest text-slate-400 font-sans font-bold mb-1.5">執行步驟</div>
+                            <div>1. pkill -9 -f "Google Chrome"</div>
+                            <div>2. pgrep 確認已關閉</div>
+                            <div>3. rm SingletonLock / SingletonCookie</div>
+                            <div>4. "/Applications/…/Google Chrome" \</div>
+                            <div className="pl-3 text-slate-300">--remote-debugging-port=9222 \</div>
+                            <div className="pl-3 text-slate-300">--user-data-dir="~/…/ChromeDebugging" \</div>
+                            <div className="pl-3 text-slate-300">--no-first-run</div>
+                          </div>
+                          <div className="w-2 h-2 bg-slate-900 dark:bg-slate-800 rotate-45 mx-auto -mt-1" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      透過 <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">chrome-devtools-mcp</code> attach 你正在使用的 Chrome
+                    </div>
+                  </div>
+                  <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg ${
+                    chromeRunning
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                  }`}>
+                    {chromeRunning ? '運行中' : '未啟動'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-bold text-slate-500 shrink-0">Port</label>
+                  <input
+                    type="number"
+                    value={config.chromeDebugPort ?? 9222}
+                    onChange={(e) => setConfig({ chromeDebugPort: Number(e.target.value) })}
+                    className="w-24 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+                    min={1024}
+                    max={65535}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCheckChromeStatus}
+                    disabled={chromeChecking}
+                    title="檢查狀態"
+                    className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-60"
+                  >
+                    <RefreshCw size={12} className={`text-slate-500 dark:text-slate-400 ${chromeChecking ? 'animate-spin' : ''}`} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLaunchChrome}
+                    disabled={chromeLaunching}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-wait"
+                  >
+                    <Play size={12} />
+                    {chromeLaunching ? '重新啟動中…' : '重新啟動 Chrome（除錯模式）'}
+                  </button>
+                </div>
+              </div>
+            )}
 
           </div>
         </div>

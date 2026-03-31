@@ -347,10 +347,150 @@ export function useGatewayActions({
     }
   };
 
+  const restartGateway = async () => {
+    if (!window.electronAPI) {
+      addLog(t('logs.commFailed', { msg: 'Electron API not available' }), 'stderr');
+      return;
+    }
+
+    if (!config.corePath || !config.corePath.trim()) {
+      addLog(t('logs.errors.missingCorePath'), 'stderr');
+      return;
+    }
+
+    addLog(t('logs.restartingGateway'), 'system');
+
+    try {
+      // Stop gateway (without killing terminal or port holders for hot restart)
+      await stopGateway({ killTerminalAndPortHolders: false });
+
+      // Wait a moment for clean shutdown
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Start gateway again
+      if (running) {
+        setRunning(false);
+      }
+
+      // Re-invoke toggleGateway to start
+      const envPrefix = buildOpenClawEnvPrefix();
+      const port = getGatewayPort();
+
+      // Re-check for port conflicts after stopping
+      if (port) {
+        const precheckRes = await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`);
+        const precheckCode = precheckRes.code ?? precheckRes.exitCode;
+        const precheckOutput = String(precheckRes.stdout || '').trim();
+        if (precheckCode === 0 && precheckOutput) {
+          const message = t('logs.errors.portOccupied', { port });
+          addLog(message, 'stderr');
+          addLog(precheckOutput, 'stderr');
+          setGatewayConflictActionMessage('');
+          setKillingGatewayPortHolder(false);
+          setGatewayConflictModal({ message, detail: precheckOutput, port });
+          return;
+        }
+      }
+
+      const checkDir = await window.electronAPI.exec(`test -d ${shellQuote(config.corePath)}`);
+      if ((checkDir.code ?? checkDir.exitCode) !== 0) {
+        addLog(t('logs.errors.corePathNotExist', { path: config.corePath }), 'stderr');
+        return;
+      }
+
+      const useExternalTerminal = shouldUseExternalTerminal();
+      let startCmd = '';
+      if (useExternalTerminal) {
+        startCmd = config.installDaemon
+          ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`
+          : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
+
+        await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
+
+        const resRaw = await execInTerminal(startCmd, {
+          title: 'Restarting OpenClaw Gateway',
+          holdOpen: true,
+          cwd: config.corePath,
+        });
+        const code = resRaw.code;
+        if (typeof code === 'number' && code !== 0) {
+          addLog(t('logs.startGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
+          return;
+        }
+        addLog(t('logs.gatewayStartCmdSent'), 'system');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } else if (config.installDaemon) {
+        await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
+        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`;
+        const resRaw = await window.electronAPI.exec(cmd);
+        const code = resRaw.code;
+        if (code === 0) {
+          addLog(t('logs.gatewayStartCmdSent'), 'system');
+        } else {
+          addLog(t('logs.startGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
+          return;
+        }
+      } else {
+        await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
+        const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
+        startCmd = runCmd;
+        const payload = {
+          command: runCmd,
+        };
+        const resRaw = await window.electronAPI.exec(`gateway:start-bg-json ${JSON.stringify(payload)}`);
+        const code = resRaw.code;
+        if (code !== 0) {
+          addLog(t('logs.startGatewayFailed', { msg: resRaw.stderr || `exit ${code}` }), 'stderr');
+          return;
+        }
+        addLog(t('logs.gatewayStartCmdSent'), 'system');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      const listening = await waitForGatewayListening();
+      if (listening) {
+        setRunning(true);
+        addLog(t('logs.gatewayRestarted'), 'system');
+
+        if (!config.installDaemon) {
+          const healthCheckCommand = port ? `lsof -nP -iTCP:${port} -sTCP:LISTEN` : '';
+          const watchdogPayload = {
+            enabled: !!config.autoRestartGateway,
+            healthCheckCommand,
+            restartCommand: startCmd,
+            intervalMs: 15000,
+            failThreshold: 2,
+            maxRestarts: 5,
+            startupGraceMs: 20000,
+            restartCooldownMs: 20000,
+            restartMode: useExternalTerminal ? 'terminal' : 'spawn',
+          };
+          const wdRes = await window.electronAPI.exec(`gateway:http-watchdog-start-json ${JSON.stringify(watchdogPayload)}`);
+          const wdCode = wdRes.code ?? wdRes.exitCode;
+          if (wdCode === 0) {
+            addLog(
+              config.autoRestartGateway
+                ? t('logs.watchdogEnabled')
+                : t('logs.watchdogDisabled'),
+              'system',
+            );
+          } else {
+            addLog(t('logs.errors.watchdogFailed', { msg: wdRes.stderr || `exit ${wdCode}` }), 'stderr');
+          }
+        }
+      } else {
+        addLog(t('logs.errors.portNotListen'), 'stderr');
+      }
+    } catch (e: unknown) {
+      addLog(t('logs.restartGatewayFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
+    }
+  };
+
   return {
     toggleGateway,
     stopGateway,
     syncGatewayStatus,
     handleKillGatewayPortHolder,
+    restartGateway,
   };
 }
