@@ -147,33 +147,16 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const [channelSaving, setChannelSaving] = useState('');
   const [channelSaved, setChannelSaved] = useState('');
 
-  // OpenClaw core version — read package.json directly (instant, no runtime boot)
-  const [openClawVersion, setOpenClawVersion] = useState<string>('');
-  const refreshOpenClawVersion = React.useCallback(async () => {
-    if (!config.corePath?.trim()) return;
-    const res = await window.electronAPI.exec(
-      `cat ${shellQuote(config.corePath + '/package.json')}`
-    );
-    if (res.code === 0 && res.stdout?.trim()) {
-      try {
-        const pkg = JSON.parse(res.stdout);
-        const match = String(pkg.version || '').match(/\d{4}\.\d+\.\d+/);
-        if (match) setOpenClawVersion('v' + match[0]);
-      } catch { /* ignore parse errors */ }
-    }
-  }, [config.corePath, shellQuote]);
-  useEffect(() => { void refreshOpenClawVersion(); }, [refreshOpenClawVersion]);
-  // Re-read version after update completes
-  const prevIsUpdating = useRef(false);
-  useEffect(() => {
-    if (prevIsUpdating.current && !isUpdating) void refreshOpenClawVersion();
-    prevIsUpdating.current = isUpdating;
-  }, [isUpdating, refreshOpenClawVersion]);
+  // OpenClaw core version — from global store (reads package.json)
+  const ocVersion = useStore((s) => s.ocVersion);
+  const checkOcVersion = useStore((s) => s.checkOcVersion);
+  useEffect(() => { void checkOcVersion(config.corePath); }, [config.corePath]);
 
   // Available versions for update
   const [availableVersions, setAvailableVersions] = useState<string[]>(['main']);
   const [selectedVersion, setSelectedVersion] = useState('main');
   const [versionsLoading, setVersionsLoading] = useState(false);
+  const normalizeVersion = (v: string) => v.trim().replace(/^v/i, '');
   const fetchAvailableVersions = async () => {
     setVersionsLoading(true);
     const res = await window.electronAPI.exec('project:get-versions');
@@ -223,6 +206,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
       // Update just completed, auto-open rollback section and load backups
       setBackupsExpanded(true);
       void fetchBackups();
+      void checkOcVersion(config.corePath);
     }
   }, [isUpdating]);
 
@@ -317,9 +301,9 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {t('runtime.update.currentVersion')}
           </span>
-          {openClawVersion ? (
+          {ocVersion ? (
             <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2 py-0.5">
-              {openClawVersion}
+              v{ocVersion}
             </span>
           ) : (
             <span className="text-xs text-slate-400 italic">
@@ -354,7 +338,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
           >
           {availableVersions.map((v) => {
-              const isCurrent = !!openClawVersion && v === openClawVersion;
+              const isCurrent = !!ocVersion && normalizeVersion(v) === normalizeVersion(ocVersion);
               const label = isCurrent
                 ? `${v}  ✓ ${t('runtime.update.installedLabel')}`
                 : v === 'main'

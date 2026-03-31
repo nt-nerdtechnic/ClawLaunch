@@ -53,8 +53,9 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({ rest
   const [chromeRunning, setChromeRunning] = useState(false);
   const [chromeLaunching, setChromeLaunching] = useState(false);
   const [chromeChecking, setChromeChecking] = useState(false);
-  const [ocVersion, setOcVersion] = useState<string | null>(null);
-  const [ocVersionChecking, setOcVersionChecking] = useState(false);
+  const ocVersion = useStore((s) => s.ocVersion);
+  const ocVersionChecking = useStore((s) => s.ocVersionChecking);
+  const checkOcVersion = useStore((s) => s.checkOcVersion);
   const [gatewayRestarting, setGatewayRestarting] = useState(false);
 
   // Version comparison helpers
@@ -81,21 +82,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({ rest
     }
   };
 
-  const handleCheckOcVersion = async () => {
-    if (!config.corePath) return;
-    setOcVersionChecking(true);
-    try {
-      const res = await window.electronAPI.exec(
-        `cd ${JSON.stringify(config.corePath)} && zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version 2>&1`
-      );
-      const match = (res.stdout || '').match(/\d{4}\.\d+\.\d+/);
-      setOcVersion(match ? match[0] : null);
-    } catch {
-      setOcVersion(null);
-    } finally {
-      setOcVersionChecking(false);
-    }
-  };
+  const handleCheckOcVersion = () => checkOcVersion(config.corePath);
 
   const handleCheckChromeStatus = async () => {
     setChromeChecking(true);
@@ -135,7 +122,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({ rest
 
   useEffect(() => {
     handleCheckChromeStatus();
-    detectOcVersion();
+    handleCheckOcVersion();
     const timer = setInterval(handleCheckChromeStatus, 10000);
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,42 +383,28 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = ({ rest
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-4 py-3 space-y-3">
 
-            {/* Version detection row */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-500">OpenClaw 版本</span>
-                {ocVersion ? (
-                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg ${
-                    supportsExistingSession
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                      : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                  }`}>
-                    v{ocVersion}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/50 px-3 py-2.5">
+              <div className="text-[11px] text-slate-600 dark:text-slate-300 flex flex-wrap items-center gap-2">
+                <span className="font-bold">版本支援狀態：</span>
+                {supportsExistingSession === true && (
+                  <span className="text-emerald-700 dark:text-emerald-300 font-bold">
+                    {ocVersion ? `OpenClaw v${ocVersion}，已支援 Browser Control` : '已支援 Browser Control'}
                   </span>
-                ) : ocVersionChecking ? (
-                  <span className="text-[11px] text-slate-400">偵測中…</span>
-                ) : (
-                  <span className="text-[11px] text-slate-400">未偵測</span>
                 )}
-                {ocVersion && (
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${
-                    supportsExistingSession
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
-                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
-                  }`}>
-                    {supportsExistingSession ? '✓ 支援瀏覽器控制' : '需升級至 2026.3.13+'}
+                {supportsExistingSession === false && (
+                  <span className="text-amber-700 dark:text-amber-300 font-bold">
+                    {ocVersion ? `OpenClaw v${ocVersion}，目前不支援 Browser Control` : '目前不支援 Browser Control'}
+                  </span>
+                )}
+                {supportsExistingSession === null && (
+                  <span className="text-slate-500 dark:text-slate-400">
+                    {ocVersionChecking ? '背景判斷中…' : '尚未取得版本，背景判斷中'}
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={detectOcVersion}
-                disabled={ocVersionChecking || !config.corePath}
-                title="重新偵測版本"
-                className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
-              >
-                <RefreshCw size={11} className={`text-slate-500 dark:text-slate-400 ${ocVersionChecking ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                判斷規則：OpenClaw 版本需 &gt;= 2026.3.13 才支援 Browser Control。
+              </div>
             </div>
 
             {/* Version too old: show upgrade notice */}
