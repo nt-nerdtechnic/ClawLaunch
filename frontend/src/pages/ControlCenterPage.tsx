@@ -578,6 +578,24 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     return activeSessions.filter((session) => session.isRunning !== true);
   }, [activeSessionFilter, activeSessions]);
 
+  const filteredLaunchAgents = useMemo(() => {
+    if (agentFilter === 'running') return launchAgents.filter(a => a.running || a.loaded);
+    if (agentFilter === 'stopped') return launchAgents.filter(a => !a.running && !a.loaded);
+    return launchAgents;
+  }, [agentFilter, launchAgents]);
+
+  const filteredCrontabEntries = useMemo(() => {
+    if (ctFilter === 'enabled') return crontabEntries.filter(e => e.enabled !== false);
+    if (ctFilter === 'disabled') return crontabEntries.filter(e => e.enabled === false);
+    return crontabEntries;
+  }, [ctFilter, crontabEntries]);
+
+  const filteredCronJobs = useMemo(() => {
+    if (cjFilter === 'enabled') return cronJobs.filter(j => j.enabled);
+    if (cjFilter === 'disabled') return cronJobs.filter(j => !j.enabled);
+    return cronJobs;
+  }, [cjFilter, cronJobs]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -793,7 +811,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               <div className="flex items-center gap-2 mb-3">
                 <Server size={12} className="text-emerald-500" />
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.services.title')}</span>
-                <span className="text-[9px] text-slate-400">LaunchAgents · {launchAgents.length} {t('controlCenter.services.countSuffix', '項')}</span>
+                <span className="text-[9px] text-slate-400">LaunchAgents · {filteredLaunchAgents.length} {t('controlCenter.services.countSuffix', '項')}</span>
                 <div className="flex items-center gap-1 ml-auto">
                   {(['all', 'running', 'stopped'] as const).map(f => {
                     const isActive = agentFilter === f;
@@ -825,12 +843,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               </div>
               {launchAgents.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
-              ) : launchAgents
-                .filter(a => {
-                  if (agentFilter === 'running') return a.running || a.loaded;
-                  if (agentFilter === 'stopped') return !a.running && !a.loaded;
-                  return true;
-                })
+              ) : filteredLaunchAgents
                 .map(agent => (
                 <div key={agent.label} className={`rounded-xl border px-3 py-2.5 transition-all ${
                   agent.running || agent.loaded
@@ -892,11 +905,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 </div>
               ))}
               {(() => {
-                const visible = launchAgents.filter(a => {
-                  if (agentFilter === 'running') return a.running || a.loaded;
-                  if (agentFilter === 'stopped') return !a.running && !a.loaded;
-                  return true;
-                });
+                const visible = filteredLaunchAgents;
                 const canStart = visible.some(a => !a.loaded);
                 const canStop  = visible.some(a => a.loaded);
                 const canClear = agentFilter === 'stopped' && visible.some(a => !a.running && !a.loaded);
@@ -943,7 +952,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               <div className="flex items-center gap-2 mb-3">
                 <Terminal size={12} className="text-amber-500" />
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.crontab.title')}</span>
-                <span className="text-[9px] text-slate-400">{t('controlCenter.crontab.count', { count: crontabEntries.length })}</span>
+                <span className="text-[9px] text-slate-400">{t('controlCenter.crontab.count', { count: filteredCrontabEntries.length })}</span>
                 <div className="flex items-center gap-1 ml-auto">
                   {(['all', 'enabled', 'disabled'] as const).map(f => {
                     const isActive = ctFilter === f;
@@ -975,12 +984,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
               </div>
               {crontabEntries.length === 0 ? (
                 <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
-              ) : crontabEntries
-                .filter(e => {
-                  if (ctFilter === 'enabled') return e.enabled !== false;
-                  if (ctFilter === 'disabled') return e.enabled === false;
-                  return true;
-                })
+              ) : filteredCrontabEntries
                 .map((entry, i) => (
                 <div key={i} className={`rounded-xl border px-3 py-2.5 transition-all ${
                   entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
@@ -1025,11 +1029,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 </div>
               ))}
               {(() => {
-                const visible = crontabEntries.filter(e => {
-                  if (ctFilter === 'enabled') return e.enabled !== false;
-                  if (ctFilter === 'disabled') return e.enabled === false;
-                  return true;
-                });
+                const visible = filteredCrontabEntries;
                 const canEnable  = visible.some(e => e.enabled === false);
                 const canDisable = visible.some(e => e.enabled !== false);
                 const canClear   = ctFilter === 'disabled' && canEnable;
@@ -1077,7 +1077,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 <div className="flex items-center gap-2">
                   <CalendarClock size={12} className="text-violet-500" />
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.cronJobs.title')}</span>
-                  <span className="text-[9px] text-slate-400">{t('controlCenter.cronJobs.count', { count: cronJobs.length })}</span>
+                  <span className="text-[9px] text-slate-400">{t('controlCenter.cronJobs.count', { count: filteredCronJobs.length })}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   {(['all', 'enabled', 'disabled'] as const).map(f => {
@@ -1114,12 +1114,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     <CalendarClock size={22} className="mb-2 opacity-30" />
                     <span className="text-sm">{t('controlCenter.cronJobs.empty')}</span>
                   </div>
-                ) : [...cronJobs]
-                  .filter(j => {
-                    if (cjFilter === 'enabled') return j.enabled;
-                    if (cjFilter === 'disabled') return !j.enabled;
-                    return true;
-                  })
+                ) : [...filteredCronJobs]
                   .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
                   const cronSessionPrefix = `agent:${job.agentId || 'main'}:cron:${job.id}`;
                   const hasRunningCronSession = activeSessions.some((session) => {
@@ -1292,11 +1287,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 })}
               </div>
               {(() => {
-                const visible = cronJobs.filter(j => {
-                  if (cjFilter === 'enabled') return j.enabled;
-                  if (cjFilter === 'disabled') return !j.enabled;
-                  return true;
-                });
+                const visible = filteredCronJobs;
                 const canEnable  = visible.some(j => !j.enabled);
                 const canDisable = visible.some(j => j.enabled);
                 const canClear   = cjFilter === 'disabled' && canEnable;
