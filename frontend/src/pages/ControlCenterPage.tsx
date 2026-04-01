@@ -774,7 +774,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         {!(isRunning || isRecent) && <Activity size={10} className="text-slate-500" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <span className="block text-[12px] font-semibold text-slate-800 dark:text-slate-100 truncate">
+                        <span className="block text-[12px] font-semibold text-slate-800 dark:text-slate-100">
                           {formatActiveSessionTitle(session)}
                         </span>
                         {session.lastMessage ? (
@@ -782,10 +782,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         ) : session.agentId ? (
                           <span className="block text-[10px] text-slate-400 truncate">agent: {session.agentId}</span>
                         ) : session.model ? (
-                          <span className="block text-[10px] text-slate-400 truncate">{session.model}</span>
+                          <span className="block text-[10px] text-slate-400">{session.model}</span>
                         ) : null}
                         {session.agentId && (
-                          <span className="block text-[10px] text-slate-400/80 truncate">{session.agentId}</span>
+                          <span className="block text-[10px] text-slate-400/80">{session.agentId}</span>
                         )}
                       </div>
                       {canAbort ? (
@@ -892,10 +892,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 </div>
               </div>
               <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
-                {cronJobs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-slate-400">
-                    <CalendarClock size={22} className="mb-2 opacity-30" />
-                    <span className="text-sm">{t('controlCenter.cronJobs.empty')}</span>
+                {filteredCronJobs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <CalendarClock size={24} className="mb-2 opacity-30" />
+                    <span className="text-sm">
+                      {cjFilter === 'enabled' ? t('controlCenter.cronJobs.emptyEnabled', '目前沒有運作中的任務') :
+                       cjFilter === 'disabled' ? t('controlCenter.cronJobs.emptyDisabled', '目前沒有停止的任務') :
+                       t('controlCenter.cronJobs.empty', '沒有排程任務')}
+                    </span>
                   </div>
                 ) : [...filteredCronJobs]
                   .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
@@ -933,7 +937,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         </span>
                         {/* 名稱 + 通知開關 */}
                         <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
-                          <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
+                          <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-100">{job.name}</span>
                           <button
                             onClick={() => void toggleDelivery(job)}
                             title={job.delivery?.mode === 'announce'
@@ -1003,13 +1007,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
                         <span className="font-mono text-violet-400/70">{formatInterval(job.schedule, t)}</span>
                         <span className="opacity-40">·</span>
-                        <span className="text-slate-500 font-mono truncate max-w-[80px]" title={job.agentId}>
+                        <span className="text-slate-500 font-mono" title={job.agentId}>
                           {job.agentId || 'main'}
                         </span>
                         {job.payload?.model && (
                           <>
                             <span className="opacity-40">·</span>
-                            <span className="text-sky-500/80 font-mono truncate max-w-[100px]" title={job.payload.model}>
+                            <span className="text-sky-500/80 font-mono" title={job.payload.model}>
                               {job.payload.model}
                             </span>
                           </>
@@ -1309,8 +1313,15 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
-              {crontabEntries.length === 0 ? (
-                <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
+              {filteredCrontabEntries.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <Terminal size={24} className="mb-2 opacity-30" />
+                  <span className="text-sm">
+                    {ctFilter === 'enabled' ? t('controlCenter.crontab.emptyEnabled', '目前沒有啟用中的系統排程') :
+                     ctFilter === 'disabled' ? t('controlCenter.crontab.emptyDisabled', '目前沒有停用的系統排程') :
+                     t('controlCenter.crontab.empty', '無系統排程項目')}
+                  </span>
+                </div>
               ) : filteredCrontabEntries
                 .map((entry, i) => (
                 <div key={i} className={`rounded-xl border px-3 py-2.5 transition-all ${
@@ -1433,8 +1444,15 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
-              {launchAgents.length === 0 ? (
-                <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.services.empty')}</p>
+              {filteredLaunchAgents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <Server size={24} className="mb-2 opacity-30" />
+                  <span className="text-sm">
+                    {agentFilter === 'running' ? t('controlCenter.services.emptyRunning', '目前沒有執行中的服務') :
+                     agentFilter === 'stopped' ? t('controlCenter.services.emptyStopped', '目前沒有已停止的服務') :
+                     t('controlCenter.services.empty', '未偵測到系統服務')}
+                  </span>
+                </div>
               ) : filteredLaunchAgents
                 .map(agent => (
                 <div key={agent.label} className={`rounded-xl border px-3 py-2.5 transition-all ${
