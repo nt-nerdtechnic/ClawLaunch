@@ -328,7 +328,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
             </div>
 
             {/* Config Path */}
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
                 {t('settings.configPath')}
               </label>
@@ -351,7 +351,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
             </div>
 
             {/* Workspace Path */}
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
                 {t('settings.workspacePath')}
               </label>
