@@ -11,6 +11,7 @@ import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
 import type { CronSchedule, CronJob } from '../types/cron';
 import { useStore } from '../store';
+import { ConfigService } from '../services/configService';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -215,7 +216,9 @@ const CHANNEL_META: { id: string; name: string }[] = [
 export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshSnapshot, stateDir }) => {
   const { t, i18n } = useTranslation();
   const runtimeProfile = useStore(s => s.runtimeProfile);
+  const config = useStore(s => s.config);
   const [cronJobs, setCronJobs]       = useState<CronJob[]>([]);
+  const [authorizedRecipients, setAuthorizedRecipients] = useState<Record<string, string[]>>({}); // channel -> IDs
   const [crontabEntries, setCrontabEntries] = useState<CrontabEntry[]>([]);
   const [launchAgents, setLaunchAgents]     = useState<LaunchAgent[]>([]);
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
@@ -263,6 +266,25 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     if ((res.code ?? res.exitCode) !== 0) throw new Error(res.stderr || 'command failed');
     return res;
   }, []);
+
+  // ── Authorized Recipients ─────────────────────────────────────────────────
+
+  const loadAuthorizedRecipients = useCallback(async () => {
+    if (!window.electronAPI) return;
+    const resolvedConfigDir = ConfigService.normalizeConfigDir(config.configPath);
+    if (!resolvedConfigDir) return;
+    try {
+      const telegramAllowFromFile = `${resolvedConfigDir}/credentials/telegram-allowFrom.json`;
+      const res = await window.electronAPI.exec(`test -f ${ConfigService.shellQuote(telegramAllowFromFile)} && cat ${ConfigService.shellQuote(telegramAllowFromFile)}`);
+      if (res.code === 0 && res.stdout) {
+        const parsed = JSON.parse(res.stdout);
+        const ids = Array.isArray(parsed?.allowFrom) ? parsed.allowFrom.map((v: any) => String(v)) : [];
+        setAuthorizedRecipients(prev => ({ ...prev, telegram: ids }));
+      }
+    } catch {
+      // ignore
+    }
+  }, [config.configPath]);
 
   // ── Loaders ────────────────────────────────────────────────────────────────
 
@@ -394,12 +416,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const refresh = useCallback(async () => {
     setError('');
     try {
-      await Promise.all([loadCron(), loadSystem()]);
+      await Promise.all([loadCron(), loadSystem(), loadAuthorizedRecipients()]);
       if (onRefreshSnapshot) await onRefreshSnapshot();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('controlCenter.errors.genericLoadFailed'));
     }
-  }, [loadCron, loadSystem, onRefreshSnapshot, t]);
+  }, [loadCron, loadSystem, loadAuthorizedRecipients, onRefreshSnapshot, t]);
 
   useEffect(() => {
     refresh();
@@ -1092,20 +1114,24 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                                 </div>
                                 <div>
                                   <label className="block text-[9px] font-bold text-slate-500 mb-0.5">對象（選填）</label>
-                                  <select
-                                    value={editDraft.deliveryTo || ''}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setEditDraft(d => d ? { ...d, deliveryTo: val, ...(val ? { deliveryChannel: val } : {}) } : d);
-                                    }}
-                                    className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
-                                  >
-                                    <option value="">不指定（使用頻道預設）</option>
-                                    {/* 若現有值不在已知選項中，動態補一個選項以顯示既有值 */}
-                                    {editDraft.deliveryTo && (
-                                      <option value={editDraft.deliveryTo}>{editDraft.deliveryTo}</option>
-                                    )}
-                                  </select>
+                                    <select
+                                      value={editDraft.deliveryTo || ''}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setEditDraft(d => d ? { ...d, deliveryTo: val, ...(val ? { deliveryChannel: val } : {}) } : d);
+                                      }}
+                                      className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                    >
+                                      <option value="">不指定（使用頻道預設）</option>
+                                      {/* Telegram 特定的已授權對象 */}
+                                      {editDraft.deliveryChannel === 'telegram' && (authorizedRecipients['telegram'] || []).map(id => (
+                                        <option key={id} value={id}>{id}</option>
+                                      ))}
+                                      {/* 若現有值不在已知選項中，動態補一個選項以顯示既有值 */}
+                                      {editDraft.deliveryTo && !(authorizedRecipients['telegram'] || []).includes(editDraft.deliveryTo) && (
+                                        <option value={editDraft.deliveryTo}>{editDraft.deliveryTo}</option>
+                                      )}
+                                    </select>
                                 </div>
                                 <div className="col-span-2">
                                   <label className="block text-[9px] font-bold text-slate-500 mb-0.5">觸發訊息（Prompt）</label>
