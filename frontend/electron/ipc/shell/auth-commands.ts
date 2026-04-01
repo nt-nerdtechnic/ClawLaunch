@@ -90,6 +90,32 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         }
       }
       const configFilePath = path.join(configDir, 'openclaw.json');
+      const ensureMainAgentListEntry = async (workspacePath?: string) => {
+        try {
+          const configJson = (await loadJsonFile(configFilePath)) || {} as Record<string, unknown>;
+          if (!configJson.agents || typeof configJson.agents !== 'object') {
+            configJson.agents = {};
+          }
+          const agents = configJson.agents as Record<string, unknown>;
+          const defaults = (agents.defaults && typeof agents.defaults === 'object')
+            ? (agents.defaults as Record<string, unknown>)
+            : {};
+          const rawList = Array.isArray(agents.list)
+            ? (agents.list as Array<Record<string, unknown>>)
+            : [];
+          const hasMain = rawList.some((item) => String(item.id || '').trim() === 'main');
+          if (hasMain) return;
+
+          const homeDir = app.getPath('home');
+          const mainAgentDir = path.join(configDir, 'agents', 'main', 'agent');
+          const mainAgentDirTilde = mainAgentDir.startsWith(homeDir)
+            ? mainAgentDir.replace(homeDir, '~')
+            : mainAgentDir;
+          const mainWorkspace = String(workspacePath || defaults.workspace || '~/.openclaw/workspace-main').trim();
+          agents.list = [...rawList, { id: 'main', workspace: mainWorkspace, agentDir: mainAgentDirTilde }];
+          await fs.writeFile(configFilePath, `${JSON.stringify(configJson, null, 2)}\n`, 'utf-8');
+        } catch { /* best-effort */ }
+      };
       // MiniMax Coding Plan Token — write directly to models.providers
       if (authChoice === 'minimax-coding-plan-global-token' || authChoice === 'minimax-coding-plan-cn-token') {
         const configJson = (await loadJsonFile(configFilePath)) || {};
@@ -132,6 +158,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       if ((onboardRes.code ?? 0) !== 0) {
         return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
       }
+      await ensureMainAgentListEntry(String(payload?.workspacePath || '').trim() || undefined);
       const aliases = getChoiceAliases(authChoice);
       const listed = await collectAuthProfiles(configDir);
       const hasMatched = listed.profiles.some((profile) => profileMatchesAliases(String(profile.profileId || ''), { provider: profile.provider }, aliases) && (CREDENTIALLESS_AUTH_CHOICES.has(authChoice) || profile.agentPresent));
