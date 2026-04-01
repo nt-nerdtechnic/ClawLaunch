@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Play, Pause, Trash2, RefreshCw, CalendarClock, Loader2, AlertCircle, Zap } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Trash2, RefreshCw, CalendarClock, Loader2, AlertCircle, Zap, ShieldCheck, ShieldOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PixelAgentSummary } from './hooks/usePixelOfficeAgents';
 import { useAgentCronJobs } from './hooks/useAgentCronJobs';
-import { AuthManagementPanel } from '../AuthManagementPanel';
 import type { CronSchedule } from '../../types/cron';
 
 type DrawerTab = 'info' | 'cron' | 'auth';
@@ -11,6 +10,8 @@ type DrawerTab = 'info' | 'cron' | 'auth';
 interface AgentSettingsDrawerProps {
   agentId: string;
   summary: PixelAgentSummary | undefined;
+  agentWorkspace?: string;
+  agentDir?: string;
   initialTab?: DrawerTab;
   onClose: () => void;
 }
@@ -30,6 +31,8 @@ function formatSchedule(s: CronSchedule): string {
 export default function AgentSettingsDrawer({
   agentId,
   summary,
+  agentWorkspace,
+  agentDir,
   initialTab = 'info',
   onClose,
 }: AgentSettingsDrawerProps) {
@@ -129,6 +132,20 @@ export default function AgentSettingsDrawer({
                 label={t('pixelOffice.drawer.info.cost', 'Cost')}
                 value={summary.cost > 0 ? `$${summary.cost.toFixed(6)}` : '—'}
               />
+              {(agentWorkspace || summary.workspace) && (
+                <StatRow
+                  label={t('pixelOffice.drawer.info.workspace', 'Workspace')}
+                  value={agentWorkspace || summary.workspace || '—'}
+                  mono
+                />
+              )}
+              {(agentDir || summary.agentDir) && (
+                <StatRow
+                  label={t('pixelOffice.drawer.info.agentDir', 'Agent Dir')}
+                  value={agentDir || summary.agentDir || '—'}
+                  mono
+                />
+              )}
             </div>
           )}
 
@@ -220,9 +237,7 @@ export default function AgentSettingsDrawer({
 
           {/* ── Auth tab ── */}
           {tab === 'auth' && (
-            <div className="p-2">
-              <AuthManagementPanel />
-            </div>
+            <PerAgentAuthViewer agentDir={agentDir || summary?.agentDir} agentId={agentId} />
           )}
         </div>
       </div>
@@ -233,10 +248,100 @@ export default function AgentSettingsDrawer({
 function StatRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-      <span className={`text-[10px] text-slate-700 dark:text-slate-200 truncate ${mono ? 'font-mono text-[8px]' : ''}`}>
+      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">{label}</span>
+      <span className={`text-right text-slate-700 dark:text-slate-200 truncate max-w-[65%] ${mono ? 'font-mono text-[8px]' : 'text-[10px]'}`}>
         {value}
       </span>
+    </div>
+  );
+}
+
+interface AuthProfile {
+  provider: string;
+  authChoice: string;
+  hasKey: boolean;
+  healthy: boolean;
+}
+
+function PerAgentAuthViewer({ agentDir, agentId }: { agentDir?: string; agentId: string }) {
+  const { t } = useTranslation();
+  const [profiles, setProfiles] = useState<AuthProfile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [scanned, setScanned] = useState(false);
+
+  useEffect(() => {
+    if (!agentDir) { setScanned(true); return; }
+    let cancelled = false;
+    setLoading(true);
+    window.electronAPI.exec(`agent:auth-list ${JSON.stringify(agentDir)}`)
+      .then(res => {
+        if (cancelled) return;
+        try {
+          const parsed = JSON.parse(res.stdout || '{}');
+          setProfiles(Array.isArray(parsed.profiles) ? parsed.profiles : []);
+        } catch { setProfiles([]); }
+      })
+      .catch(() => setProfiles([]))
+      .finally(() => { if (!cancelled) { setLoading(false); setScanned(true); } });
+    return () => { cancelled = true; };
+  }, [agentDir]);
+
+  return (
+    <div className="p-3 space-y-2">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+          {t('pixelOffice.drawer.auth.title', 'Per-Agent Auth')}
+        </span>
+        {agentDir && (
+          <span className="text-[8px] font-mono text-slate-400/70 truncate max-w-[55%]">{agentDir}</span>
+        )}
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 size={14} className="animate-spin text-slate-400" />
+        </div>
+      )}
+
+      {!loading && scanned && profiles.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-400">
+          <ShieldOff size={20} className="opacity-30" />
+          <p className="text-[10px] text-center">
+            {agentDir
+              ? t('pixelOffice.drawer.auth.noProfiles', 'No auth profiles found for this agent.')
+              : t('pixelOffice.drawer.auth.noAgentDir', 'Agent dir not configured.\nConfigure agents.list[].agentDir in openclaw.json.')}
+          </p>
+          <p className="text-[9px] font-mono text-slate-400/60">agent: {agentId}</p>
+        </div>
+      )}
+
+      {!loading && profiles.map((p, i) => (
+        <div
+          key={i}
+          className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
+            p.healthy && p.hasKey
+              ? 'border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/30 dark:bg-emerald-950/10'
+              : 'border-amber-200 dark:border-amber-800/40 bg-amber-50/30 dark:bg-amber-950/10'
+          }`}
+        >
+          {p.healthy && p.hasKey
+            ? <ShieldCheck size={11} className="shrink-0 text-emerald-500" />
+            : <ShieldOff size={11} className="shrink-0 text-amber-500" />}
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold text-slate-700 dark:text-slate-200 truncate capitalize">{p.provider}</p>
+            {p.authChoice && (
+              <p className="text-[8px] font-mono text-slate-400 truncate">{p.authChoice}</p>
+            )}
+          </div>
+          <span className={`shrink-0 text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${
+            p.healthy && p.hasKey
+              ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
+              : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/40'
+          }`}>
+            {p.healthy && p.hasKey ? t('common.status.ok', 'OK') : t('common.status.warn', 'WARN')}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

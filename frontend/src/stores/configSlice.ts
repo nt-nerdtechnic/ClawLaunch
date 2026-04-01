@@ -22,6 +22,14 @@ export interface Config {
   browserDriver?: 'existing-session' | 'raw-cdp';
 }
 
+export interface AgentListEntry {
+  id: string;
+  name: string;
+  workspace: string;
+  agentDir: string;
+  model: string;
+}
+
 export interface DetectedConfig {
   apiKey?: string;
   model?: string;
@@ -31,6 +39,7 @@ export interface DetectedConfig {
   configPath?: string;
   workspacePath?: string;
   workspaceSkills?: SkillItem[];
+  agentList?: AgentListEntry[];
 }
 
 export interface ConfigSlice {

@@ -12,6 +12,8 @@ export interface PixelAgentSummary {
   tokensOut: number;
   cost: number;
   sessionCount: number;
+  workspace?: string;
+  agentDir?: string;
 }
 
 interface ScannedSession {
@@ -35,6 +37,7 @@ interface UsePixelOfficeAgentsResult {
 export function usePixelOfficeAgents(): UsePixelOfficeAgentsResult {
   const snapshot = useStore(s => s.snapshot);
   const configPath = useStore(s => s.config?.configPath);
+  const configAgentList = useStore(s => s.detectedConfig?.agentList);
 
   // Fallback: poll scanActiveSessions when snapshot is empty
   const [scannedSessions, setScannedSessions] = useState<ScannedSession[]>([]);
@@ -139,8 +142,9 @@ export function usePixelOfficeAgents(): UsePixelOfficeAgentsResult {
       }
     }
 
-    // Union of all known agents: snapshot/scanned/configured
-    const allAgentIds = new Set<string>([...sessionAgentIds, ...configuredAgentIds]);
+    // Union of all known agents: snapshot/scanned/configured/config-list
+    const configListIds = (configAgentList ?? []).map(a => a.id).filter(Boolean);
+    const allAgentIds = new Set<string>([...sessionAgentIds, ...configuredAgentIds, ...configListIds]);
 
     // Clean up removed agents
     for (const existingId of assignment.keys()) {
@@ -177,16 +181,19 @@ export function usePixelOfficeAgents(): UsePixelOfficeAgentsResult {
           tokensOut += s.tokensOut || 0;
           cost += s.cost || 0;
         }
+        const configEntry = configAgentList?.find(a => a.id === agentId);
         results.push({
           id: agentId,
-          displayName: agentId,
+          displayName: configEntry?.name || agentId,
           color: AGENT_COLORS[colorIdx],
           snapshotState: isActive ? 'active' : 'idle',
-          model: data.sessions[0]?.model,
+          model: data.sessions[0]?.model || configEntry?.model || undefined,
           tokensIn,
           tokensOut,
           cost,
           sessionCount: data.sessions.length,
+          workspace: configEntry?.workspace || undefined,
+          agentDir: configEntry?.agentDir || undefined,
         });
         continue;
       }
@@ -196,35 +203,42 @@ export function usePixelOfficeAgents(): UsePixelOfficeAgentsResult {
         const sessions = byScannedAgent.get(agentId)!;
         const isActive = sessions.some(s => s.isRunning === true);
         const displayName = sessions.length === 1 && sessions[0].displayName ? sessions[0].displayName : agentId;
+        const configEntry = configAgentList?.find(a => a.id === agentId);
         results.push({
           id: agentId,
-          displayName,
+          displayName: configEntry?.name || displayName,
           color: AGENT_COLORS[colorIdx],
           snapshotState: isActive ? 'active' : 'idle',
-          model: sessions[0]?.model,
+          model: sessions[0]?.model || configEntry?.model || undefined,
           tokensIn: 0,
           tokensOut: 0,
           cost: 0,
           sessionCount: sessions.length,
+          workspace: configEntry?.workspace || undefined,
+          agentDir: configEntry?.agentDir || undefined,
         });
         continue;
       }
 
       // Configured agent with no sessions — show as idle
+      const configEntry = configAgentList?.find(a => a.id === agentId);
       results.push({
         id: agentId,
-        displayName: agentId,
+        displayName: configEntry?.name || agentId,
         color: AGENT_COLORS[colorIdx],
         snapshotState: 'idle',
+        model: configEntry?.model || undefined,
         tokensIn: 0,
         tokensOut: 0,
         cost: 0,
         sessionCount: 0,
+        workspace: configEntry?.workspace || undefined,
+        agentDir: configEntry?.agentDir || undefined,
       });
     }
 
     return results;
-  }, [snapshot?.sessions, snapshot?.statuses, scannedSessions, configuredAgentIds]);
+  }, [snapshot?.sessions, snapshot?.statuses, scannedSessions, configuredAgentIds, configAgentList]);
 
   return { summaries, refreshAgents };
 }

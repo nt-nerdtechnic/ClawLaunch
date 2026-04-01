@@ -12,6 +12,8 @@ import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
 import type { CronSchedule, CronJob } from '../types/cron';
 import { useStore } from '../store';
 import { ConfigService } from '../services/configService';
+import { PROVIDER_MODEL_CATALOGUE } from '../constants/providers';
+import { usePixelOfficeAgents } from '../components/pixel-office/hooks/usePixelOfficeAgents';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -237,7 +239,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ name: string; intervalMin: number; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; agentId: string; model: string; intervalMin: number; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
+
+  const { summaries: allAgents } = usePixelOfficeAgents();
 
   // 從 runtimeProfile 偵測已綁定 bot token 的頻道
   const configuredBotChannels = useMemo(() => {
@@ -476,7 +480,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   };
 
-  const updateCron = async (jobId: string, updates: { name?: string; everyMs?: number; timeoutSeconds?: number; delivery?: { mode: string; channel?: string; to?: string }; payloadMessage?: string }) => {
+  const updateCron = async (jobId: string, updates: { name?: string; agentId?: string; model?: string; everyMs?: number; timeoutSeconds?: number; delivery?: { mode: string; channel?: string; to?: string }; payloadMessage?: string }) => {
     try {
       setError('');
       await execCmd(`cron:update ${JSON.stringify({ jobId, stateDir, ...updates })}`);
@@ -502,6 +506,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     const existingTo = job.delivery?.to || '';
     setEditDraft({
       name: job.name,
+      agentId: job.agentId || 'main',
+      model: job.payload?.model || '',
       intervalMin,
       timeoutMin,
       deliveryMode: job.delivery?.mode || 'none',
@@ -993,9 +999,21 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           </button>
                         </div>
                       </div>
-                      {/* 副資訊列：排程 · 上次時間 · 下次時間 */}
+                      {/* 副資訊列：排程 · Agent · 模型 · 上次時間 · 下次時間 */}
                       <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
                         <span className="font-mono text-violet-400/70">{formatInterval(job.schedule, t)}</span>
+                        <span className="opacity-40">·</span>
+                        <span className="text-slate-500 font-mono truncate max-w-[80px]" title={job.agentId}>
+                          {job.agentId || 'main'}
+                        </span>
+                        {job.payload?.model && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="text-sky-500/80 font-mono truncate max-w-[100px]" title={job.payload.model}>
+                              {job.payload.model}
+                            </span>
+                          </>
+                        )}
                         {job.payload?.timeoutSeconds && (
                           <>
                             <span className="opacity-40">·</span>
@@ -1038,6 +1056,36 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                                 className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
                                 maxLength={100}
                               />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">Agent 種類</label>
+                              <select
+                                value={editDraft.agentId}
+                                onChange={e => setEditDraft(d => d ? { ...d, agentId: e.target.value } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              >
+                                <option value="" disabled>請選擇 Agent...</option>
+                                {allAgents.map(a => (
+                                  <option key={a.id} value={a.id}>{a.displayName}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">強制指定模型（選填）</label>
+                              <select
+                                value={editDraft.model}
+                                onChange={e => setEditDraft(d => d ? { ...d, model: e.target.value } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              >
+                                <option value="">(留空，套用 Agent 預設模型)</option>
+                                {Object.entries(PROVIDER_MODEL_CATALOGUE).map(([prov, data]) => (
+                                  <optgroup key={prov} label={data.label}>
+                                    {data.models.map(m => (
+                                      <option key={m} value={m}>{m}</option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                              </select>
                             </div>
                             <div>
                               <label className="block text-[9px] font-bold text-slate-500 mb-0.5">排程（分鐘）</label>
@@ -1155,6 +1203,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             <button
                               onClick={() => void updateCron(job.id, {
                                 name: editDraft.name,
+                                agentId: editDraft.agentId,
+                                ...(editDraft.model ? { model: editDraft.model } : { model: '' }),
                                 everyMs: editDraft.intervalMin * 60000,
                                 ...(editDraft.timeoutMin !== '' ? { timeoutSeconds: editDraft.timeoutMin * 60 } : {}),
                                 delivery: {

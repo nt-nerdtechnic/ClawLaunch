@@ -43,6 +43,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
   const running = useStore(s => s.running);
   const snapshotHistory = useStore(s => s.snapshotHistory);
   const snapshot = useStore(s => s.snapshot);
+  const configAgentList = useStore(s => s.detectedConfig?.agentList);
 
   const todayCost = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -229,6 +230,14 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
             <AgentSettingsDrawer
               agentId={drawerState.agentId}
               summary={summaries.find(s => s.id === drawerState.agentId)}
+              agentWorkspace={
+                configAgentList?.find(a => a.id === drawerState.agentId)?.workspace
+                || summaries.find(s => s.id === drawerState.agentId)?.workspace
+              }
+              agentDir={
+                configAgentList?.find(a => a.id === drawerState.agentId)?.agentDir
+                || summaries.find(s => s.id === drawerState.agentId)?.agentDir
+              }
               initialTab={drawerState.initialTab}
               onClose={() => setDrawerState(null)}
             />

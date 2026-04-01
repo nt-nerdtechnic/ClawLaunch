@@ -305,6 +305,15 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
         updated = true;
         const next: Record<string, unknown> = { ...job, updatedAtMs: Date.now() };
         if (payload.name !== undefined) next['name'] = String(payload.name).trim();
+        if (payload.agentId !== undefined) {
+          const agentIdStr = String(payload.agentId).trim();
+          if (agentIdStr) next['agentId'] = agentIdStr;
+        }
+        if (payload.model !== undefined) {
+          const modelStr = String(payload.model).trim();
+          const existingPayload = ((next['payload'] || job['payload'] || {}) as Record<string, unknown>);
+          next['payload'] = { ...existingPayload, model: modelStr || undefined };
+        }
         if (payload.everyMs !== undefined) {
           const everyMs = Math.max(60000, Number(payload.everyMs));
           next['schedule'] = { ...(job['schedule'] as Record<string, unknown>), everyMs };

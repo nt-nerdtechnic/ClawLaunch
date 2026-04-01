@@ -87,7 +87,8 @@ export async function resolveOpenClawRuntime() {
   const gatewayCredentials = resolveGatewayCredentials(openclawConfig);
   const gatewayUrlArg = buildGatewayUrlArg(String((openclawConfig?.gateway as Record<string, unknown>)?.port ?? ''));
   const gatewayAuthArg = buildGatewayAuthArg(gatewayCredentials);
-  const envPrefix = `${configDir ? `OPENCLAW_STATE_DIR=${shellQuote(configDir)} ` : ''}${configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} ` : ''}`;
+  const mainAgentDir = configDir ? path.join(configDir, 'agents', 'main', 'agent') : '';
+  const envPrefix = `${configDir ? `OPENCLAW_STATE_DIR=${shellQuote(configDir)} ` : ''}${configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} ` : ''}${mainAgentDir ? `OPENCLAW_AGENT_DIR=${shellQuote(mainAgentDir)} ` : ''}`;
   const cdPrefix = corePath ? `cd ${shellQuote(corePath)} && ` : '';
   return {
     corePath,

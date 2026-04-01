@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
-import type { ReadModelSession } from '../store';
+
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { TrendingUp, TrendingDown, Minus, RefreshCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -22,9 +22,7 @@ const formatDelta = (current: number, previous: number) => {
 };
 
 // Keep as fallback (when runtimeUsageEvents is empty)
-const estimateCost = (inputTokens: number, outputTokens: number) => {
-  return ((inputTokens + outputTokens * 2) / 1_000_000) * 0.5;
-};
+
 
 const formatCompactNumber = (number: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -38,26 +36,9 @@ const normalizeFinite = (value: unknown, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
-const toMonthDay = (isoTime: string) => {
-  const date = new Date(isoTime);
-  if (Number.isNaN(date.getTime())) return '??-??';
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${mm}-${dd}`;
-};
-
-const toDateKey = (isoTime: string) => {
-  const date = new Date(isoTime);
-  if (Number.isNaN(date.getTime())) return '';
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-};
-
 export function Analytics() {
   const { t } = useTranslation();
-  const { setUsage, snapshot, snapshotHistory, runtimeUsageEvents, modelPrices, setModelPrices } = useStore();
+  const { setUsage, runtimeUsageEvents, modelPrices, setModelPrices } = useStore();
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const [usageWindow, setUsageWindow] = useState<'today' | '7d' | '30d'>('7d');
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
@@ -89,10 +70,8 @@ export function Analytics() {
   const getModelPrice = (modelName: string) => {
     const name = modelName.trim().toLowerCase();
     if (name === 'unknown' || !name) return null;
-
     if (!modelPrices || Object.keys(modelPrices).length === 0) return null;
     
-    // Attempt to match perfectly first from OpenRouter
     if (modelPrices[name]) return modelPrices[name];
     
     const norm = name.replace(/[-_.\s]/g, '');
@@ -102,7 +81,7 @@ export function Analytics() {
       const slug = id.split('/')[1] || id;
       const normSlug = slug.toLowerCase().replace(/[-_.\s]/g, '');
       
-      if (norm === normSlug) return price; // Exact slug match
+      if (norm === normSlug) return price;
       
       if (norm.includes(normSlug) || normSlug.includes(norm)) {
          if (!bestMatch || normSlug.length > bestMatch.slug.length) {
@@ -115,14 +94,8 @@ export function Analytics() {
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
 
-  const snapshotSessions = snapshot?.sessions;
-  const sessions: ReadModelSession[] = useMemo(() => {
-    if (!Array.isArray(snapshotSessions)) return [];
-    return snapshotSessions.filter((item): item is ReadModelSession => !!item && typeof item === 'object');
-  }, [snapshotSessions]);
-
-  // ── Track 2: JSONL Calculation - Build per-day DaySeries from runtimeUsageEvents ──
-  const runtimeDayMap = useMemo<DaySeries[]>(() => {
+  // ── Build per-day DaySeries from runtimeUsageEvents ──
+  const chartData = useMemo<DaySeries[]>(() => {
     if (runtimeUsageEvents.length === 0) return [];
     const map = new Map<string, DaySeries>();
     for (const ev of runtimeUsageEvents) {
@@ -136,79 +109,14 @@ export function Analytics() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
   }, [runtimeUsageEvents]);
 
-  // ── Track 1 Fallback: session-based daily aggregation ──
-  const fallbackChartData = useMemo<DaySeries[]>(() => {
-    const dailyMap = new Map<string, { label: string; in: number; out: number; tokens: number; cost: number }>();
-
-    for (const session of sessions) {
-      const updatedAt = typeof session.updatedAt === 'string' ? session.updatedAt : '';
-      const key = toDateKey(updatedAt || snapshot?.generatedAt || '');
-      if (!key) continue;
-      const current = dailyMap.get(key) || { label: toMonthDay(updatedAt || snapshot?.generatedAt || ''), in: 0, out: 0, tokens: 0, cost: 0 };
-      const inTokens = normalizeFinite(session.tokensIn, 0);
-      const outTokens = normalizeFinite(session.tokensOut, 0);
-      const sessionCostRaw = normalizeFinite(session.cost, NaN);
-      const sessionCost = Number.isFinite(sessionCostRaw) && sessionCostRaw >= 0 ? sessionCostRaw : estimateCost(inTokens, outTokens);
-
-      current.in += inTokens;
-      current.out += outTokens;
-      current.tokens += inTokens + outTokens;
-      current.cost += sessionCost;
-      dailyMap.set(key, current);
-    }
-
-    return Array.from(dailyMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-30)
-      .map(([, value]) => ({ name: value.label, in: value.in, out: value.out, tokens: value.tokens, cost: normalizeFinite(value.cost, estimateCost(value.in, value.out)) }));
-  }, [sessions, snapshot?.generatedAt]);
-
-  // Priority: runtimeDayMap (Track 2) > snapshotHistory (Track 1) > fallbackChartData
-  const chartData = useMemo<DaySeries[]>(() => {
-    if (runtimeDayMap.length > 0) return runtimeDayMap;
-
-    if (Array.isArray(snapshotHistory) && snapshotHistory.length > 0) {
-      return snapshotHistory.map((point) => ({
-        name: String(point.label || '').trim() || String(point.dateKey || '').slice(5),
-        in: normalizeFinite(point.tokensIn, 0),
-        out: normalizeFinite(point.tokensOut, 0),
-        tokens: normalizeFinite(point.totalTokens, 0),
-        cost: (() => {
-          const exactCost = normalizeFinite(point.estimatedCost, NaN);
-          if (Number.isFinite(exactCost) && exactCost >= 0) return exactCost;
-          return estimateCost(normalizeFinite(point.tokensIn, 0), normalizeFinite(point.tokensOut, 0));
-        })(),
-      }));
-    }
-
-    return fallbackChartData;
-  }, [runtimeDayMap, fallbackChartData, snapshotHistory]);
-
-  // Track 2 Priority: Sum from runtimeUsageEvents (most accurate)
   const totals = useMemo(() => {
-    if (runtimeUsageEvents.length > 0) {
-      return runtimeUsageEvents.reduce(
-        (acc, ev) => ({ input: acc.input + ev.tokensIn, output: acc.output + ev.tokensOut, cost: acc.cost + ev.cost }),
-        { input: 0, output: 0, cost: 0 },
-      );
-    }
-    // Fallback: session-based
-    return sessions.reduce(
-      (acc, session) => {
-        const input = normalizeFinite(session.tokensIn, 0);
-        const output = normalizeFinite(session.tokensOut, 0);
-        const exactCost = normalizeFinite(session.cost, NaN);
-        acc.input += input;
-        acc.output += output;
-        acc.cost += Number.isFinite(exactCost) && exactCost >= 0 ? exactCost : estimateCost(input, output);
-        return acc;
-      },
+    return runtimeUsageEvents.reduce(
+      (acc, ev) => ({ input: acc.input + ev.tokensIn, output: acc.output + ev.tokensOut, cost: acc.cost + ev.cost }),
       { input: 0, output: 0, cost: 0 },
     );
-  }, [runtimeUsageEvents, sessions]);
+  }, [runtimeUsageEvents]);
 
-  // Dynamic calculation across three time windows from runtimeUsageEvents (same as openclaw-control-center computeUsageCostSnapshot)
-  const runtimePeriods = useMemo<Record<'today' | '7d' | '30d', PeriodAgg>>(() => {
+  const usagePeriods = useMemo<Record<'today' | '7d' | '30d', PeriodAgg>>(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
     const getFrom = (days: number) =>
       new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
@@ -229,23 +137,6 @@ export function Analytics() {
     };
   }, [runtimeUsageEvents]);
 
-  const usagePeriods = useMemo<Record<'today' | '7d' | '30d', PeriodAgg>>(() => {
-    if (runtimeUsageEvents.length > 0) return runtimePeriods;
-
-    const aggregate = (data: DaySeries[]): PeriodAgg => ({
-      tokens: data.reduce((acc, row) => acc + normalizeFinite(row.tokens, 0), 0),
-      cost: data.reduce((acc, row) => acc + normalizeFinite(row.cost, 0), 0),
-      requestCount: 0,
-    });
-
-    return {
-      today: aggregate(chartData.slice(-1)),
-      '7d': aggregate(chartData.slice(-7)),
-      '30d': aggregate(chartData.slice(-30)),
-    };
-  }, [runtimeUsageEvents, runtimePeriods, chartData]);
-
-  // Pace classification (same as openclaw-control-center classifyPace)
   const paceStatus = useMemo(() => {
     if (runtimeUsageEvents.length === 0) return null;
     const avgCost = (daysBack: number, len: number) => {
@@ -262,7 +153,6 @@ export function Analytics() {
     return { label: t('analytics.pace.steady'), state: 'steady' as const, color: 'text-emerald-500' as const };
   }, [runtimeUsageEvents, t]);
 
-  // Provider distribution (only runtimeUsageEvents contains provider info)
   const providerBreakdown = useMemo(() => {
     if (runtimeUsageEvents.length === 0) return [];
     const map = new Map<string, { tokens: number; cost: number }>();
@@ -284,8 +174,8 @@ export function Analytics() {
 
     const inDelta = today && yesterday ? formatDelta(today.in, yesterday.in) : '+0.0%';
     const outDelta = today && yesterday ? formatDelta(today.out, yesterday.out) : '+0.0%';
-    const todayCost = today ? normalizeFinite(today.cost, estimateCost(today.in, today.out)) : 0;
-    const yesterdayCost = yesterday ? normalizeFinite(yesterday.cost, estimateCost(yesterday.in, yesterday.out)) : 0;
+    const todayCost = today ? today.cost : 0;
+    const yesterdayCost = yesterday ? yesterday.cost : 0;
     const costDelta = today && yesterday ? formatDelta(todayCost, yesterdayCost) : '+0.0%';
 
     return {
@@ -305,44 +195,18 @@ export function Analytics() {
         hourlyMap.set(`${hh}:00`, { name: `${hh}:00`, in: 0, out: 0, tokens: 0, cost: 0 });
       }
 
-      if (runtimeUsageEvents.length > 0) {
-        for (const ev of runtimeUsageEvents) {
-          if (ev.day === todayStr) {
-            const date = new Date(ev.timestamp);
-            if (!Number.isNaN(date.getTime())) {
-              const hh = String(date.getHours()).padStart(2, '0');
-              const key = `${hh}:00`;
-              const cur = hourlyMap.get(key);
-              if (cur) {
-                cur.in += normalizeFinite(ev.tokensIn, 0);
-                cur.out += normalizeFinite(ev.tokensOut, 0);
-                cur.tokens += normalizeFinite(ev.tokens, 0);
-                cur.cost += normalizeFinite(ev.cost, 0);
-              }
-            }
-          }
-        }
-      } else {
-        for (const session of sessions) {
-          const updatedAt = typeof session.updatedAt === 'string' ? session.updatedAt : '';
-          const snapshotDate = typeof snapshot?.generatedAt === 'string' ? snapshot.generatedAt : '';
-          const keyDate = toDateKey(updatedAt || snapshotDate);
-          
-          if (keyDate === todayStr) {
-            const date = new Date(updatedAt || snapshotDate);
-            if (!Number.isNaN(date.getTime())) {
-              const hh = String(date.getHours()).padStart(2, '0');
-              const key = `${hh}:00`;
-              const cur = hourlyMap.get(key);
-              if (cur) {
-                const inTokens = normalizeFinite(session.tokensIn, 0);
-                const outTokens = normalizeFinite(session.tokensOut, 0);
-                const sessionCostRaw = normalizeFinite(session.cost, NaN);
-                cur.in += inTokens;
-                cur.out += outTokens;
-                cur.tokens += inTokens + outTokens;
-                cur.cost += Number.isFinite(sessionCostRaw) && sessionCostRaw >= 0 ? sessionCostRaw : estimateCost(inTokens, outTokens);
-              }
+      for (const ev of runtimeUsageEvents) {
+        if (ev.day === todayStr) {
+          const date = new Date(ev.timestamp);
+          if (!Number.isNaN(date.getTime())) {
+            const hh = String(date.getHours()).padStart(2, '0');
+            const key = `${hh}:00`;
+            const cur = hourlyMap.get(key);
+            if (cur) {
+              cur.in += normalizeFinite(ev.tokensIn, 0);
+              cur.out += normalizeFinite(ev.tokensOut, 0);
+              cur.tokens += normalizeFinite(ev.tokens, 0);
+              cur.cost += normalizeFinite(ev.cost, 0);
             }
           }
         }
@@ -352,60 +216,32 @@ export function Analytics() {
 
     if (usageWindow === '7d') return chartData.slice(-7);
     return chartData.slice(-30);
-  }, [chartData, usageWindow, runtimeUsageEvents, sessions, snapshot?.generatedAt]);
+  }, [chartData, usageWindow, runtimeUsageEvents]);
 
-  // Track 2 Priority: From runtimeUsageEvents grouped by model (accurate source)
   const costHotspots = useMemo(() => {
-    if (runtimeUsageEvents.length > 0) {
-      const grouped = new Map<string, number>();
-      for (const ev of runtimeUsageEvents) {
-        const key = String(ev.model || ev.agentId || 'unknown').trim() || 'unknown';
-        grouped.set(key, (grouped.get(key) ?? 0) + ev.cost);
-      }
-      return Array.from(grouped.entries())
-        .map(([name, cost]) => ({ name, cost }))
-        .sort((a, b) => b.cost - a.cost)
-        .slice(0, 5);
-    }
-    // Fallback: sessions
+    if (runtimeUsageEvents.length === 0) return [];
     const grouped = new Map<string, number>();
-    for (const session of sessions) {
-      const key = String(session.model || session.agentId || t('analytics.costHotspots.unknownSource')).trim() || t('analytics.costHotspots.unknownSource');
-      const input = normalizeFinite(session.tokensIn, 0);
-      const output = normalizeFinite(session.tokensOut, 0);
-      const exact = normalizeFinite(session.cost, NaN);
-      const cost = Number.isFinite(exact) && exact >= 0 ? exact : estimateCost(input, output);
-      grouped.set(key, (grouped.get(key) || 0) + cost);
+    for (const ev of runtimeUsageEvents) {
+      const key = String(ev.model || ev.agentId || 'unknown').trim() || 'unknown';
+      grouped.set(key, (grouped.get(key) ?? 0) + ev.cost);
     }
     return Array.from(grouped.entries())
       .map(([name, cost]) => ({ name, cost }))
       .sort((a, b) => b.cost - a.cost)
       .slice(0, 5);
-  }, [runtimeUsageEvents, sessions, t]);
+  }, [runtimeUsageEvents]);
 
-  // Track 2 Priority: Grouped by agentId from runtimeUsageEvents
   const agentBreakdown = useMemo(() => {
-    if (runtimeUsageEvents.length > 0) {
-      const grouped = new Map<string, number>();
-      for (const ev of runtimeUsageEvents) {
-        const agentId = ev.agentId || 'Unknown';
-        grouped.set(agentId, (grouped.get(agentId) ?? 0) + ev.tokens);
-      }
-      return Array.from(grouped.entries())
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value);
-    }
-    // Fallback: sessions
+    if (runtimeUsageEvents.length === 0) return [];
     const grouped = new Map<string, number>();
-    for (const session of sessions) {
-      const agentId = String(session.agentId || 'Unknown').trim() || 'Unknown';
-      const tokens = Number(session.tokensIn || 0) + Number(session.tokensOut || 0);
-      grouped.set(agentId, (grouped.get(agentId) || 0) + tokens);
+    for (const ev of runtimeUsageEvents) {
+      const agentId = ev.agentId || 'Unknown';
+      grouped.set(agentId, (grouped.get(agentId) ?? 0) + ev.tokens);
     }
     return Array.from(grouped.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [runtimeUsageEvents, sessions]);
+  }, [runtimeUsageEvents]);
 
   useEffect(() => {
     setUsage({
@@ -423,7 +259,6 @@ export function Analytics() {
         <StatCard label={t('analytics.estimatedCost')} value={`$${stats.cost.value}`} delta={stats.cost.delta} />
       </div>
 
-      {/* Period Selector + Pace Badge */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{t('analytics.window.title')}</span>
@@ -461,7 +296,6 @@ export function Analytics() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
-        {/* Main Consumption Trend */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"></div>
 
@@ -471,7 +305,7 @@ export function Analytics() {
               <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">{t('analytics.labels.dailyTotalStacked')}</p>
             </div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              {runtimeUsageEvents.length > 0 ? t('analytics.labels.jsonlSource') : t('analytics.labels.readModel')}
+              {t('analytics.labels.jsonlSource')}
             </div>
           </div>
 
@@ -526,7 +360,6 @@ export function Analytics() {
           </div>
         </div>
 
-        {/* Efficiency Chart */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent"></div>
 
@@ -575,7 +408,6 @@ export function Analytics() {
 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
-        {/* Provider Breakdown */}
         {providerBreakdown.length > 0 && (
           <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
             <div className="mb-6">
@@ -594,13 +426,12 @@ export function Analytics() {
           </div>
         )}
 
-        {/* Cost Hotspots */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl">
           <div className="mb-6 flex items-start justify-between">
             <div>
               <h3 className="text-lg font-black uppercase tracking-widest text-slate-900 dark:text-slate-100">{t('analytics.costHotspots.title')}</h3>
               <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">
-                {runtimeUsageEvents.length > 0 ? t('analytics.costHotspots.subtitleRuntime') : t('analytics.costHotspots.subtitle')}
+                {t('analytics.costHotspots.subtitleRuntime')}
               </p>
             </div>
             <button
@@ -615,8 +446,8 @@ export function Analytics() {
           <div className="space-y-2">
             {costHotspots.length > 0 ? costHotspots.map((row) => {
               const priceObj = getModelPrice(row.name);
-              const inPrice = priceObj ? (priceObj.prompt * 1000000).toFixed(2) : '0.50';
-              const outPrice = priceObj ? (priceObj.completion * 1000000).toFixed(2) : '1.00';
+              const inPrice = priceObj ? (priceObj.prompt * 1000000).toFixed(2) : '--';
+              const outPrice = priceObj ? (priceObj.completion * 1000000).toFixed(2) : '--';
               
               return (
                 <div key={row.name} className="flex flex-col rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-white/70 dark:bg-slate-900/40">
@@ -635,7 +466,6 @@ export function Analytics() {
           </div>
         </div>
 
-        {/* Agent Attribution */}
         <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-8 rounded-[32px] shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-pink-500/50 to-transparent"></div>
 

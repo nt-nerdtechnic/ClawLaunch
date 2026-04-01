@@ -238,9 +238,23 @@ export function parseOpenClawConfig(content: string) {
       }
     }
 
-    return { apiKey, model, workspace, botToken, corePath, authChoice, providers, gateway };
+    const agentList: Array<{ id: string; name: string; workspace: string; agentDir: string; model: string }> =
+      (Array.isArray(parsed.agents?.list) ? parsed.agents.list : [])
+        .map((a: Record<string, unknown>) => {
+          const id = String(a.id ?? '').trim();
+          return {
+            id,
+            name: String(a.name ?? a.id ?? '').trim(),
+            workspace: String(a.workspace ?? parsed.agents?.defaults?.workspace ?? '').trim(),
+            agentDir: String(a.agentDir ?? `~/.openclaw/agents/${id}/agent`).trim(),
+            model: String(a.model ?? '').trim(),
+          };
+        })
+        .filter((a: { id: string }) => !!a.id);
+
+    return { apiKey, model, workspace, botToken, corePath, authChoice, providers, gateway, agentList };
   } catch (_e) {
-    return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '', providers: [] as string[], gateway: null };
+    return { apiKey: '', model: '', workspace: '', botToken: '', corePath: '', authChoice: '', providers: [] as string[], gateway: null, agentList: [] as Array<{ id: string; name: string; workspace: string; agentDir: string; model: string }> };
   }
 }
 

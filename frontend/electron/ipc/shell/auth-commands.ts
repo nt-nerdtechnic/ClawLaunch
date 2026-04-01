@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { app } from 'electron';
 import { t } from '../../utils/i18n.js';
 import { shellQuote } from '../../utils/shell-utils.js';
 import { normalizeConfigDir } from '../../utils/normalize.js';
@@ -165,6 +166,75 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       const agentDir = path.join(configDir, 'agents', agentId, 'agent');
       await fs.mkdir(agentDir, { recursive: true });
 
+      const homeDir = app.getPath('home');
+      const toTildePath = (value: string) =>
+        value.startsWith(homeDir) ? value.replace(homeDir, '~') : value;
+
+      // ── Helper: register agent in agents.list[] of openclaw.json ──────────
+      const registerAgentInConfig = async (workspacePath?: string) => {
+        try {
+          const configJson = (await loadJsonFile(configFilePath)) || {} as Record<string, unknown>;
+          if (!configJson.agents || typeof configJson.agents !== 'object') {
+            configJson.agents = {};
+          }
+          const agents = configJson.agents as Record<string, unknown>;
+          const defaults = (agents.defaults && typeof agents.defaults === 'object')
+            ? (agents.defaults as Record<string, unknown>)
+            : {};
+          const rawList = Array.isArray(agents.list)
+            ? (agents.list as Array<Record<string, unknown>>)
+            : [];
+
+          const nextListMap = new Map<string, Record<string, unknown>>();
+          for (const item of rawList) {
+            const id = String(item.id || '').trim();
+            if (!id) continue;
+            nextListMap.set(id, { ...item, id });
+          }
+
+          const mainWorkspace = String(defaults.workspace || '~/.openclaw/workspace-main').trim();
+          const mainAgentDir = toTildePath(path.join(configDir, 'agents', 'main', 'agent'));
+          if (!nextListMap.has('main')) {
+            nextListMap.set('main', {
+              id: 'main',
+              workspace: mainWorkspace,
+              agentDir: mainAgentDir,
+            });
+          }
+
+          const existing = nextListMap.get(agentId) || { id: agentId };
+          nextListMap.set(agentId, {
+            ...existing,
+            id: agentId,
+            workspace: workspacePath || String(existing.workspace || `~/.openclaw/workspace-${agentId}`).trim(),
+            agentDir: toTildePath(agentDir),
+          });
+
+          agents.list = Array.from(nextListMap.values());
+          await fs.writeFile(configFilePath, `${JSON.stringify(configJson, null, 2)}\n`, 'utf-8');
+        } catch { /* best-effort: don't fail the whole operation */ }
+      };
+
+      const restoreMainDefaultAgentDir = async () => {
+        try {
+          const configJson = (await loadJsonFile(configFilePath)) || {} as Record<string, unknown>;
+          if (!configJson.agents || typeof configJson.agents !== 'object') return;
+          const agents = configJson.agents as Record<string, unknown>;
+          if (!agents.defaults || typeof agents.defaults !== 'object') return;
+          const defaults = agents.defaults as Record<string, unknown>;
+          const current = String(defaults.agentDir || '').trim();
+          if (!current) return;
+
+          const normalized = current.replace(/\\/g, '/');
+          if (normalized.endsWith('/agents/main/agent') || normalized.endsWith('/agents/main/agent/')) {
+            return;
+          }
+
+          defaults.agentDir = toTildePath(path.join(configDir, 'agents', 'main', 'agent'));
+          await fs.writeFile(configFilePath, `${JSON.stringify(configJson, null, 2)}\n`, 'utf-8');
+        } catch { /* best-effort */ }
+      };
+
       // ── Fast path: clone existing global profiles ──────────────────────────
       if (payload?.cloneFromGlobal === true) {
         const configJson = (await loadJsonFile(configFilePath)) || {};
@@ -183,6 +253,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         const existing = (await loadJsonFile(authProfilesPath)) || {};
         const existingProfiles = (existing.profiles as Record<string, unknown>) || {};
         await saveJsonFile(authProfilesPath, { ...existing, profiles: { ...existingProfiles, ...toClone } });
+        await registerAgentInConfig();
         return { code: 0, stdout: JSON.stringify({ agentId, cloned: Object.keys(toClone) }), stderr: '', exitCode: 0 };
       }
 
@@ -216,6 +287,8 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       if ((onboardRes.code ?? 0) !== 0) {
         return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
       }
+      await restoreMainDefaultAgentDir();
+      await registerAgentInConfig(String(payload?.workspacePath || '').trim() || undefined);
       return { code: 0, stdout: JSON.stringify({ agentId, authChoice }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'auth create-agent failed', exitCode: 1 };

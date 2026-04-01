@@ -123,9 +123,10 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
     }
     const coreSkills = corePath ? await scanSkillsInDir(path.join(corePath, 'skills')) : [];
     const workspaceSkills = workspacePath ? await scanInstalledSkills(workspacePath) : [];
+    const agentList = (existingConfig as Record<string, unknown>)['agentList'] ?? [];
     return {
       code: 0,
-      stdout: JSON.stringify({ corePath, configPath, workspacePath, existingConfig: { ...existingConfig, workspaceSkills }, coreSkills }),
+      stdout: JSON.stringify({ corePath, configPath, workspacePath, agentList, existingConfig: { ...existingConfig, workspaceSkills }, coreSkills }),
       exitCode: 0,
     };
   }
@@ -176,6 +177,7 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
             corePath: configData.corePath,
             configPath: finalConfigDirPath,
             workspacePath: configData.workspace,
+            agentList: configData.agentList ?? [],
             coreSkills,
             existingConfig,
           }),
@@ -185,6 +187,34 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
       return { code: 1, stdout: '', stderr: 'No config found at path', exitCode: 1 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'config probe failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('agent:auth-list')) {
+    const agentDirRaw = unwrapCliArg(fullCommand.replace('agent:auth-list', '').trim());
+    const homeDir = app.getPath('home');
+    const agentDir = agentDirRaw.startsWith('~') ? agentDirRaw.replace('~', homeDir) : agentDirRaw;
+    if (!agentDir) return { code: 1, stdout: JSON.stringify({ profiles: [] }), stderr: 'Missing agentDir', exitCode: 1 };
+    try {
+      const authProfilesPath = path.join(agentDir, 'auth-profiles.json');
+      const content = await fs.readFile(authProfilesPath, 'utf-8');
+      const raw = JSON.parse(content);
+      const rawObject = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+      const rawProfiles = rawObject.profiles;
+      const profiles = Array.isArray(rawProfiles)
+        ? rawProfiles
+        : (rawProfiles && typeof rawProfiles === 'object'
+          ? Object.values(rawProfiles as Record<string, unknown>)
+          : (Array.isArray(raw) ? raw : Object.values(rawObject)));
+      const sanitized = profiles.map((p: Record<string, unknown>) => ({
+        provider: String(p.provider || p.name || '').toLowerCase(),
+        authChoice: String(p.authChoice || ''),
+        hasKey: !!(p.apiKey || p.api_key || p.token || p.bearer),
+        healthy: p.credentialHealthy !== false,
+      })).filter((p: { provider: string }) => !!p.provider);
+      return { code: 0, stdout: JSON.stringify({ profiles: sanitized }), exitCode: 0 };
+    } catch {
+      return { code: 0, stdout: JSON.stringify({ profiles: [] }), exitCode: 0 };
     }
   }
 
