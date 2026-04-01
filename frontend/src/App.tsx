@@ -183,7 +183,7 @@ function App() {
             />
           )}
           launcherSettingsContent={(
-            <LauncherSettingsPage restartGateway={restartGateway} />
+            <LauncherSettingsPage />
           )}
           runtimeSettingsContent={(
             <RuntimeSettingsPage

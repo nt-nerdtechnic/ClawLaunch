@@ -1,15 +1,57 @@
 {
   "miniView": {
-    "latticeStatus": "Lattice 狀態",
-    "tokenBudget": "Token 用量",
-    "trend7d": "7日趨勢",
-    "home": "首頁",
-    "taskBoard": "任務",
-    "monitor": "監控",
-    "expand": "展開"
+    "tokenBudget": "Token 預算",
+    "trend7d": "Trend (7d)",
+    "security": "Security",
+    "logs": "Logs"
   },
   "common": {
-    "toggleTheme": "切換主題"
+    "time": {
+      "every": "每 {{val}}",
+      "soon": "即將",
+      "ago": "{{val}} 前",
+      "later": "{{val}} 後",
+      "pending": "待執行"
+    },
+    "status": {
+      "todo": "待處理",
+      "in_progress": "執行中",
+      "blocked": "封鎖中",
+      "done": "已完成",
+      "success": "成功",
+      "failure": "失敗",
+      "exec": "執行",
+      "completed": "完成"
+    },
+    "source": {
+      "fs": "檔案系統",
+      "agent": "Agent 作業",
+      "cron": "排程",
+      "system": "系統"
+    },
+    "agent": {
+      "running": "運行 · {{pid}}",
+      "loaded": "已載入",
+      "unloaded": "未載入",
+      "notInstalled": "未安裝"
+    },
+    "labels": {
+      "success": "成功",
+      "failure": "失敗",
+      "notParsed": "未解析到",
+      "oauthFlow": "OAuth 流程",
+      "noKeyRequired": "無須密鑰",
+      "executing": "執行中",
+      "execute": "執行",
+      "static": "靜態",
+      "dynamic": "動態",
+      "cancel": "取消",
+      "collapse": "摺疊",
+      "expandAll": "全部展開"
+    },
+    "punctuation": {
+      "comma": "、"
+    }
   },
   "terminal": {
     "dailyDigest": "每日摘要",
@@ -170,7 +212,6 @@
       "scanBtn": "立即掃描 Agent 作業",
       "empty": "尚無作業紀錄"
     },
-
     "services": {
       "title": "系統服務",
       "empty": "未偵測到系統服務",
@@ -215,7 +256,57 @@
     "sessions": "對話",
     "tokens": "Tokens",
     "cost": "費用",
-    "noAgents": "目前沒有活躍的 Agent"
+    "noAgents": "目前沒有活躍的 Agent",
+    "clickToChat": "點擊對話 · 右鍵管理",
+    "contextMenu": {
+      "chat": "Chat",
+      "stopAll": "停止所有對話",
+      "settings": "設定",
+      "cronJobs": "Cron 排程",
+      "auth": "Auth 憑證"
+    },
+    "drawer": {
+      "tabs": {
+        "info": "資訊",
+        "cron": "Cron 排程",
+        "auth": "Auth 憑證"
+      },
+      "info": {
+        "id": "Agent ID",
+        "state": "狀態",
+        "model": "模型",
+        "sessions": "對話數",
+        "tokensIn": "Tokens 輸入",
+        "tokensOut": "Tokens 輸出",
+        "cost": "費用"
+      },
+      "cron": {
+        "noJobs": "此 Agent 沒有 Cron 排程",
+        "trigger": "立即執行",
+        "pause": "暫停",
+        "resume": "繼續",
+        "disable": "停用",
+        "enable": "啟用",
+        "delete": "刪除"
+      }
+    },
+    "hud": {
+      "gatewayOn": "ON",
+      "gatewayOff": "OFF",
+      "active": "運行中",
+      "todayCost": "今日",
+      "addAgent": "新增"
+    },
+    "addAgent": {
+      "title": "新增 Agent",
+      "agentId": "Agent ID",
+      "agentIdHint": "小寫英文、數字、連字號，最多 31 字元",
+      "authChoice": "驗證方式",
+      "apiKey": "API Key",
+      "creating": "建立中…",
+      "create": "建立 Agent",
+      "success": "Agent 建立成功！"
+    }
   },
   "chat": {
     "justNow": "剛剛",
@@ -456,9 +547,9 @@
     "botToken": "Telegram Bot Token",
     "botTokenPlaceholder": "輸入您的 Bot Token...",
     "inferenceEngine": "Primary Inference Engine",
-    "corePath": "OpenClaw 主核心區 (Core)",
+    "corePath": "主核心區 (Core)",
     "corePathPlaceholder": "留空則使用系統預設路徑",
-    "configPath": "OpenClaw 設定區 (Config)",
+    "configPath": "設定區 (Config)",
     "configPathPlaceholder": "留空則使用預設路徑",
     "gatewayPort": "Gateway 連接埠 (Port)",
     "gatewayPortPlaceholder": "18789",
@@ -1479,54 +1570,6 @@
       "workspaceExtension": "工作區擴充技能"
     }
   },
-  "common": {
-    "time": {
-      "every": "每 {{val}}",
-      "soon": "即將",
-      "ago": "{{val}} 前",
-      "later": "{{val}} 後",
-      "pending": "待執行"
-    },
-    "status": {
-      "todo": "待處理",
-      "in_progress": "執行中",
-      "blocked": "封鎖中",
-      "done": "已完成",
-      "success": "成功",
-      "failure": "失敗",
-      "exec": "執行",
-      "completed": "完成"
-    },
-    "source": {
-      "fs": "檔案系統",
-      "agent": "Agent 作業",
-      "cron": "排程",
-      "system": "系統"
-    },
-    "agent": {
-      "running": "運行 · {{pid}}",
-      "loaded": "已載入",
-      "unloaded": "未載入",
-      "notInstalled": "未安裝"
-    },
-    "labels": {
-      "success": "成功",
-      "failure": "失敗",
-      "notParsed": "未解析到",
-      "oauthFlow": "OAuth 流程",
-      "noKeyRequired": "無須密鑰",
-      "executing": "執行中",
-      "execute": "執行",
-      "static": "靜態",
-      "dynamic": "動態",
-      "cancel": "取消",
-      "collapse": "摺疊",
-      "expandAll": "全部展開"
-    },
-    "punctuation": {
-      "comma": "、"
-    }
-  },
   "launcher": {
     "autoRestart": {
       "label": "自動重啟 Gateway（崩潰時）",
@@ -1627,12 +1670,6 @@
     "initPathActual": "實際初始化將使用：",
     "initTarget": "將初始化至："
   },
-  "miniView": {
-    "tokenBudget": "Token 預算",
-    "trend7d": "Trend (7d)",
-    "security": "Security",
-    "logs": "Logs"
-  },
   "memory": {
     "browser": "資料管理區",
     "sections": {
@@ -1705,7 +1742,6 @@
     "saving": "儲存中...",
     "cancelEdit": "取消",
     "saved": "已儲存 ✓",
-    "revealInFinder": "在 Finder 中顯示",
     "imgClearBtn": "清除此資料夾的圖片",
     "imgClearConfirm": "確認清除",
     "imgClearCancel": "取消",

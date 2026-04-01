@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { ConfigService } from '../services/configService';
@@ -8,7 +8,6 @@ import { useAppComputedValues } from '../hooks/useAppComputedValues';
 import { useRuntimeActions } from '../hooks/useRuntimeActions';
 import { AuthManagementPanel } from '../components/AuthManagementPanel';
 import { TelegramPairingSection } from '../components/TelegramPairingSection';
-import TerminalLog from '../components/common/TerminalLog';
 
 interface ChannelOption {
   id: string;
@@ -56,7 +55,6 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const detectedConfig = useStore((s) => s.detectedConfig);
   const setRuntimeProfile = useStore((s) => s.setRuntimeProfile);
   const addLog = useStore((s) => s.addLog);
-  const logs = useStore((s) => s.logs);
   const resolvedConfigDir = ConfigService.normalizeConfigDir(config.configPath);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
   const { authProfiles, loadAuthProfiles } = useAuthProfiles(resolvedConfigDir, 'runtimeSettings');
@@ -89,10 +87,6 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const {
     handleSaveConfig,
     runtimeSaveState,
-    handleOpenClawDoctor,
-    handleSecurityCheck,
-    handleUpdateOpenClaw,
-    isUpdating,
     handleSaveChannelToken,
   } = useRuntimeActions({
     config,
@@ -147,73 +141,6 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const [channelSaving, setChannelSaving] = useState('');
   const [channelSaved, setChannelSaved] = useState('');
 
-  // OpenClaw core version — from global store (reads package.json)
-  const ocVersion = useStore((s) => s.ocVersion);
-  const checkOcVersion = useStore((s) => s.checkOcVersion);
-  useEffect(() => { void checkOcVersion(config.corePath); }, [config.corePath]);
-
-  // Available versions for update
-  const [availableVersions, setAvailableVersions] = useState<string[]>(['main']);
-  const [selectedVersion, setSelectedVersion] = useState('main');
-  const [versionsLoading, setVersionsLoading] = useState(false);
-  const normalizeVersion = (v: string) => v.trim().replace(/^v/i, '');
-  const fetchAvailableVersions = async () => {
-    setVersionsLoading(true);
-    const res = await window.electronAPI.exec('project:get-versions');
-    if (res.code === 0 && res.stdout?.trim()) {
-      try {
-        const parsed = JSON.parse(res.stdout);
-        if (Array.isArray(parsed) && parsed.every((v) => typeof v === 'string')) {
-          setAvailableVersions(parsed);
-        }
-      } catch { /* keep default */ }
-    }
-    setVersionsLoading(false);
-  };
-  useEffect(() => { void fetchAvailableVersions(); }, []);
-
-  // Rollback
-  interface BackupEntry { name: string; path: string; mtime: number; }
-  const [backups, setBackups] = useState<BackupEntry[]>([]);
-  const [backupsExpanded, setBackupsExpanded] = useState(false);
-  const [selectedBackup, setSelectedBackup] = useState('');
-  const [backupsLoading, setBackupsLoading] = useState(false);
-  const [isRollingBack, setIsRollingBack] = useState(false);
-  const wasUpdatingRef = useRef(false);
-  const updateLogStartRef = useRef<number>(-1);
-
-  const fetchBackups = async () => {
-    if (!config.corePath?.trim()) return;
-    setBackupsLoading(true);
-    const res = await window.electronAPI.exec(`project:list-backups ${JSON.stringify({ corePath: config.corePath })}`);
-    if (res.code === 0 && res.stdout?.trim()) {
-      try {
-        const parsed: BackupEntry[] = JSON.parse(res.stdout);
-        setBackups(parsed);
-        if (parsed.length > 0 && !selectedBackup) setSelectedBackup(parsed[0].path);
-      } catch { /* keep */ }
-    }
-    setBackupsLoading(false);
-  };
-
-  // Auto-expand & fetch backups when update completes
-  useEffect(() => {
-    if (isUpdating) {
-      wasUpdatingRef.current = true;
-      updateLogStartRef.current = logs.length;
-    } else if (wasUpdatingRef.current) {
-      wasUpdatingRef.current = false;
-      // Update just completed, auto-open rollback section and load backups
-      setBackupsExpanded(true);
-      void fetchBackups();
-      void checkOcVersion(config.corePath);
-    }
-  }, [isUpdating]);
-
-  useEffect(() => {
-    if (backupsExpanded && !wasUpdatingRef.current) void fetchBackups();
-  }, [backupsExpanded, config.corePath]);
-
   // Sync channel tokens from runtimeProfile (excluding telegram, handled by runtimeDraftBotToken)
   useEffect(() => {
     const channels = (runtimeProfile?.channels || {}) as Record<string, Record<string, unknown>>;
@@ -262,204 +189,6 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in zoom-in-95">
-      {/* Quick Diagnostics Section */}
-      <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
-        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-          {t('settings.diag.title')}
-        </div>
-        <div className="text-xs text-slate-500 dark:text-slate-400">
-          {t('settings.diag.terminalHelp')}
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={handleOpenClawDoctor}
-            disabled={!config?.corePath?.trim()}
-            className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-sky-700 dark:bg-sky-950/30 dark:hover:bg-sky-950/50 dark:text-sky-300"
-          >
-            <span>🩺</span>
-            <span>doctor --fix</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleSecurityCheck}
-            disabled={!config?.corePath?.trim()}
-            className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-violet-700 dark:bg-violet-950/30 dark:hover:bg-violet-950/50 dark:text-violet-300"
-          >
-            <span>🔍</span>
-            <span>{t('runtime.diag.securityAudit')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* OpenClaw Core Version & Update Section */}
-      <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
-        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-          {t('runtime.update.title')}
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {t('runtime.update.currentVersion')}
-          </span>
-          {ocVersion ? (
-            <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2 py-0.5">
-              v{ocVersion}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-400 italic">
-              {config.corePath?.trim() ? t('runtime.update.versionLoading') : t('runtime.update.versionUnavailable')}
-            </span>
-          )}
-        </div>
-        {/* Version selector */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-              {t('runtime.update.selectVersion')}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {versionsLoading && <Loader2 size={11} className="animate-spin text-slate-400" />}
-              <button
-                type="button"
-                onClick={() => void fetchAvailableVersions()}
-                disabled={versionsLoading}
-                className="text-[10px] font-bold text-sky-500 hover:text-sky-600 disabled:opacity-40 transition-colors"
-              >
-                {t('runtime.update.refreshVersions')}
-              </button>
-              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5">
-                {t('setupInitialize.versionSource')}
-              </span>
-            </div>
-          </div>
-          <select
-            value={selectedVersion}
-            onChange={(e) => setSelectedVersion(e.target.value)}
-            className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-          >
-          {availableVersions.map((v) => {
-              const isCurrent = !!ocVersion && normalizeVersion(v) === normalizeVersion(ocVersion);
-              const label = isCurrent
-                ? `${v}  ✓ ${t('runtime.update.installedLabel')}`
-                : v === 'main'
-                  ? `${v} ${t('setupInitialize.latestSuffix')}`
-                  : v;
-              return (
-                <option key={v} value={v} disabled={isCurrent}>
-                  {label}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-        <div className="grid grid-cols-1 gap-3">
-          <button
-            type="button"
-            onClick={() => void handleUpdateOpenClaw(selectedVersion)}
-            disabled={!config?.corePath?.trim() || isUpdating}
-            className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-emerald-700 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:text-emerald-300"
-          >
-            {isUpdating ? (
-              <><Loader2 size={14} className="animate-spin" /><span>{t('runtime.update.updating')}</span></>
-            ) : (
-              <><span>🔄</span><span>{t('runtime.update.updateBtn')}</span></>
-            )}
-          </button>
-        </div>
-        {(isUpdating || logs.length > updateLogStartRef.current) && updateLogStartRef.current >= 0 && (
-          <TerminalLog
-            logs={logs.slice(updateLogStartRef.current)}
-            height="h-52"
-            title="Update Output"
-          />
-        )}
-      </div>
-
-      {/* Rollback Section */}
-      <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setBackupsExpanded(v => !v)}
-          className="w-full flex items-center justify-between px-8 py-5 hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <RotateCcw size={14} className="text-amber-500" />
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-              {t('runtime.rollback.title')}
-            </span>
-            {backups.length > 0 && (
-              <span className="text-[9px] font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-full px-2 py-0.5">
-                {backups.length}
-              </span>
-            )}
-          </div>
-          {backupsExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
-        </button>
-
-        {backupsExpanded && (
-          <div className="px-8 pb-8 space-y-4 border-t border-slate-200 dark:border-slate-800 pt-5">
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('runtime.rollback.desc')}</p>
-
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                {t('runtime.rollback.selectBackup')}
-              </span>
-              <button
-                type="button"
-                onClick={() => void fetchBackups()}
-                disabled={backupsLoading}
-                className="text-[10px] font-bold text-sky-500 hover:text-sky-600 disabled:opacity-40 transition-colors flex items-center gap-1"
-              >
-                {backupsLoading && <Loader2 size={9} className="animate-spin" />}
-                {t('runtime.update.refreshVersions')}
-              </button>
-            </div>
-
-            {backups.length === 0 && !backupsLoading ? (
-              <p className="text-[11px] text-slate-400 italic px-1">{t('runtime.rollback.noBackups')}</p>
-            ) : (
-              <select
-                value={selectedBackup}
-                onChange={(e) => setSelectedBackup(e.target.value)}
-                className="w-full bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-amber-400 dark:focus:border-amber-500/50 transition-colors"
-              >
-                {backups.map((b) => (
-                  <option key={b.path} value={b.path}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <button
-              type="button"
-              disabled={!selectedBackup || isRollingBack || isUpdating}
-              onClick={async () => {
-                if (!selectedBackup || !config.corePath?.trim()) return;
-                setIsRollingBack(true);
-                try {
-                  const payload = { corePath: config.corePath, backupPath: selectedBackup };
-                  const res = await window.electronAPI.exec(`project:rollback ${JSON.stringify(payload)}`);
-                  if ((res.code ?? res.exitCode) !== 0) {
-                    addLog(t('runtime.rollback.failed', { msg: res.stderr || `exit ${res.code}` }), 'stderr');
-                  } else {
-                    addLog(t('runtime.rollback.success', { path: selectedBackup }), 'system');
-                  }
-                } finally {
-                  setIsRollingBack(false);
-                }
-              }}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-amber-700 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:text-amber-300"
-            >
-              {isRollingBack ? (
-                <><Loader2 size={14} className="animate-spin" /><span>{t('runtime.rollback.rollingBack')}</span></>
-              ) : (
-                <><RotateCcw size={14} /><span>{t('runtime.rollback.rollbackBtn')}</span></>
-              )}
-            </button>
-          </div>
-        )}
-      </div>
 
       {/* Gateway Port Section */}
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">

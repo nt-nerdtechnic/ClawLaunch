@@ -1,15 +1,57 @@
 {
   "miniView": {
-    "latticeStatus": "Lattice Status",
-    "tokenBudget": "Tokens Used",
-    "trend7d": "7D Trend",
-    "home": "Home",
-    "taskBoard": "Tasks",
-    "monitor": "Monitor",
-    "expand": "Expand"
+    "tokenBudget": "Token Budget",
+    "trend7d": "Trend (7d)",
+    "security": "Security",
+    "logs": "Logs"
   },
   "common": {
-    "toggleTheme": "Toggle theme"
+    "time": {
+      "every": "Every {{val}}",
+      "soon": "Soon",
+      "ago": "{{val}} ago",
+      "later": "in {{val}}",
+      "pending": "Pending"
+    },
+    "status": {
+      "todo": "To Do",
+      "in_progress": "Running",
+      "blocked": "Blocked",
+      "done": "Done",
+      "success": "Success",
+      "failure": "Failure",
+      "exec": "Exec",
+      "completed": "Completed"
+    },
+    "source": {
+      "fs": "FS",
+      "agent": "Agent",
+      "cron": "Cron",
+      "system": "System"
+    },
+    "agent": {
+      "running": "Running · {{pid}}",
+      "loaded": "Loaded",
+      "unloaded": "Unloaded",
+      "notInstalled": "Not Installed"
+    },
+    "labels": {
+      "success": "Success",
+      "failure": "Failure",
+      "notParsed": "N/A",
+      "oauthFlow": "OAuth Flow",
+      "noKeyRequired": "No Key Required",
+      "executing": "Executing",
+      "execute": "Run",
+      "static": "Static",
+      "dynamic": "Dynamic",
+      "cancel": "Cancel",
+      "collapse": "Collapse",
+      "expandAll": "Expand All"
+    },
+    "punctuation": {
+      "comma": ", "
+    }
   },
   "terminal": {
     "dailyDigest": "Daily Digest",
@@ -170,7 +212,6 @@
       "scanBtn": "Scan Agent Activities",
       "empty": "No activity records"
     },
-
     "services": {
       "title": "System Services",
       "empty": "No system services detected",
@@ -215,7 +256,57 @@
     "sessions": "Sessions",
     "tokens": "Tokens",
     "cost": "Cost",
-    "noAgents": "No active agents"
+    "noAgents": "No active agents",
+    "clickToChat": "Click to chat · Right-click to manage",
+    "contextMenu": {
+      "chat": "Chat",
+      "stopAll": "Stop All Sessions",
+      "settings": "Settings",
+      "cronJobs": "Cron Jobs",
+      "auth": "Auth"
+    },
+    "drawer": {
+      "tabs": {
+        "info": "Info",
+        "cron": "Cron Jobs",
+        "auth": "Auth"
+      },
+      "info": {
+        "id": "Agent ID",
+        "state": "State",
+        "model": "Model",
+        "sessions": "Sessions",
+        "tokensIn": "Tokens In",
+        "tokensOut": "Tokens Out",
+        "cost": "Cost"
+      },
+      "cron": {
+        "noJobs": "No cron jobs for this agent",
+        "trigger": "Run Now",
+        "pause": "Pause",
+        "resume": "Resume",
+        "disable": "Disable",
+        "enable": "Enable",
+        "delete": "Delete"
+      }
+    },
+    "hud": {
+      "gatewayOn": "ON",
+      "gatewayOff": "OFF",
+      "active": "active",
+      "todayCost": "today",
+      "addAgent": "Add"
+    },
+    "addAgent": {
+      "title": "New Agent",
+      "agentId": "Agent ID",
+      "agentIdHint": "Lowercase letters, digits and hyphens · max 31 chars",
+      "authChoice": "Auth Provider",
+      "apiKey": "API Key",
+      "creating": "Creating…",
+      "create": "Create Agent",
+      "success": "Agent created!"
+    }
   },
   "chat": {
     "justNow": "Just now",
@@ -237,7 +328,7 @@
     "unavailable": "Chat IPC is unavailable in this environment",
     "coreRequired": "Core is not running. Start Gateway (Core) before sending a chat message",
     "inputHint": "Enter to send, Shift+Enter for newline",
-    "commandHint": "/stop abort \u00b7 /new session",
+    "commandHint": "/stop abort · /new session",
     "wsDisconnected": "WebSocket disconnected",
     "retryWsConnect": "Retry connection",
     "wsReconnectFailed": "Reconnect failed: {{msg}}",
@@ -1471,54 +1562,6 @@
       "workspaceExtension": "Workspace Extension Skill"
     }
   },
-  "common": {
-    "time": {
-      "every": "Every {{val}}",
-      "soon": "Soon",
-      "ago": "{{val}} ago",
-      "later": "in {{val}}",
-      "pending": "Pending"
-    },
-    "status": {
-      "todo": "To Do",
-      "in_progress": "Running",
-      "blocked": "Blocked",
-      "done": "Done",
-      "success": "Success",
-      "failure": "Failure",
-      "exec": "Exec",
-      "completed": "Completed"
-    },
-    "source": {
-      "fs": "FS",
-      "agent": "Agent",
-      "cron": "Cron",
-      "system": "System"
-    },
-    "agent": {
-      "running": "Running · {{pid}}",
-      "loaded": "Loaded",
-      "unloaded": "Unloaded",
-      "notInstalled": "Not Installed"
-    },
-    "labels": {
-      "success": "Success",
-      "failure": "Failure",
-      "notParsed": "N/A",
-      "oauthFlow": "OAuth Flow",
-      "noKeyRequired": "No Key Required",
-      "executing": "Executing",
-      "execute": "Run",
-      "static": "Static",
-      "dynamic": "Dynamic",
-      "cancel": "Cancel",
-      "collapse": "Collapse",
-      "expandAll": "Expand All"
-    },
-    "punctuation": {
-      "comma": ", "
-    }
-  },
   "launcher": {
     "autoRestart": {
       "label": "Auto Restart Gateway",
@@ -1619,12 +1662,6 @@
     "initPathActual": "Actual initialization will use: ",
     "initTarget": "Initializing to: "
   },
-  "miniView": {
-    "tokenBudget": "Token Budget",
-    "trend7d": "Trend (7d)",
-    "security": "Security",
-    "logs": "Logs"
-  },
   "memory": {
     "browser": "Data Management Area",
     "sections": {
@@ -1663,7 +1700,6 @@
     "saving": "Saving...",
     "cancelEdit": "Cancel",
     "saved": "Saved ✓",
-    "revealInFinder": "Reveal in Finder",
     "imgClearBtn": "Clear images in this folder",
     "imgClearConfirm": "Confirm",
     "imgClearCancel": "Cancel",

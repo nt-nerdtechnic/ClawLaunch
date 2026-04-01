@@ -16,9 +16,10 @@ import { useTranslation } from 'react-i18next';
 interface PixelOfficeCanvasProps {
   paused: boolean;
   onAgentClick?: (agentId: string, displayName: string) => void;
+  onAgentContextMenu?: (agentId: string, displayName: string, relX: number, relY: number) => void;
 }
 
-export default function PixelOfficeCanvas({ paused, onAgentClick }: PixelOfficeCanvasProps) {
+export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContextMenu }: PixelOfficeCanvasProps) {
   const { t } = useTranslation();
   const theme = useStore(s => s.theme);
   const dark = theme === 'dark';
@@ -71,7 +72,7 @@ export default function PixelOfficeCanvas({ paused, onAgentClick }: PixelOfficeC
   const cache = useMemo<SpriteCache>(() => buildSpriteCache(AGENT_COLORS), []);
 
   // Get agent summaries from snapshot
-  const summaries = usePixelOfficeAgents();
+  const { summaries } = usePixelOfficeAgents();
 
   // Sync pixel agents with snapshot summaries
   useEffect(() => {
@@ -175,6 +176,25 @@ export default function PixelOfficeCanvas({ paused, onAgentClick }: PixelOfficeC
     }
   }, [summaries, onAgentClick]);
 
+  const handleContextMenu = useCallback((e: ReactMouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!onAgentContextMenu) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = CANVAS_W / rect.width;
+    const scaleY = CANVAS_H / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top) * scaleY;
+    const hit = hitTestAgent(cx, cy, agentsRef.current, SPRITE_DRAW_W, SPRITE_DRAW_H);
+    if (hit) {
+      const summary = summaries.find(s => s.id === hit.id);
+      const relX = e.clientX - rect.left;
+      const relY = e.clientY - rect.top;
+      onAgentContextMenu(hit.id, summary?.displayName ?? hit.id, relX, relY);
+    }
+  }, [summaries, onAgentContextMenu]);
+
   return (
     <div className="relative w-full h-full">
       <canvas
@@ -186,6 +206,7 @@ export default function PixelOfficeCanvas({ paused, onAgentClick }: PixelOfficeC
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
+        onContextMenu={handleContextMenu}
       />
 
       {/* Tooltip overlay */}
@@ -217,9 +238,9 @@ export default function PixelOfficeCanvas({ paused, onAgentClick }: PixelOfficeC
             {t('pixelOffice.sessions')}: {tooltipData.agent.sessionCount}
             {tooltipData.agent.cost > 0 && ` · $${tooltipData.agent.cost.toFixed(4)}`}
           </div>
-          {onAgentClick && (
+          {(onAgentClick || onAgentContextMenu) && (
             <div className="mt-1 text-[8px] font-medium text-sky-500 dark:text-sky-400">
-              {t('pixelOffice.clickToChat', '點擊開啟對話')}
+              {t('pixelOffice.clickToChat', '點擊對話 · 右鍵管理')}
             </div>
           )}
         </div>

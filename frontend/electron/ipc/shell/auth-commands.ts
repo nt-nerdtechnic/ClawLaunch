@@ -143,6 +143,85 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
     }
   }
 
+  if (fullCommand.startsWith('auth:create-agent')) {
+    try {
+      const payloadStr = fullCommand.replace('auth:create-agent', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const corePath = String(payload?.corePath || '').trim();
+      const configDir = normalizeConfigDir(String(payload?.configPath || ''));
+      const agentId = String(payload?.agentId || '').trim().toLowerCase();
+
+      if (!configDir) {
+        return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
+      }
+      if (!agentId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(agentId)) {
+        return { code: 1, stdout: '', stderr: 'Invalid agentId: use lowercase letters, digits, hyphens (max 31 chars)', exitCode: 1 };
+      }
+      if (agentId === 'main') {
+        return { code: 1, stdout: '', stderr: 'Agent ID "main" is reserved — use auth:add-profile instead', exitCode: 1 };
+      }
+
+      const configFilePath = path.join(configDir, 'openclaw.json');
+      const agentDir = path.join(configDir, 'agents', agentId, 'agent');
+      await fs.mkdir(agentDir, { recursive: true });
+
+      // ── Fast path: clone existing global profiles ──────────────────────────
+      if (payload?.cloneFromGlobal === true) {
+        const configJson = (await loadJsonFile(configFilePath)) || {};
+        const globalProfiles = ((configJson?.auth as Record<string, unknown>)?.profiles as Record<string, unknown>) || {};
+        const selectedIds: string[] = Array.isArray(payload?.profileIds)
+          ? (payload.profileIds as unknown[]).map(String)
+          : Object.keys(globalProfiles);
+        const toClone: Record<string, unknown> = {};
+        for (const id of selectedIds) {
+          if (globalProfiles[id]) toClone[id] = globalProfiles[id];
+        }
+        if (Object.keys(toClone).length === 0) {
+          return { code: 1, stdout: '', stderr: 'No matching profiles found in openclaw.json to clone', exitCode: 1 };
+        }
+        const authProfilesPath = path.join(agentDir, 'auth-profiles.json');
+        const existing = (await loadJsonFile(authProfilesPath)) || {};
+        const existingProfiles = (existing.profiles as Record<string, unknown>) || {};
+        await saveJsonFile(authProfilesPath, { ...existing, profiles: { ...existingProfiles, ...toClone } });
+        return { code: 0, stdout: JSON.stringify({ agentId, cloned: Object.keys(toClone) }), stderr: '', exitCode: 0 };
+      }
+
+      // ── Slow path: run openclaw onboard with a new credential ──────────────
+      if (!corePath) {
+        return { code: 1, stdout: '', stderr: 'Missing corePath (required for onboard)', exitCode: 1 };
+      }
+      const authChoice = String(payload?.authChoice || '').trim();
+      const secret = sanitizeSecret(String(payload?.secret || ''));
+      if (!SUPPORTED_AUTH_CHOICES.has(authChoice)) {
+        return { code: 1, stdout: '', stderr: `Unsupported authChoice: ${authChoice}`, exitCode: 1 };
+      }
+      if (OAUTH_AUTH_CHOICES.has(authChoice)) {
+        return { code: 1, stdout: '', stderr: 'OAuth requires full onboarding flow in terminal', exitCode: 1 };
+      }
+      if (!CREDENTIALLESS_AUTH_CHOICES.has(authChoice) && !secret) {
+        return { code: 1, stdout: '', stderr: 'Credential is required for this authChoice', exitCode: 1 };
+      }
+      const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_AGENT_DIR=${shellQuote(agentDir)} `;
+      const workspaceFlag = String(payload?.workspacePath || '').trim() ? ` --workspace ${shellQuote(String(payload.workspacePath).trim())}` : '';
+      let authFlags = '';
+      if (authChoice === 'token') {
+        authFlags = ` --token-provider anthropic --token ${shellQuote(secret)}`;
+      } else if (!CREDENTIALLESS_AUTH_CHOICES.has(authChoice)) {
+        const flag = AUTH_CHOICE_FLAG_MAPPING[authChoice];
+        if (!flag) return { code: 1, stdout: '', stderr: `No auth flag mapping for ${authChoice}`, exitCode: 1 };
+        authFlags = ` ${flag} ${shellQuote(secret)}`;
+      }
+      const onboardCmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw onboard --auth-choice ${shellQuote(authChoice)}${authFlags}${workspaceFlag} --no-install-daemon --skip-daemon --skip-health --non-interactive --accept-risk`;
+      const onboardRes = await ctx.runShellCommand(onboardCmd);
+      if ((onboardRes.code ?? 0) !== 0) {
+        return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
+      }
+      return { code: 0, stdout: JSON.stringify({ agentId, authChoice }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'auth create-agent failed', exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('config:model-options')) {
     try {
       const payloadStr = fullCommand.replace('config:model-options', '').trim();
@@ -222,6 +301,30 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       return { code: 0, stdout: JSON.stringify({ groups, source: modelFiles[0] }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'config model-options failed', exitCode: 1 };
+    }
+  }
+
+  if (fullCommand.startsWith('agent:list')) {
+    try {
+      const payloadStr = fullCommand.replace('agent:list', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const configDir = normalizeConfigDir(String(payload?.configPath || ''));
+      if (!configDir) return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
+      const agentsDir = path.join(configDir, 'agents');
+      let entries: string[] = [];
+      try {
+        const dirents = await fs.readdir(agentsDir, { withFileTypes: true });
+        entries = dirents.filter(d => d.isDirectory()).map(d => d.name);
+      } catch { /* agents dir doesn't exist yet */ }
+      const agents = await Promise.all(entries.map(async (agentId) => {
+        const authPath = path.join(agentsDir, agentId, 'agent', 'auth-profiles.json');
+        let hasAuth = false;
+        try { await fs.access(authPath); hasAuth = true; } catch { /* no auth */ }
+        return { agentId, hasAuth };
+      }));
+      return { code: 0, stdout: JSON.stringify({ agents }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'agent:list failed', exitCode: 1 };
     }
   }
 

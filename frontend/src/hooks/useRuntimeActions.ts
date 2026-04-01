@@ -220,44 +220,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     }
   };
 
-  const handleOpenClawDoctor = async () => {
-    if (!config.corePath?.trim()) {
-      addLog(t('runtime.actions.doctorMissingCore'), 'stderr');
-      return;
-    }
-    try {
-      const envPrefix = buildOpenClawEnvPrefix();
-      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw doctor --fix`;
-      await execInTerminal(cmd, {
-        title: t('runtime.actions.doctorTitle'),
-        holdOpen: true,
-        cwd: config.corePath,
-      });
-      addLog(t('runtime.actions.doctorStarted'), 'system');
-    } catch (e: unknown) {
-      addLog(t('runtime.actions.doctorFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
-    }
-  };
-
-  const handleSecurityCheck = async () => {
-    if (!config.corePath?.trim()) {
-      addLog(t('runtime.actions.auditMissingCore'), 'stderr');
-      return;
-    }
-    try {
-      const envPrefix = buildOpenClawEnvPrefix();
-      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw security audit --fix --deep`;
-      await execInTerminal(cmd, {
-        title: t('runtime.actions.auditTitle'),
-        holdOpen: true,
-        cwd: config.corePath,
-      });
-      addLog(t('runtime.actions.auditStarted'), 'system');
-    } catch (e: unknown) {
-      addLog(t('runtime.actions.auditFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
-    }
-  };
-
   const handleUpdateOpenClaw = async (targetVersion: string) => {
     if (!config.corePath?.trim()) {
       addLog(t('runtime.update.missingCore'), 'stderr');
@@ -380,8 +342,6 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     handleSaveConfig,
     launcherSaveState,
     runtimeSaveState,
-    handleOpenClawDoctor,
-    handleSecurityCheck,
     handleUpdateOpenClaw,
     isUpdating,
     handleSaveChannelToken,

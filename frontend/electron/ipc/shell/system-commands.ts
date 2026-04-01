@@ -166,10 +166,11 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
       const plist = path.join(home, `Library/LaunchAgents/${agentLabel}.plist`);
       const launchctlRes = await runSilent('launchctl list');
       const isLoaded = launchctlRes.stdout.split('\n').some(l => l.includes(agentLabel));
+      const uid = process.getuid ? process.getuid() : 0;
       if (isLoaded) {
-        await runSilent(`launchctl unload -w "${plist}"`);
+        await runSilent(`launchctl bootout gui/${uid} "${plist}"`);
       } else {
-        await runSilent(`launchctl load -w "${plist}"`);
+        await runSilent(`launchctl bootstrap gui/${uid} "${plist}"`);
       }
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
     } catch (e) {
@@ -184,7 +185,8 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
       if (!agentLabel) return { code: 1, stdout: '', stderr: 'label is required', exitCode: 1 };
       const home = process.env['HOME'] || '';
       const plist = path.join(home, `Library/LaunchAgents/${agentLabel}.plist`);
-      await runSilent(`launchctl unload -w "${plist}"`);
+      const uid = process.getuid ? process.getuid() : 0;
+      await runSilent(`launchctl bootout gui/${uid} "${plist}"`);
       await fs.rm(plist).catch(() => {});
       return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
     } catch (e) {
@@ -310,6 +312,15 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
         if (payload.timeoutSeconds !== undefined) {
           const timeoutSeconds = Math.max(60, Number(payload.timeoutSeconds));
           next['payload'] = { ...(job['payload'] as Record<string, unknown>), timeoutSeconds };
+        }
+        if (payload.payloadMessage !== undefined) {
+          const msg = String(payload.payloadMessage).trim();
+          next['payload'] = { ...(next['payload'] as Record<string, unknown> || job['payload'] as Record<string, unknown>), message: msg || undefined };
+        }
+        if (payload.delivery !== undefined && typeof payload.delivery === 'object' && payload.delivery !== null) {
+          const incoming = payload.delivery as Record<string, unknown>;
+          const existing = (job['delivery'] as Record<string, unknown>) || {};
+          next['delivery'] = { ...existing, ...incoming };
         }
         return next;
       });

@@ -168,7 +168,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [gatewayWsReconnectError, setGatewayWsReconnectError] = useState('');
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const agentPickerRef = useRef<HTMLDivElement>(null);
-  const knownAgents = usePixelOfficeAgents();
+  const { summaries: knownAgents } = usePixelOfficeAgents();
 
   // Ensure current agent is always present in picker, even if not in snapshot
   const agentOptions = useMemo(() => {

@@ -5,10 +5,12 @@ import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
-  Pencil, Save, X, Zap,
+  Pencil, Save, X, Zap, Bell, BellOff,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
+import type { CronSchedule, CronJob } from '../types/cron';
+import { useStore } from '../store';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,34 +43,6 @@ interface LaunchAgent {
   exitCode: number | null;
   scheduleInterval?: number;
   scheduleCalendar?: CalendarInterval[];
-}
-
-interface CronSchedule {
-  kind: 'cron' | 'every';
-  expr?: string;
-  tz?: string;
-  everyMs?: number;
-}
-
-interface CronState {
-  lastRunAtMs?: number;
-  lastStatus?: 'ok' | 'error';
-  lastDurationMs?: number;
-  consecutiveErrors?: number;
-  lastError?: string;
-  nextRunAtMs?: number;
-  runningAtMs?: number;
-}
-
-interface CronJob {
-  id: string;
-  name: string;
-  enabled: boolean;
-  agentId: string;
-  schedule: CronSchedule;
-  state: CronState;
-  delivery: { mode: string; channel?: string };
-  payload?: { timeoutSeconds?: number; model?: string; kind?: string };
 }
 
 // Active OpenClaw session
@@ -225,8 +199,22 @@ function formatLaunchAgentSchedule(
   return null;
 }
 
+// ── Channel metadata (mirrors RuntimeSettingsPage) ──────────────────────────
+const CHANNEL_META: { id: string; name: string }[] = [
+  { id: 'telegram',   name: 'Telegram'    },
+  { id: 'discord',    name: 'Discord'     },
+  { id: 'slack',      name: 'Slack'       },
+  { id: 'googlechat', name: 'Google Chat' },
+  { id: 'line',       name: 'LINE'        },
+  { id: 'whatsapp',   name: 'WhatsApp'    },
+  { id: 'signal',     name: 'Signal'      },
+  { id: 'imessage',   name: 'iMessage'    },
+  { id: 'irc',        name: 'IRC'         },
+];
+
 export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshSnapshot, stateDir }) => {
   const { t, i18n } = useTranslation();
+  const runtimeProfile = useStore(s => s.runtimeProfile);
   const [cronJobs, setCronJobs]       = useState<CronJob[]>([]);
   const [crontabEntries, setCrontabEntries] = useState<CrontabEntry[]>([]);
   const [launchAgents, setLaunchAgents]     = useState<LaunchAgent[]>([]);
@@ -246,7 +234,22 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ name: string; intervalMin: number; timeoutMin: number | '' } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; intervalMin: number; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
+
+  // 從 runtimeProfile 偵測已綁定 bot token 的頻道
+  const configuredBotChannels = useMemo(() => {
+    const channels = (runtimeProfile?.channels || {}) as Record<string, Record<string, unknown>>;
+    return CHANNEL_META.filter(ch => {
+      if (ch.id === 'telegram') return !!String(runtimeProfile?.botToken || '').trim();
+      return !!String(channels?.[ch.id]?.botToken || '').trim();
+    }).map(ch => {
+      const rawToken = ch.id === 'telegram'
+        ? String(runtimeProfile?.botToken || '').trim()
+        : String(channels?.[ch.id]?.botToken || '').trim();
+      const preview = rawToken.length > 8 ? `${rawToken.slice(0, 4)}••••${rawToken.slice(-4)}` : '••••';
+      return { ...ch, preview };
+    });
+  }, [runtimeProfile]);
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -283,12 +286,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       const laData = JSON.parse(laRes.stdout || '{}');
       const ctEntries = ctData.entries || [];
       const laAgents = laData.agents || [];
-      
+
       console.log(`[ControlCenter] loadSystem parsed ct:${ctEntries.length}, la:${laAgents.length}`);
       setCrontabEntries(ctEntries);
       setLaunchAgents(laAgents);
       setLastSystemScanned(new Date());
-    } catch (e) { 
+    } catch (e) {
       console.error('[ControlCenter] loadSystem failed:', e);
     }
   }, []);
@@ -402,7 +405,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     refresh();
     loadActiveSessions();
   }, [refresh, loadActiveSessions]);
-  
+
   useEffect(() => {
     const id = setInterval(() => void Promise.all([loadCron(), loadSystem()]), 30000);
     return () => clearInterval(id);
@@ -451,7 +454,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   };
 
-  const updateCron = async (jobId: string, updates: { name?: string; everyMs?: number; timeoutSeconds?: number }) => {
+  const updateCron = async (jobId: string, updates: { name?: string; everyMs?: number; timeoutSeconds?: number; delivery?: { mode: string; channel?: string; to?: string }; payloadMessage?: string }) => {
     try {
       setError('');
       await execCmd(`cron:update ${JSON.stringify({ jobId, stateDir, ...updates })}`);
@@ -463,10 +466,27 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   };
 
+  const toggleDelivery = async (job: CronJob) => {
+    const currentMode = job.delivery?.mode || 'none';
+    const newMode = currentMode === 'announce' ? 'none' : 'announce';
+    await updateCron(job.id, {
+      delivery: { ...job.delivery, mode: newMode },
+    });
+  };
+
   const startEditCron = (job: CronJob) => {
     const intervalMin = job.schedule?.everyMs ? Math.round(job.schedule.everyMs / 60000) : 10;
     const timeoutMin = job.payload?.timeoutSeconds ? Math.round(job.payload.timeoutSeconds / 60) : '';
-    setEditDraft({ name: job.name, intervalMin, timeoutMin });
+    const existingTo = job.delivery?.to || '';
+    setEditDraft({
+      name: job.name,
+      intervalMin,
+      timeoutMin,
+      deliveryMode: job.delivery?.mode || 'none',
+      deliveryChannel: job.delivery?.channel || '',
+      deliveryTo: existingTo,
+      payloadMessage: job.payload?.message || '',
+    });
     setEditingJobId(job.id);
   };
 
@@ -604,33 +624,33 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { 
-            label: t('controlCenter.kpi.activeSessions', '執行中工作'), 
-            value: kpi.activeSessions, 
+          {
+            label: t('controlCenter.kpi.activeSessions', '執行中工作'),
+            value: kpi.activeSessions,
             color: 'text-indigo-600 dark:text-indigo-400',
             targetId: 'active-sessions-section'
           },
-          { 
-            label: t('controlCenter.kpi.cronSchedules', '應用排程'), 
-            value: kpi.cronSchedules.total, 
+          {
+            label: t('controlCenter.kpi.cronSchedules', '應用排程'),
+            value: kpi.cronSchedules.total,
             color: 'text-violet-600 dark:text-violet-400',
             targetId: 'application-scheduling-section'
           },
-          { 
-            label: t('controlCenter.kpi.crontabEntries', '系統排程'), 
-            value: kpi.crontabEntriesCount, 
+          {
+            label: t('controlCenter.kpi.crontabEntries', '系統排程'),
+            value: kpi.crontabEntriesCount,
             color: 'text-amber-600 dark:text-amber-400',
             targetId: 'system-crontab-section'
           },
-          { 
-            label: t('controlCenter.kpi.systemServices', '系統服務'), 
-            value: kpi.systemServices.total, 
+          {
+            label: t('controlCenter.kpi.systemServices', '系統服務'),
+            value: kpi.systemServices.total,
             color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400',
             targetId: 'system-services-section'
           },
         ].map(({ label, value, color, targetId }) => (
-          <button 
-            key={label} 
+          <button
+            key={label}
             onClick={() => scrollToSection(targetId)}
             className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[22px] p-4 shadow-sm text-center transition-all hover:scale-[1.02] hover:shadow-md hover:bg-white dark:hover:bg-slate-800/40 group active:scale-95"
           >
@@ -718,8 +738,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     <div className="flex items-center gap-2">
                       {/* Session icon with pulse indicator */}
                       <div className={`shrink-0 w-5 h-5 rounded-lg flex items-center justify-center ${
-                        isRunning || isRecent 
-                          ? 'bg-violet-100 dark:bg-violet-900/40' 
+                        isRunning || isRecent
+                          ? 'bg-violet-100 dark:bg-violet-900/40'
                           : 'bg-slate-100 dark:bg-slate-800/40'
                       }`}>
                         {(isRunning || isRecent) && <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />}
@@ -804,6 +824,502 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         {/* ── Three-layer scheduling ──────────────────────────────────────── */}
         <div className="contents">
 
+          {/* Layer 3: OpenClaw scheduling */}
+          <div id="application-scheduling-section" className="order-2 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+            <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(139,92,246,0.45),transparent)' }} />
+            <div className="p-5 space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <CalendarClock size={12} className="text-violet-500" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.cronJobs.title')}</span>
+                  <span className="text-[9px] text-slate-400">{t('controlCenter.cronJobs.count', { count: filteredCronJobs.length })}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {(['all', 'enabled', 'disabled'] as const).map(f => {
+                    const isActive = cjFilter === f;
+                    const Icon = f === 'all' ? Activity : f === 'enabled' ? Play : Pause;
+                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all')
+                                : f === 'enabled' ? t('controlCenter.cronJobs.filterEnabled')
+                                : t('controlCenter.cronJobs.filterDisabled');
+                    return (
+                      <button
+                        key={f}
+                        onClick={() => setCjFilter(f)}
+                        title={label}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-violet-500 text-white border-violet-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
+                      >
+                        <Icon size={8} />
+                        <span className="hidden sm:inline">{label}</span>
+                      </button>
+                    );
+                  })}
+                  <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
+                  <button
+                    onClick={async () => { setCronLoading(true); await loadCron(); setCronLoading(false); }}
+                    title={lastCronScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastCronScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
+                  >
+                    <RefreshCw size={9} className={cronLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
+                {cronJobs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                    <CalendarClock size={22} className="mb-2 opacity-30" />
+                    <span className="text-sm">{t('controlCenter.cronJobs.empty')}</span>
+                  </div>
+                ) : [...filteredCronJobs]
+                  .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
+                  const cronSessionPrefix = `agent:${job.agentId || 'main'}:cron:${job.id}`;
+                  const hasRunningCronSession = activeSessions.some((session) => {
+                    const sessionKey = String(session.key || '').trim();
+                    return session.isRunning === true && (sessionKey === cronSessionPrefix || sessionKey.startsWith(`${cronSessionPrefix}:`));
+                  });
+                  const runningAtMs = job.state?.runningAtMs ?? 0;
+                  const lastRunAtMs = job.state?.lastRunAtMs ?? 0;
+                  const hasRecentTriggerGrace = Boolean(
+                    triggeringJobIds.has(job.id)
+                    || (runningAtMs > lastRunAtMs && Date.now() - runningAtMs < 60_000)
+                  );
+                  const isCurrentlyRunning = hasRunningCronSession || hasRecentTriggerGrace;
+                  const hasError = !isCurrentlyRunning && (job.state?.consecutiveErrors ?? 0) > 0;
+                  return (
+                    <div key={job.id} className={`rounded-xl border px-3 py-2.5 transition-all ${
+                      !job.enabled
+                        ? 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
+                        : isCurrentlyRunning
+                        ? 'border-emerald-100 dark:border-emerald-900/30 bg-white dark:bg-slate-900/50'
+                        : hasError
+                        ? 'border-rose-100 dark:border-rose-900/30 bg-white dark:bg-slate-900/50'
+                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {/* 運作狀態 badge */}
+                        <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                          job.enabled
+                            ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800/40'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                        }`}>
+                          {job.enabled ? t('controlCenter.cronJobs.filterEnabled') : t('controlCenter.cronJobs.filterDisabled')}
+                        </span>
+                        {/* 名稱 + 通知開關 */}
+                        <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
+                          <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
+                          <button
+                            onClick={() => void toggleDelivery(job)}
+                            title={job.delivery?.mode === 'announce'
+                              ? t('controlCenter.cronJobs.notifyOn', '通知已開啟，點擊關閉')
+                              : t('controlCenter.cronJobs.notifyOff', '通知已關閉，點擊開啟')}
+                            className={`shrink-0 p-0.5 rounded transition-all ${
+                              job.delivery?.mode === 'announce'
+                                ? 'text-violet-500 hover:text-violet-700 dark:hover:text-violet-300'
+                                : 'text-slate-300 dark:text-slate-600 hover:text-violet-400'
+                            }`}>
+                            {job.delivery?.mode === 'announce' ? <Bell size={9} /> : <BellOff size={9} />}
+                          </button>
+                        </div>
+                        {isCurrentlyRunning && (
+                          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800/40">
+                            <Activity size={8} className="animate-pulse text-sky-500 dark:text-sky-400" />
+                            {t('common.status.exec', '執行')}
+                          </span>
+                        )}
+                        {/* 上次執行結果 badge */}
+                        {!isCurrentlyRunning && job.state?.lastRunAtMs && (
+                          <span className={`shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                            job.state.lastStatus === 'ok'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
+                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/40'
+                          }`}>
+                            {job.state.lastStatus === 'ok'
+                              ? <CheckCircle size={8} />
+                              : <AlertTriangle size={8} />}
+                            {job.state.lastStatus === 'ok' ? t('controlCenter.cronJobs.lastOk') : t('controlCenter.cronJobs.lastFail')}
+                          </span>
+                        )}
+                        {/* 連續錯誤次數 badge */}
+                        {hasError && (
+                          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40">
+                            <AlertTriangle size={8} />
+                            {t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
+                          </span>
+                        )}
+                        {/* 操作按鈕 */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={() => void triggerCron(job.id)}
+                            title={t('controlCenter.cronJobs.triggerNow', '立即執行')}
+                            disabled={triggeringJobIds.has(job.id)}
+                            className="p-1 rounded-lg transition-all text-slate-300 dark:text-slate-600 hover:text-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <Zap size={10} className={triggeringJobIds.has(job.id) ? 'animate-pulse text-emerald-500' : ''} />
+                          </button>
+                          <button
+                            onClick={() => editingJobId === job.id ? (setEditingJobId(null), setEditDraft(null)) : startEditCron(job)}
+                            title={editingJobId === job.id ? '取消編輯' : '編輯'}
+                            className={`p-1 rounded-lg transition-all ${editingJobId === job.id ? 'text-violet-500' : 'text-slate-300 dark:text-slate-600 hover:text-violet-500'}`}>
+                            <Pencil size={10} />
+                          </button>
+                          <button onClick={() => void toggleCron(job.id)} title={job.enabled ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
+                            className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}>
+                            {job.enabled ? <Pause size={10} /> : <Play size={10} />}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm({ name: job.name, onConfirm: () => void deleteCron(job.id) })}
+                            className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
+                      </div>
+                      {/* 副資訊列：排程 · 上次時間 · 下次時間 */}
+                      <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
+                        <span className="font-mono text-violet-400/70">{formatInterval(job.schedule, t)}</span>
+                        {job.payload?.timeoutSeconds && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="text-amber-400/70">{t('controlCenter.cronJobs.timeout', { val: `${Math.round(job.payload.timeoutSeconds / 60)}m` })}</span>
+                          </>
+                        )}
+                        {job.state?.lastRunAtMs && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span>{relTime(job.state.lastRunAtMs, t)}</span>
+                          </>
+                        )}
+                        {job.enabled && job.state?.nextRunAtMs && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="text-violet-400">{nextTime(job.state.nextRunAtMs, t)}</span>
+                          </>
+                        )}
+                        {job.delivery?.mode === 'announce' && (job.delivery.channel || job.delivery.to) && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span className="flex items-center gap-0.5 text-violet-400/70">
+                              <Bell size={8} />
+                              {[job.delivery.channel, job.delivery.to].filter(Boolean).join(' › ')}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {/* 內嵌編輯表單 */}
+                      {editingJobId === job.id && editDraft && (
+                        <div className="mt-2 pt-2 border-t border-violet-100 dark:border-violet-900/30 space-y-2">
+                          {/* 基本欄位 */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="col-span-3">
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">名稱</label>
+                              <input
+                                type="text"
+                                value={editDraft.name}
+                                onChange={e => setEditDraft(d => d ? { ...d, name: e.target.value } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                maxLength={100}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">排程（分鐘）</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={1440}
+                                value={editDraft.intervalMin}
+                                onChange={e => setEditDraft(d => d ? { ...d, intervalMin: Math.max(1, Number(e.target.value)) } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">逾時（分鐘）</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                value={editDraft.timeoutMin}
+                                placeholder="不設定"
+                                onChange={e => setEditDraft(d => d ? { ...d, timeoutMin: e.target.value === '' ? '' : Math.max(1, Number(e.target.value)) } : d)}
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              />
+                            </div>
+                            <div className="col-span-1" />
+                          </div>
+                          {/* 通知格式 */}
+                          <div className="pt-1.5 border-t border-violet-50 dark:border-violet-900/20">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                                <Bell size={8} />通知格式
+                              </label>
+                              <div className="flex items-center gap-1">
+                                {(['none', 'announce'] as const).map(mode => (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => setEditDraft(d => d ? { ...d, deliveryMode: mode } : d)}
+                                    className={`px-2 py-0.5 text-[9px] font-bold rounded-md border transition-all ${
+                                      editDraft.deliveryMode === mode
+                                        ? 'bg-violet-500 text-white border-violet-500'
+                                        : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700 hover:border-violet-300'
+                                    }`}
+                                  >
+                                    {mode === 'none' ? '不通知' : '廣播'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {editDraft.deliveryMode === 'announce' && (
+                              <div className="grid grid-cols-2 gap-2 mt-1">
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5 flex items-center justify-between">
+                                    <span>頻道</span>
+                                    {configuredBotChannels.length > 0 && (
+                                      <span className="text-[8px] text-violet-400 font-normal">{configuredBotChannels.length} 個已綁定</span>
+                                    )}
+                                  </label>
+                                  <select
+                                    value={editDraft.deliveryChannel}
+                                    onChange={e => setEditDraft(d => d ? { ...d, deliveryChannel: e.target.value } : d)}
+                                    className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                  >
+                                    <option value="">— 選擇頻道 —</option>
+                                    {CHANNEL_META.map(ch => {
+                                      const isConfigured = configuredBotChannels.some(c => c.id === ch.id);
+                                      return (
+                                        <option key={ch.id} value={ch.id}>
+                                          {isConfigured ? `✓ ${ch.name}` : ch.name}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5">對象（選填）</label>
+                                  <select
+                                    value={editDraft.deliveryTo || ''}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setEditDraft(d => d ? { ...d, deliveryTo: val, ...(val ? { deliveryChannel: val } : {}) } : d);
+                                    }}
+                                    className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                  >
+                                    <option value="">不指定（使用頻道預設）</option>
+                                    {/* 若現有值不在已知選項中，動態補一個選項以顯示既有值 */}
+                                    {editDraft.deliveryTo && (
+                                      <option value={editDraft.deliveryTo}>{editDraft.deliveryTo}</option>
+                                    )}
+                                  </select>
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5">觸發訊息（Prompt）</label>
+                                  <textarea
+                                    value={editDraft.payloadMessage}
+                                    onChange={e => setEditDraft(d => d ? { ...d, payloadMessage: e.target.value } : d)}
+                                    rows={3}
+                                    placeholder="每次觸發時送給 agent 的提示，留空則使用任務預設 prompt"
+                                    className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-400 resize-none"
+                                    maxLength={2000}
+                                  />
+                                  <div className="flex justify-end mt-0.5">
+                                    <span className="text-[8px] text-slate-300 dark:text-slate-600">{editDraft.payloadMessage.length}/2000</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* 操作按鈕 */}
+                          <div className="flex items-center gap-1 pt-0.5">
+                            <button
+                              onClick={() => void updateCron(job.id, {
+                                name: editDraft.name,
+                                everyMs: editDraft.intervalMin * 60000,
+                                ...(editDraft.timeoutMin !== '' ? { timeoutSeconds: editDraft.timeoutMin * 60 } : {}),
+                                delivery: {
+                                  mode: editDraft.deliveryMode,
+                                  ...(editDraft.deliveryChannel ? { channel: editDraft.deliveryChannel } : {}),
+                                  ...(editDraft.deliveryTo ? { to: editDraft.deliveryTo } : {}),
+                                },
+                                ...(editDraft.payloadMessage ? { payloadMessage: editDraft.payloadMessage } : {}),
+                              })}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-bold bg-violet-500 text-white hover:bg-violet-600 transition-all"
+                            >
+                              <Save size={9} />儲存
+                            </button>
+                            <button
+                              onClick={() => { setEditingJobId(null); setEditDraft(null); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
+                            >
+                              <X size={9} />取消
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {(() => {
+                const visible = filteredCronJobs;
+                const canEnable  = visible.some(j => !j.enabled);
+                const canDisable = visible.some(j => j.enabled);
+                const canClear   = cjFilter === 'disabled' && canEnable;
+                if (!canEnable && !canDisable) return null;
+                return (
+                  <div className="flex justify-end items-center gap-1.5 pt-1">
+                    {canEnable && (
+                      <button
+                        onClick={() => void enableAllDisabledCronJobs()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+                      >
+                        <Play size={8} />{t('common.enableAll', '全部啟用')}
+                      </button>
+                    )}
+                    {canDisable && (
+                      <button
+                        onClick={() => void disableAllEnabledCronJobs()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
+                      >
+                        <Pause size={8} />{t('common.disableAll', '全部停用')}
+                      </button>
+                    )}
+                    {canClear && (
+                      <button
+                        onClick={() => {
+                          const count = visible.filter(j => !j.enabled).length;
+                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllDisabledCronJobs() });
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                      >
+                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Layer 2: crontab */}
+          <div id="system-crontab-section" className="order-3 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
+            <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(245,158,11,0.45),transparent)' }} />
+            <div className="p-5 space-y-2">
+              <div className="flex items-center gap-2 mb-3">
+                <Terminal size={12} className="text-amber-500" />
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.crontab.title')}</span>
+                <span className="text-[9px] text-slate-400">{t('controlCenter.crontab.count', { count: filteredCrontabEntries.length })}</span>
+                <div className="flex items-center gap-1 ml-auto">
+                  {(['all', 'enabled', 'disabled'] as const).map(f => {
+                    const isActive = ctFilter === f;
+                    const Icon = f === 'all' ? Activity : f === 'enabled' ? Play : Pause;
+                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all')
+                                : f === 'enabled' ? t('controlCenter.crontab.filterEnabled')
+                                : t('controlCenter.crontab.filterDisabled');
+                    return (
+                      <button
+                        key={f}
+                        onClick={() => setCtFilter(f)}
+                        title={label}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-amber-500 text-white border-amber-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
+                      >
+                        <Icon size={8} />
+                        <span className="hidden sm:inline">{label}</span>
+                      </button>
+                    );
+                  })}
+                  <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
+                  <button
+                    onClick={async () => { setSystemLoading(true); await loadSystem(); setSystemLoading(false); }}
+                    title={lastSystemScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastSystemScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
+                  >
+                    <RefreshCw size={9} className={systemLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              </div>
+              {crontabEntries.length === 0 ? (
+                <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
+              ) : filteredCrontabEntries
+                .map((entry, i) => (
+                <div key={i} className={`rounded-xl border px-3 py-2.5 transition-all ${
+                  entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {/* 狀態 badge */}
+                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                      entry.enabled !== false
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                    }`}>
+                      {entry.enabled !== false ? t('controlCenter.crontab.filterEnabled') : t('controlCenter.crontab.filterDisabled')}
+                    </span>
+                    {/* 名稱 */}
+                    <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{entry.name}</span>
+                    {/* 操作按鈕 */}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button onClick={() => void toggleCrontab(entry.raw)} title={entry.enabled !== false ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
+                        className={`p-1 rounded-lg transition-all ${entry.enabled !== false ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-amber-600'}`}>
+                        {entry.enabled !== false ? <Pause size={10} /> : <Play size={10} />}
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm({ name: entry.name, onConfirm: () => void deleteCrontab(entry.raw) })}
+                        className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  </div>
+                  {/* 副資訊：排程表達式 + 描述 + 指令 */}
+                  <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
+                    <span className="font-mono text-amber-400/80 bg-amber-50/50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded" title={describeCron(entry.schedule, i18n.language)}>
+                      {entry.schedule}
+                    </span>
+                    {describeCron(entry.schedule, i18n.language) && (
+                      <>
+                        <span className="opacity-40">·</span>
+                        <span className="truncate max-w-[120px]">{describeCron(entry.schedule, i18n.language)}</span>
+                      </>
+                    )}
+                    <span className="truncate max-w-[140px] opacity-50 ml-auto">{entry.command.split('/').slice(-2).join('/')}</span>
+                  </div>
+                </div>
+              ))}
+              {(() => {
+                const visible = filteredCrontabEntries;
+                const canEnable  = visible.some(e => e.enabled === false);
+                const canDisable = visible.some(e => e.enabled !== false);
+                const canClear   = ctFilter === 'disabled' && canEnable;
+                if (!canEnable && !canDisable) return null;
+                return (
+                  <div className="flex justify-end items-center gap-1.5 pt-1">
+                    {canEnable && (
+                      <button
+                        onClick={() => void enableAllDisabledCrontab()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+                      >
+                        <Play size={8} />{t('common.enableAll', '全部啟用')}
+                      </button>
+                    )}
+                    {canDisable && (
+                      <button
+                        onClick={() => void disableAllEnabledCrontab()}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
+                      >
+                        <Pause size={8} />{t('common.disableAll', '全部停用')}
+                      </button>
+                    )}
+                    {canClear && (
+                      <button
+                        onClick={() => {
+                          const count = visible.filter(e => e.enabled === false).length;
+                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停用', { count }), onConfirm: () => void deleteAllDisabledCrontab() });
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
+                      >
+                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
           {/* Layer 1: System services */}
           <div id="system-services-section" className="order-4 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
             <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(16,185,129,0.45),transparent)' }} />
@@ -816,13 +1332,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   {(['all', 'running', 'stopped'] as const).map(f => {
                     const isActive = agentFilter === f;
                     const Icon = f === 'all' ? Activity : f === 'running' ? Play : Pause;
-                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
-                                : f === 'running' ? t('controlCenter.services.filterRunning') 
+                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all')
+                                : f === 'running' ? t('controlCenter.services.filterRunning')
                                 : t('controlCenter.services.filterStopped');
                     return (
-                      <button 
-                        key={f} 
-                        onClick={() => setAgentFilter(f)} 
+                      <button
+                        key={f}
+                        onClick={() => setAgentFilter(f)}
                         title={label}
                         className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
                       >
@@ -933,388 +1449,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         onClick={() => {
                           const count = visible.filter(a => !a.running && !a.loaded).length;
                           setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllStoppedAgents() });
-                        }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
-                      >
-                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* Layer 2: crontab */}
-          <div id="system-crontab-section" className="order-3 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
-            <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(245,158,11,0.45),transparent)' }} />
-            <div className="p-5 space-y-2">
-              <div className="flex items-center gap-2 mb-3">
-                <Terminal size={12} className="text-amber-500" />
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.crontab.title')}</span>
-                <span className="text-[9px] text-slate-400">{t('controlCenter.crontab.count', { count: filteredCrontabEntries.length })}</span>
-                <div className="flex items-center gap-1 ml-auto">
-                  {(['all', 'enabled', 'disabled'] as const).map(f => {
-                    const isActive = ctFilter === f;
-                    const Icon = f === 'all' ? Activity : f === 'enabled' ? Play : Pause;
-                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
-                                : f === 'enabled' ? t('controlCenter.crontab.filterEnabled') 
-                                : t('controlCenter.crontab.filterDisabled');
-                    return (
-                      <button 
-                        key={f} 
-                        onClick={() => setCtFilter(f)} 
-                        title={label}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-amber-500 text-white border-amber-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
-                      >
-                        <Icon size={8} />
-                        <span className="hidden sm:inline">{label}</span>
-                      </button>
-                    );
-                  })}
-                  <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
-                  <button
-                    onClick={async () => { setSystemLoading(true); await loadSystem(); setSystemLoading(false); }}
-                    title={lastSystemScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastSystemScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
-                  >
-                    <RefreshCw size={9} className={systemLoading ? 'animate-spin' : ''} />
-                  </button>
-                </div>
-              </div>
-              {crontabEntries.length === 0 ? (
-                <p className="text-[11px] text-slate-400 py-1">{t('controlCenter.crontab.empty')}</p>
-              ) : filteredCrontabEntries
-                .map((entry, i) => (
-                <div key={i} className={`rounded-xl border px-3 py-2.5 transition-all ${
-                  entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    {/* 狀態 badge */}
-                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
-                      entry.enabled !== false
-                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
-                    }`}>
-                      {entry.enabled !== false ? t('controlCenter.crontab.filterEnabled') : t('controlCenter.crontab.filterDisabled')}
-                    </span>
-                    {/* 名稱 */}
-                    <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{entry.name}</span>
-                    {/* 操作按鈕 */}
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <button onClick={() => void toggleCrontab(entry.raw)} title={entry.enabled !== false ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
-                        className={`p-1 rounded-lg transition-all ${entry.enabled !== false ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-amber-600'}`}>
-                        {entry.enabled !== false ? <Pause size={10} /> : <Play size={10} />}
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm({ name: entry.name, onConfirm: () => void deleteCrontab(entry.raw) })}
-                        className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
-                  </div>
-                  {/* 副資訊：排程表達式 + 描述 + 指令 */}
-                  <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
-                    <span className="font-mono text-amber-400/80 bg-amber-50/50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded" title={describeCron(entry.schedule, i18n.language)}>
-                      {entry.schedule}
-                    </span>
-                    {describeCron(entry.schedule, i18n.language) && (
-                      <>
-                        <span className="opacity-40">·</span>
-                        <span className="truncate max-w-[120px]">{describeCron(entry.schedule, i18n.language)}</span>
-                      </>
-                    )}
-                    <span className="truncate max-w-[140px] opacity-50 ml-auto">{entry.command.split('/').slice(-2).join('/')}</span>
-                  </div>
-                </div>
-              ))}
-              {(() => {
-                const visible = filteredCrontabEntries;
-                const canEnable  = visible.some(e => e.enabled === false);
-                const canDisable = visible.some(e => e.enabled !== false);
-                const canClear   = ctFilter === 'disabled' && canEnable;
-                if (!canEnable && !canDisable) return null;
-                return (
-                  <div className="flex justify-end items-center gap-1.5 pt-1">
-                    {canEnable && (
-                      <button
-                        onClick={() => void enableAllDisabledCrontab()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
-                      >
-                        <Play size={8} />{t('common.enableAll', '全部啟用')}
-                      </button>
-                    )}
-                    {canDisable && (
-                      <button
-                        onClick={() => void disableAllEnabledCrontab()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
-                      >
-                        <Pause size={8} />{t('common.disableAll', '全部停用')}
-                      </button>
-                    )}
-                    {canClear && (
-                      <button
-                        onClick={() => {
-                          const count = visible.filter(e => e.enabled === false).length;
-                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停用', { count }), onConfirm: () => void deleteAllDisabledCrontab() });
-                        }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
-                      >
-                        <Trash2 size={8} />{t('common.clearAll', '全部清除')}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* Layer 3: OpenClaw scheduling */}
-          <div id="application-scheduling-section" className="order-2 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[28px] shadow-sm overflow-hidden scroll-mt-2 md:scroll-mt-4">
-            <div style={{ height: '2px', background: 'linear-gradient(to right,transparent,rgba(139,92,246,0.45),transparent)' }} />
-            <div className="p-5 space-y-2">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <CalendarClock size={12} className="text-violet-500" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">{t('controlCenter.cronJobs.title')}</span>
-                  <span className="text-[9px] text-slate-400">{t('controlCenter.cronJobs.count', { count: filteredCronJobs.length })}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {(['all', 'enabled', 'disabled'] as const).map(f => {
-                    const isActive = cjFilter === f;
-                    const Icon = f === 'all' ? Activity : f === 'enabled' ? Play : Pause;
-                    const label = f === 'all' ? t('controlCenter.timeline.tabs.all') 
-                                : f === 'enabled' ? t('controlCenter.cronJobs.filterEnabled') 
-                                : t('controlCenter.cronJobs.filterDisabled');
-                    return (
-                      <button 
-                        key={f} 
-                        onClick={() => setCjFilter(f)} 
-                        title={label}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all border ${isActive ? 'bg-violet-500 text-white border-violet-500' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100 dark:border-slate-800'}`}
-                      >
-                        <Icon size={8} />
-                        <span className="hidden sm:inline">{label}</span>
-                      </button>
-                    );
-                  })}
-                  <div className="w-px h-3 bg-slate-200 dark:bg-slate-700 mx-1" />
-                  <button
-                    onClick={async () => { setCronLoading(true); await loadCron(); setCronLoading(false); }}
-                    title={lastCronScanned ? `${t('controlCenter.actions.refresh')} · 上次掃描: ${lastCronScanned.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : t('controlCenter.actions.refresh')}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
-                  >
-                    <RefreshCw size={9} className={cronLoading ? 'animate-spin' : ''} />
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
-                {cronJobs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-slate-400">
-                    <CalendarClock size={22} className="mb-2 opacity-30" />
-                    <span className="text-sm">{t('controlCenter.cronJobs.empty')}</span>
-                  </div>
-                ) : [...filteredCronJobs]
-                  .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
-                  const cronSessionPrefix = `agent:${job.agentId || 'main'}:cron:${job.id}`;
-                  const hasRunningCronSession = activeSessions.some((session) => {
-                    const sessionKey = String(session.key || '').trim();
-                    return session.isRunning === true && (sessionKey === cronSessionPrefix || sessionKey.startsWith(`${cronSessionPrefix}:`));
-                  });
-                  const runningAtMs = job.state?.runningAtMs ?? 0;
-                  const lastRunAtMs = job.state?.lastRunAtMs ?? 0;
-                  const hasRecentTriggerGrace = Boolean(
-                    triggeringJobIds.has(job.id)
-                    || (runningAtMs > lastRunAtMs && Date.now() - runningAtMs < 60_000)
-                  );
-                  const isCurrentlyRunning = hasRunningCronSession || hasRecentTriggerGrace;
-                  const hasError = !isCurrentlyRunning && (job.state?.consecutiveErrors ?? 0) > 0;
-                  return (
-                    <div key={job.id} className={`rounded-xl border px-3 py-2.5 transition-all ${
-                      !job.enabled
-                        ? 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
-                        : isCurrentlyRunning
-                        ? 'border-emerald-100 dark:border-emerald-900/30 bg-white dark:bg-slate-900/50'
-                        : hasError
-                        ? 'border-rose-100 dark:border-rose-900/30 bg-white dark:bg-slate-900/50'
-                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        {/* 運作狀態 badge */}
-                        <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
-                          job.enabled
-                            ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800/40'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
-                        }`}>
-                          {job.enabled ? t('controlCenter.cronJobs.filterEnabled') : t('controlCenter.cronJobs.filterDisabled')}
-                        </span>
-                        {/* 名稱 */}
-                        <span className="flex-1 min-w-0 text-[11px] font-semibold text-slate-800 dark:text-slate-100 truncate">{job.name}</span>
-                        {isCurrentlyRunning && (
-                          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800/40">
-                            <Activity size={8} className="animate-pulse text-sky-500 dark:text-sky-400" />
-                            {t('common.status.exec', '執行')}
-                          </span>
-                        )}
-                        {/* 上次執行結果 badge */}
-                        {!isCurrentlyRunning && job.state?.lastRunAtMs && (
-                          <span className={`shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
-                            job.state.lastStatus === 'ok'
-                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
-                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/40'
-                          }`}>
-                            {job.state.lastStatus === 'ok'
-                              ? <CheckCircle size={8} />
-                              : <AlertTriangle size={8} />}
-                            {job.state.lastStatus === 'ok' ? t('controlCenter.cronJobs.lastOk') : t('controlCenter.cronJobs.lastFail')}
-                          </span>
-                        )}
-                        {/* 連續錯誤次數 badge */}
-                        {hasError && (
-                          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40">
-                            <AlertTriangle size={8} />
-                            {t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
-                          </span>
-                        )}
-                        {/* 操作按鈕 */}
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <button
-                            onClick={() => void triggerCron(job.id)}
-                            title={t('controlCenter.cronJobs.triggerNow', '立即執行')}
-                            disabled={triggeringJobIds.has(job.id)}
-                            className="p-1 rounded-lg transition-all text-slate-300 dark:text-slate-600 hover:text-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">
-                            <Zap size={10} className={triggeringJobIds.has(job.id) ? 'animate-pulse text-emerald-500' : ''} />
-                          </button>
-                          <button
-                            onClick={() => editingJobId === job.id ? (setEditingJobId(null), setEditDraft(null)) : startEditCron(job)}
-                            title={editingJobId === job.id ? '取消編輯' : '編輯'}
-                            className={`p-1 rounded-lg transition-all ${editingJobId === job.id ? 'text-violet-500' : 'text-slate-300 dark:text-slate-600 hover:text-violet-500'}`}>
-                            <Pencil size={10} />
-                          </button>
-                          <button onClick={() => void toggleCron(job.id)} title={job.enabled ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
-                            className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}>
-                            {job.enabled ? <Pause size={10} /> : <Play size={10} />}
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm({ name: job.name, onConfirm: () => void deleteCron(job.id) })}
-                            className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all">
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      </div>
-                      {/* 副資訊列：排程 · 上次時間 · 下次時間 */}
-                      <div className="mt-1 flex items-center gap-2 text-[9px] text-slate-400 flex-wrap">
-                        <span className="font-mono text-violet-400/70">{formatInterval(job.schedule, t)}</span>
-                        {job.payload?.timeoutSeconds && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span className="text-amber-400/70">{t('controlCenter.cronJobs.timeout', { val: `${Math.round(job.payload.timeoutSeconds / 60)}m` })}</span>
-                          </>
-                        )}
-                        {job.state?.lastRunAtMs && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span>{relTime(job.state.lastRunAtMs, t)}</span>
-                          </>
-                        )}
-                        {job.enabled && job.state?.nextRunAtMs && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span className="text-violet-400">{nextTime(job.state.nextRunAtMs, t)}</span>
-                          </>
-                        )}
-                      </div>
-                      {/* 內嵌編輯表單 */}
-                      {editingJobId === job.id && editDraft && (
-                        <div className="mt-2 pt-2 border-t border-violet-100 dark:border-violet-900/30 space-y-2">
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="col-span-3">
-                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">名稱</label>
-                              <input
-                                type="text"
-                                value={editDraft.name}
-                                onChange={e => setEditDraft(d => d ? { ...d, name: e.target.value } : d)}
-                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
-                                maxLength={100}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">排程（分鐘）</label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={1440}
-                                value={editDraft.intervalMin}
-                                onChange={e => setEditDraft(d => d ? { ...d, intervalMin: Math.max(1, Number(e.target.value)) } : d)}
-                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">逾時（分鐘）</label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={60}
-                                value={editDraft.timeoutMin}
-                                placeholder="不設定"
-                                onChange={e => setEditDraft(d => d ? { ...d, timeoutMin: e.target.value === '' ? '' : Math.max(1, Number(e.target.value)) } : d)}
-                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
-                              />
-                            </div>
-                            <div className="flex items-end gap-1">
-                              <button
-                                onClick={() => void updateCron(job.id, {
-                                  name: editDraft.name,
-                                  everyMs: editDraft.intervalMin * 60000,
-                                  ...(editDraft.timeoutMin !== '' ? { timeoutSeconds: editDraft.timeoutMin * 60 } : {}),
-                                })}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-bold bg-violet-500 text-white hover:bg-violet-600 transition-all"
-                              >
-                                <Save size={9} />儲存
-                              </button>
-                              <button
-                                onClick={() => { setEditingJobId(null); setEditDraft(null); }}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700 transition-all"
-                              >
-                                <X size={9} />取消
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              {(() => {
-                const visible = filteredCronJobs;
-                const canEnable  = visible.some(j => !j.enabled);
-                const canDisable = visible.some(j => j.enabled);
-                const canClear   = cjFilter === 'disabled' && canEnable;
-                if (!canEnable && !canDisable) return null;
-                return (
-                  <div className="flex justify-end items-center gap-1.5 pt-1">
-                    {canEnable && (
-                      <button
-                        onClick={() => void enableAllDisabledCronJobs()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-200 dark:border-emerald-800/40 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
-                      >
-                        <Play size={8} />{t('common.enableAll', '全部啟用')}
-                      </button>
-                    )}
-                    {canDisable && (
-                      <button
-                        onClick={() => void disableAllEnabledCronJobs()}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-amber-200 dark:border-amber-800/40 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
-                      >
-                        <Pause size={8} />{t('common.disableAll', '全部停用')}
-                      </button>
-                    )}
-                    {canClear && (
-                      <button
-                        onClick={() => {
-                          const count = visible.filter(j => !j.enabled).length;
-                          setDeleteConfirm({ name: t('common.deleteAllCount', '全部 {{count}} 個已停止', { count }), onConfirm: () => void deleteAllDisabledCronJobs() });
                         }}
                         className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-bold border border-rose-200 dark:border-rose-800/40 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 transition-all"
                       >

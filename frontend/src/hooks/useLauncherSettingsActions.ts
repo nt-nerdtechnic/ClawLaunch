@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import type { Config } from '../store';
 import { ConfigService } from '../services/configService';
+import { execInTerminal } from '../utils/terminal';
 
 type LogSource = 'system' | 'stderr' | 'stdout';
 
@@ -90,9 +91,51 @@ export function useLauncherSettingsActions({
     setConfig({ [key]: selectedPath } as Partial<Config>);
   }, [setConfig]);
 
+  const buildOpenClawEnvPrefix = () => ConfigService.buildOpenClawEnvPrefix(config.configPath);
+
+  const handleOpenClawDoctor = async () => {
+    if (!config.corePath?.trim()) {
+      addLog(t('runtime.actions.doctorMissingCore'), 'stderr');
+      return;
+    }
+    try {
+      const envPrefix = buildOpenClawEnvPrefix();
+      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw doctor --fix`;
+      await execInTerminal(cmd, {
+        title: t('runtime.actions.doctorTitle'),
+        holdOpen: true,
+        cwd: config.corePath,
+      });
+      addLog(t('runtime.actions.doctorStarted'), 'system');
+    } catch (e: unknown) {
+      addLog(t('runtime.actions.doctorFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
+    }
+  };
+
+  const handleSecurityCheck = async () => {
+    if (!config.corePath?.trim()) {
+      addLog(t('runtime.actions.auditMissingCore'), 'stderr');
+      return;
+    }
+    try {
+      const envPrefix = buildOpenClawEnvPrefix();
+      const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw security audit --fix --deep`;
+      await execInTerminal(cmd, {
+        title: t('runtime.actions.auditTitle'),
+        holdOpen: true,
+        cwd: config.corePath,
+      });
+      addLog(t('runtime.actions.auditStarted'), 'system');
+    } catch (e: unknown) {
+      addLog(t('runtime.actions.auditFailed', { msg: e instanceof Error ? e.message : String(e) }), 'stderr');
+    }
+  };
+
   return {
     launcherSaveState,
     handleSaveLauncherConfig,
     handleBrowsePath,
+    handleOpenClawDoctor,
+    handleSecurityCheck,
   };
 }

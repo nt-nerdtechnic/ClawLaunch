@@ -342,34 +342,49 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       const { corePath, backupPath } = JSON.parse(payloadStr);
       if (!corePath || !backupPath) return { code: 1, stderr: 'corePath and backupPath required', exitCode: 1 };
 
+      // Security: allow rollback source only from {corePath}/.openclaw-backups
+      const coreRealPath = await fs.realpath(corePath);
+      const backupsRoot = path.join(coreRealPath, '.openclaw-backups');
+      const [backupsRootRealPath, backupRealPath] = await Promise.all([
+        fs.realpath(backupsRoot),
+        fs.realpath(backupPath),
+      ]);
+      const backupRel = path.relative(backupsRootRealPath, backupRealPath);
+      if (!backupRel || backupRel.startsWith('..') || path.isAbsolute(backupRel)) {
+        return {
+          code: 1,
+          stderr: `Invalid backup path. Must be under ${backupsRootRealPath}`,
+          exitCode: 1,
+        };
+      }
+
       // Verify backup exists
-      try { await fs.stat(backupPath); } catch {
+      try { await fs.stat(backupRealPath); } catch {
         return { code: 1, stderr: `Backup not found: ${backupPath}`, exitCode: 1 };
       }
 
       // Safety: snapshot current state before rollback
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const backupsRoot = path.join(corePath, '.openclaw-backups');
-      rollbackTmpPath = path.join(backupsRoot, `${timestamp}_pre-rollback`);
+      rollbackTmpPath = path.join(backupsRootRealPath, `${timestamp}_pre-rollback`);
       await fs.mkdir(rollbackTmpPath, { recursive: true });
       ctx.emitShellStdout(`>>> Saving pre-rollback snapshot to ${rollbackTmpPath}...\n`, 'stdout');
-      await fs.cp(corePath, rollbackTmpPath, {
+      await fs.cp(coreRealPath, rollbackTmpPath, {
         recursive: true, force: true,
         filter: (src) => {
-          const rel = path.relative(corePath, src);
+          const rel = path.relative(coreRealPath, src);
           return !rel.startsWith('node_modules') && !rel.startsWith('.update-tmp') && !rel.startsWith('.openclaw-backups');
         },
       });
 
       // Restore backup → corePath
-      ctx.emitShellStdout(`>>> Restoring from ${backupPath}...\n`, 'stdout');
-      await fs.cp(backupPath, corePath, { recursive: true, force: true });
+      ctx.emitShellStdout(`>>> Restoring from ${backupRealPath}...\n`, 'stdout');
+      await fs.cp(backupRealPath, coreRealPath, { recursive: true, force: true });
 
       // Re-install dependencies
       ctx.emitShellStdout('>>> Reinstalling dependencies...\n', 'stdout');
       const runCmd = (cmd: string) =>
         new Promise<{ code: number; stdout: string; stderr: string }>((resolveStep) => {
-          const proc = spawn(cmd, { shell: true, cwd: corePath });
+          const proc = spawn(cmd, { shell: true, cwd: coreRealPath });
           ctx.activeProcesses.add(proc);
           let stdout = '', stderr = '';
           proc.stdout.on('data', (data: Buffer) => { const chunk = data.toString(); stdout += chunk; ctx.emitShellStdout(chunk, 'stdout'); });
@@ -385,7 +400,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       }
 
       ctx.emitShellStdout('>>> Rollback complete!\n', 'stdout');
-      return { code: 0, stdout: JSON.stringify({ restoredFrom: backupPath }), exitCode: 0 };
+      return { code: 0, stdout: JSON.stringify({ restoredFrom: backupRealPath }), exitCode: 0 };
     } catch (e) {
       return { code: 1, stderr: (e as Error)?.message || 'rollback failed', exitCode: 1 };
     }

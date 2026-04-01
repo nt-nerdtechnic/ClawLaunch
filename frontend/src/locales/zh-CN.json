@@ -1,15 +1,64 @@
 {
   "miniView": {
-    "latticeStatus": "Lattice 状态",
-    "tokenBudget": "Token 用量",
-    "trend7d": "7日趋势",
-    "home": "首页",
-    "taskBoard": "任务",
-    "monitor": "监控",
-    "expand": "展开"
+    "tokenBudget": "Token 预算",
+    "trend7d": "Trend (7d)",
+    "security": "Security",
+    "logs": "Logs"
   },
   "common": {
-    "toggleTheme": "切换主题"
+    "labels": {
+      "confirm": "确认",
+      "cancel": "取消",
+      "success": "成功",
+      "failure": "失败",
+      "error": "错误",
+      "warning": "警告",
+      "info": "信息",
+      "loading": "加载中...",
+      "saving": "保存中...",
+      "saved": "已保存",
+      "notParsed": "未解析到",
+      "oauthFlow": "OAuth 流程",
+      "noKeyRequired": "无须密钥",
+      "executing": "执行中",
+      "execute": "执行",
+      "static": "静态",
+      "dynamic": "动态",
+      "collapse": "折叠",
+      "expandAll": "全部展开"
+    },
+    "time": {
+      "every": "每 {{val}}",
+      "soon": "即将",
+      "ago": "{{val}} 前",
+      "later": "{{val}} 后",
+      "pending": "待执行"
+    },
+    "status": {
+      "todo": "待处理",
+      "in_progress": "运行中",
+      "blocked": "锁定中",
+      "done": "已完成",
+      "success": "成功",
+      "failure": "失败",
+      "exec": "执行",
+      "completed": "完成"
+    },
+    "source": {
+      "fs": "文件系统",
+      "agent": "Agent 作业",
+      "cron": "计划",
+      "system": "系统"
+    },
+    "agent": {
+      "running": "运行 · {{pid}}",
+      "loaded": "已载入",
+      "unloaded": "未载入",
+      "notInstalled": "未安装"
+    },
+    "punctuation": {
+      "comma": "、"
+    }
   },
   "terminal": {
     "dailyDigest": "每日摘要",
@@ -162,7 +211,6 @@
       "scanBtn": "立即扫描 Agent 作业",
       "empty": "尚无作业记录"
     },
-
     "services": {
       "title": "系统服务",
       "empty": "未侦测到系统服务",
@@ -207,7 +255,57 @@
     "sessions": "对话",
     "tokens": "Tokens",
     "cost": "费用",
-    "noAgents": "当前没有活跃的 Agent"
+    "noAgents": "当前没有活跃的 Agent",
+    "clickToChat": "点击对话 · 右键管理",
+    "contextMenu": {
+      "chat": "Chat",
+      "stopAll": "停止所有对话",
+      "settings": "设置",
+      "cronJobs": "Cron 排程",
+      "auth": "Auth 凭证"
+    },
+    "drawer": {
+      "tabs": {
+        "info": "信息",
+        "cron": "Cron 排程",
+        "auth": "Auth 凭证"
+      },
+      "info": {
+        "id": "Agent ID",
+        "state": "状态",
+        "model": "模型",
+        "sessions": "对话数",
+        "tokensIn": "Tokens 输入",
+        "tokensOut": "Tokens 输出",
+        "cost": "费用"
+      },
+      "cron": {
+        "noJobs": "此 Agent 没有 Cron 排程",
+        "trigger": "立即执行",
+        "pause": "暂停",
+        "resume": "继续",
+        "disable": "停用",
+        "enable": "启用",
+        "delete": "删除"
+      }
+    },
+    "hud": {
+      "gatewayOn": "ON",
+      "gatewayOff": "OFF",
+      "active": "运行中",
+      "todayCost": "今日",
+      "addAgent": "新增"
+    },
+    "addAgent": {
+      "title": "新增 Agent",
+      "agentId": "Agent ID",
+      "agentIdHint": "小写字母、数字、连字符，最多 31 个字符",
+      "authChoice": "验证方式",
+      "apiKey": "API Key",
+      "creating": "创建中…",
+      "create": "创建 Agent",
+      "success": "Agent 创建成功！"
+    }
   },
   "chat": {
     "justNow": "刚刚",
@@ -1228,61 +1326,6 @@
       "workspaceExtension": "工作区扩充技能"
     }
   },
-  "common": {
-    "labels": {
-      "confirm": "确认",
-      "cancel": "取消",
-      "success": "成功",
-      "failure": "失败",
-      "error": "错误",
-      "warning": "警告",
-      "info": "信息",
-      "loading": "加载中...",
-      "saving": "保存中...",
-      "saved": "已保存",
-      "notParsed": "未解析到",
-      "oauthFlow": "OAuth 流程",
-      "noKeyRequired": "无须密钥",
-      "executing": "执行中",
-      "execute": "执行",
-      "static": "静态",
-      "dynamic": "动态",
-      "collapse": "折叠",
-      "expandAll": "全部展开"
-    },
-    "time": {
-      "every": "每 {{val}}",
-      "soon": "即将",
-      "ago": "{{val}} 前",
-      "later": "{{val}} 后",
-      "pending": "待执行"
-    },
-    "status": {
-      "todo": "待处理",
-      "in_progress": "运行中",
-      "blocked": "锁定中",
-      "done": "已完成",
-      "success": "成功",
-      "failure": "失败",
-      "exec": "执行",
-      "completed": "完成"
-    },
-    "source": {
-      "fs": "文件系统",
-      "agent": "Agent 作业",
-      "cron": "计划",
-      "system": "系统"
-    },
-    "agent": {
-      "running": "运行 · {{pid}}",
-      "loaded": "已载入",
-      "unloaded": "未载入",
-      "notInstalled": "未安装"
-    },
-    "punctuation": {
-      "comma": "、"
-    }
-  },
   "launcher": {
     "autoRestart": {
       "label": "自动重启 Gateway（崩溃时）",
@@ -1382,12 +1425,6 @@
     "oauthTitle": "OpenClaw OAuth 授权流程 (models auth login)",
     "initPathActual": "实际初始化将使用：",
     "initTarget": "将初始化至："
-  },
-  "miniView": {
-    "tokenBudget": "Token 预算",
-    "trend7d": "Trend (7d)",
-    "security": "Security",
-    "logs": "Logs"
   },
   "memory": {
     "browser": "数据管理区",

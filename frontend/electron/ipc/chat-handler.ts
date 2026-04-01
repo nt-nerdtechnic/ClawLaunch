@@ -912,9 +912,11 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
               || isHeartbeatAck
               || (isHeartbeatFresh && lastMessageRole !== 'assistant')
               || (isHeartbeatFresh && !isCompletedByContent);
+            const persistentMainIdleThresholdMs = 5 * 60 * 1000; // 5 minutes
             const persistentMainHasStopSignal = meta?.abortedLastRun === true
               || (lastMessageRole === 'assistant' && (hasExplicitStoppedState || isCompletedByContent))
-              || (!isHeartbeatFresh && hasExplicitStoppedState);
+              || (!isHeartbeatFresh && hasExplicitStoppedState)
+              || (lastMessageRole === 'assistant' && ageMs > persistentMainIdleThresholdMs);
             const persistentMainIsRunning = persistentMainHasTarget
               && persistentMainHasActiveSignal
               && !persistentMainHasStopSignal;
