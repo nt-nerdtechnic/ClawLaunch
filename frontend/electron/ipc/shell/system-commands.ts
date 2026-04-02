@@ -341,10 +341,13 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
         if (job['id'] !== jobId) return job;
         found = true;
         const existingState = (job['state'] as Record<string, unknown>) || {};
-        const { consecutiveErrors: _ce, lastError: _le, lastStatus: _ls, ...restState } = existingState as {
-          consecutiveErrors?: unknown; lastError?: unknown; lastStatus?: unknown; [k: string]: unknown;
+        const {
+          consecutiveErrors: _ce, lastError: _le, lastStatus: _ls, lastRunAtMs: _lr,
+          ...restState
+        } = existingState as {
+          consecutiveErrors?: unknown; lastError?: unknown; lastStatus?: unknown; lastRunAtMs?: unknown; [k: string]: unknown;
         };
-        void _ce; void _le; void _ls;
+        void _ce; void _le; void _ls; void _lr;
         return { ...job, state: { ...restState, consecutiveErrors: 0 }, updatedAtMs: Date.now() };
       });
       if (!found) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };

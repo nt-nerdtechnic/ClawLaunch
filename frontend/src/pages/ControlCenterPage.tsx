@@ -476,16 +476,19 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     try {
       setError('');
       setFixingJobIds((prev) => { const next = new Set(prev); next.add(jobId); return next; });
+      setTriggeringJobIds((prev) => { const next = new Set(prev); next.add(jobId); return next; });
       // Step 1: Clear consecutiveErrors / lastError in jobs.json (OpenClaw's own cron state file)
       await execCmd(`cron:reset-errors ${JSON.stringify({ jobId, stateDir })}`);
       // Step 2: Fire `openclaw cron run <jobId>` natively in background
       window.electronAPI.exec(`cron:trigger ${JSON.stringify({ jobId, stateDir, fireAndForget: true })}`);
-      await new Promise(r => setTimeout(r, 800));
+      // Brief visual feedback then remove spinner
+      await new Promise(r => setTimeout(r, 1200));
       await loadCron();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Fix and retry failed');
     } finally {
       setFixingJobIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
+      setTriggeringJobIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
     }
   };
 
@@ -939,7 +942,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                     </span>
                   </div>
                 ) : [...filteredCronJobs]
-                  .sort((a, b) => (b.state?.lastRunAtMs ?? 0) - (a.state?.lastRunAtMs ?? 0)).map(job => {
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(job => {
                   const cronSessionPrefix = `agent:${job.agentId || 'main'}:cron:${job.id}`;
                   const hasRunningCronSession = activeSessions.some((session) => {
                     const sessionKey = String(session.key || '').trim();
@@ -994,41 +997,30 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             {t('common.status.exec', '執行')}
                           </span>
                         )}
-                        {/* 上次執行結果 badge */}
+                        {/* 執行結果與錯誤修復整合標籤 */}
                         {!isCurrentlyRunning && job.state?.lastRunAtMs && (
-                          <span className={`shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
-                            job.state.lastStatus === 'ok'
-                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40'
-                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/40'
-                          }`}>
-                            {job.state.lastStatus === 'ok'
-                              ? <CheckCircle size={8} />
-                              : <AlertTriangle size={8} />}
-                            {job.state.lastStatus === 'ok' ? t('controlCenter.cronJobs.lastOk') : t('controlCenter.cronJobs.lastFail')}
-                          </span>
-                        )}
-                        {/* 連續錯誤次數 badge + 快速修復按鈕 */}
-                        {hasError && (
-                          <>
-                            <span
-                              title={job.state?.lastError || t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
-                              className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40 cursor-help"
-                            >
-                              <AlertTriangle size={8} />
-                              {t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
-                            </span>
+                          (hasError || job.state?.lastStatus === 'error') ? (
                             <button
-                              onClick={() => void fixAndRetry(job.id)}
-                              title={t('controlCenter.cronJobs.fixAndRetry', '自動排除錯誤並重新執行（openclaw cron run）')}
+                              onClick={(e) => { e.stopPropagation(); void fixAndRetry(job.id); }}
                               disabled={fixingJobIds.has(job.id)}
-                              className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-rose-50 dark:bg-rose-950/30 text-rose-500 dark:text-rose-400 border-rose-200 dark:border-rose-800/40 hover:bg-rose-100 dark:hover:bg-rose-950/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                              title={job.state?.lastError || t('controlCenter.cronJobs.fixAndRetry')}
+                              className="shrink-0 flex items-center group transition-all active:scale-95 disabled:opacity-60 disabled:active:scale-100"
                             >
-                              <Wrench size={8} className={fixingJobIds.has(job.id) ? 'animate-spin' : ''} />
-                              {fixingJobIds.has(job.id)
-                                ? t('controlCenter.cronJobs.fixing', '修復中…')
-                                : t('controlCenter.cronJobs.fix', '修復')}
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-l-md border-y border-l bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/20 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/40 transition-colors text-[9px] font-bold">
+                                <AlertTriangle size={8} />
+                                <span>{t('controlCenter.cronJobs.lastFail')} {job.state?.consecutiveErrors ? `(${job.state.consecutiveErrors})` : ''}</span>
+                              </div>
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-r-md border bg-rose-500 text-white border-rose-500 group-hover:bg-rose-600 transition-colors shadow-sm text-[9px] font-bold">
+                                <Wrench size={8} className={fixingJobIds.has(job.id) ? 'animate-spin' : ''} />
+                                <span>{fixingJobIds.has(job.id) ? t('controlCenter.cronJobs.fixing') : t('controlCenter.cronJobs.fix')}</span>
+                              </div>
                             </button>
-                          </>
+                          ) : job.state?.lastStatus === 'ok' ? (
+                            <span className="shrink-0 flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40">
+                              <CheckCircle size={8} />
+                              {t('controlCenter.cronJobs.lastOk')}
+                            </span>
+                          ) : null
                         )}
                         {/* 操作按鈕 */}
                         <div className="flex items-center gap-0.5 shrink-0">
@@ -1375,7 +1367,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                      t('controlCenter.crontab.empty', '無系統排程項目')}
                   </span>
                 </div>
-              ) : filteredCrontabEntries
+              ) : [...filteredCrontabEntries]
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                 .map((entry, i) => (
                 <div key={i} className={`rounded-xl border px-3 py-2.5 transition-all ${
                   entry.enabled !== false ? 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50' : 'border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20 opacity-60'
@@ -1506,7 +1499,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                      t('controlCenter.services.empty', '未偵測到系統服務')}
                   </span>
                 </div>
-              ) : filteredLaunchAgents
+              ) : [...filteredLaunchAgents]
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                 .map(agent => (
                 <div key={agent.label} className={`rounded-xl border px-3 py-2.5 transition-all ${
                   agent.running || agent.loaded
