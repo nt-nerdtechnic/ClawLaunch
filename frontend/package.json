@@ -33,6 +33,11 @@
     "win": {
       "target": "nsis",
       "icon": "public/icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "public/icon.png",
+      "category": "Utility"
     }
   },
   "dependencies": {
@@ -50,7 +55,8 @@
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.11",
+    "cross-env": "^10.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -65,7 +71,6 @@
     "@vitest/ui": "^4.1.2",
     "autoprefixer": "^10.4.27",
     "concurrently": "^9.2.1",
-    "cross-env": "^10.1.0",
     "electron": "^41.0.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9.39.1",

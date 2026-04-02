@@ -5,9 +5,15 @@ import path from 'node:path';
 export const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 將字串以 POSIX single-quote 包裝，可安全嵌入 shell 命令。 */
-export const shellQuote = (value: string): string =>
-  `'${String(value).replace(/'/g, `'\\''`)}'`;
+/** 將字串以適當引號包裝，可安全嵌入 shell 命令。 */
+export const shellQuote = (value: string): string => {
+  if (process.platform === 'win32') {
+    // Windows CMD 使用雙引號，若內部有雙引號則以雙倍引號 "" 跳脫
+    return `"${String(value).replace(/"/g, '""')}"`;
+  }
+  // POSIX 使用單引號
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+};
 
 /** 用於 AppleScript 字串跳脫。 */
 export const escapeAppleScriptString = (value: string): string =>

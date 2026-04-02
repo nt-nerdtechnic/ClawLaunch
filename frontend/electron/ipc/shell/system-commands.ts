@@ -21,10 +21,37 @@ const runSilent = (cmd: string): Promise<{ stdout: string; stderr: string; code:
 
 // ── Handler ──────────────────────────────────────────────────────────────────
 
+// ── Platform not-supported stubs ─────────────────────────────────────────────
+
+const WIN_NOT_SUPPORTED: CommandResult = {
+  code: 1,
+  stdout: '',
+  stderr: 'Not supported on Windows',
+  exitCode: 1,
+};
+
+/** LaunchAgents / launchctl is macOS (darwin) only */
+const DARWIN_ONLY_NOT_SUPPORTED: CommandResult = {
+  code: 1,
+  stdout: '',
+  stderr: 'Not supported on this platform (macOS only)',
+  exitCode: 1,
+};
+
+// ── Home directory (cross-platform) ─────────────────────────────────────────
+
+const getHomeDir = (): string =>
+  process.env['HOME'] || process.env['USERPROFILE'] || app.getPath('home');
+
+// ── Handler ──────────────────────────────────────────────────────────────────
+
 export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExecContext): Promise<CommandResult | null> {
   const fullCommand = _fullCommand;
 
   if (fullCommand === 'system:crontab:list') {
+    if (process.platform === 'win32') {
+      return { code: 0, stdout: JSON.stringify({ entries: [] }), stderr: '', exitCode: 0 };
+    }
     try {
       const res = await runSilent('crontab -l');
       const lines = res.stdout.split('\n').filter(l => l.trim() && (!l.trim().startsWith('#') || l.trim().startsWith('# [DISABLED]')));
@@ -44,6 +71,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
   }
 
   if (fullCommand.startsWith('system:crontab:toggle ')) {
+    if (process.platform === 'win32') return WIN_NOT_SUPPORTED;
     try {
       const payload = JSON.parse(fullCommand.replace('system:crontab:toggle ', '').trim() || '{}');
       const raw = String(payload?.raw || '');
@@ -69,6 +97,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
   }
 
   if (fullCommand.startsWith('system:crontab:delete ')) {
+    if (process.platform === 'win32') return WIN_NOT_SUPPORTED;
     try {
       const payload = JSON.parse(fullCommand.replace('system:crontab:delete ', '').trim() || '{}');
       const raw = String(payload?.raw || '');
@@ -88,8 +117,11 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
   }
 
   if (fullCommand === 'system:launchagents:list') {
+    if (process.platform !== 'darwin') {
+      return { code: 0, stdout: JSON.stringify({ agents: [] }), stderr: '', exitCode: 0 };
+    }
     try {
-      const home = process.env['HOME'] || '';
+      const home = getHomeDir();
       const agentsDir = path.join(home, 'Library/LaunchAgents');
       const friendlyNames: Record<string, string> = {
         'ai.openclaw.gateway': 'OpenClaw Gateway',
@@ -158,11 +190,12 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
   }
 
   if (fullCommand.startsWith('system:launchagents:toggle ')) {
+    if (process.platform !== 'darwin') return DARWIN_ONLY_NOT_SUPPORTED;
     try {
       const payload = JSON.parse(fullCommand.replace('system:launchagents:toggle ', '').trim() || '{}');
       const agentLabel = String(payload?.label || '');
       if (!agentLabel) return { code: 1, stdout: '', stderr: 'label is required', exitCode: 1 };
-      const home = process.env['HOME'] || '';
+      const home = getHomeDir();
       const plist = path.join(home, `Library/LaunchAgents/${agentLabel}.plist`);
       const launchctlRes = await runSilent('launchctl list');
       const isLoaded = launchctlRes.stdout.split('\n').some(l => l.includes(agentLabel));
@@ -179,11 +212,12 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
   }
 
   if (fullCommand.startsWith('system:launchagents:delete ')) {
+    if (process.platform !== 'darwin') return DARWIN_ONLY_NOT_SUPPORTED;
     try {
       const payload = JSON.parse(fullCommand.replace('system:launchagents:delete ', '').trim() || '{}');
       const agentLabel = String(payload?.label || '');
       if (!agentLabel) return { code: 1, stdout: '', stderr: 'label is required', exitCode: 1 };
-      const home = process.env['HOME'] || '';
+      const home = getHomeDir();
       const plist = path.join(home, `Library/LaunchAgents/${agentLabel}.plist`);
       const uid = process.getuid ? process.getuid() : 0;
       await runSilent(`launchctl bootout gui/${uid} "${plist}"`);
@@ -236,7 +270,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     try {
       const payloadStr = fullCommand.replace('cron:list', '').trim();
       const payload = payloadStr ? JSON.parse(payloadStr) : {};
-      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(getHomeDir(), '.openclaw')).trim();
       const cronPath = path.join(stateDir, 'cron', 'jobs.json');
       try {
         const raw = await fs.readFile(cronPath, 'utf-8');
@@ -253,7 +287,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     try {
       const payload = JSON.parse(fullCommand.replace('cron:toggle ', '').trim() || '{}');
       const jobId = String(payload?.jobId || '').trim();
-      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(getHomeDir(), '.openclaw')).trim();
       if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
       const cronPath = path.join(stateDir, 'cron', 'jobs.json');
       const raw = await fs.readFile(cronPath, 'utf-8');
@@ -275,7 +309,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     try {
       const payload = JSON.parse(fullCommand.replace('cron:delete ', '').trim() || '{}');
       const jobId = String(payload?.jobId || '').trim();
-      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(getHomeDir(), '.openclaw')).trim();
       if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
       const cronPath = path.join(stateDir, 'cron', 'jobs.json');
       const raw = await fs.readFile(cronPath, 'utf-8');
@@ -294,7 +328,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     try {
       const payload = JSON.parse(fullCommand.replace('cron:update ', '').trim() || '{}');
       const jobId = String(payload?.jobId || '').trim();
-      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(process.env['HOME'] || '', '.openclaw')).trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(getHomeDir(), '.openclaw')).trim();
       if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
       const cronPath = path.join(stateDir, 'cron', 'jobs.json');
       const raw = await fs.readFile(cronPath, 'utf-8');

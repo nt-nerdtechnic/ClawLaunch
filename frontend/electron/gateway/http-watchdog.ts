@@ -126,7 +126,7 @@ export const runGatewayHttpWatchdogCheck = async (): Promise<void> => {
 
     gatewayHttpWatchdog.restartAttempts += 1;
     _emit(
-      `[gateway-http-watchdog] restart attempt ${gatewayHttpWatchdog.restartAttempts}/${gatewayHttpWatchdog.options.maxRestarts} via ${gatewayHttpWatchdog.options.restartMode === 'spawn' ? 'background spawn' : 'macOS Terminal'}\n`,
+      `[gateway-http-watchdog] restart attempt ${gatewayHttpWatchdog.restartAttempts}/${gatewayHttpWatchdog.options.maxRestarts} via ${gatewayHttpWatchdog.options.restartMode === 'spawn' ? 'background spawn' : process.platform === 'win32' ? 'Windows cmd.exe' : process.platform === 'linux' ? 'Linux terminal' : 'macOS Terminal'}\n`,
       'stdout',
     );
 

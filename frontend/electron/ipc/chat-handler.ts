@@ -7,7 +7,7 @@ import { t } from '../utils/i18n.js';
 import { extractCronDisplayNameFromText, extractMessageText, deriveSessionDisplayName, extractRunIdFromSendPayload } from '../utils/chat-helpers.js';
 import { readLauncherConfigPaths } from '../services/activity-watcher.js';
 
-const HOME = process.env['HOME'] || '';
+const HOME = (() => { try { return app.getPath('home'); } catch { return process.env['HOME'] || process.env['USERPROFILE'] || ''; } })();
 
 // ── Tail-read last JSONL message (reads only last TAIL_BYTES, not whole file) ─
 const TAIL_BYTES = 8192;

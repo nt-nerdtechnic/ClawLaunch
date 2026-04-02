@@ -71,7 +71,8 @@ export function initGatewayWatchdog(
 
 // ── Terminal helpers ─────────────────────────────────────────────────────────
 
-export const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart'): string => {
+/** macOS：透過 osascript 在 Terminal.app 開啟新視窗執行指令 */
+export const buildMacTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart'): string => {
   const marker = `${NT_CLAW_TERMINAL_MARKER_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
   const finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; ${command}; printf "\\n${t('main.shell.terminal.footer')}"; read -r _`;
   const line1 = `tell application "Terminal" to do script "${escapeAppleScriptString(finalCmd)}"`;
@@ -79,9 +80,42 @@ export const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gat
   return `osascript -e ${shellQuote(line1)} -e ${shellQuote(line2)}`;
 };
 
+/** Windows：透過 cmd.exe 開啟新視窗執行指令 */
+export const buildWindowsTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart'): string => {
+  // 使用雙引號逸脫：cmd /k 裡不能有未逸脫的雙引號
+  const safeTitle = title.replace(/"/g, "'");
+  const safeCommand = command.replace(/"/g, '\\"');
+  // start "" 開啟新視窗，/k 執行後保持視窗開啟（方便查看 log）
+  return `cmd.exe /c start "${safeTitle}" cmd.exe /k "${safeCommand}"`;
+};
+
+/**
+ * Linux：依序嘗試 gnome-terminal / konsole / xterm 開啟新視窗執行指令。
+ * 若均不可用則降級為直接 bash -c 於背景執行。
+ */
+export const buildLinuxTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart'): string => {
+  const safe = command.replace(/'/g, `'\''`);
+  const gnome = `gnome-terminal --title='${title.replace(/'/g, `'\''\''\'`)}' -- bash -c '${safe}; echo; read -r -p "Press Enter to close..." _' 2>/dev/null`;
+  const konsole = `konsole --title '${title.replace(/'/g, `'\''\''\'`)}' -e bash -c '${safe}; echo; read -r -p "Press Enter to close..." _' 2>/dev/null`;
+  const xterm = `xterm -title '${title.replace(/'/g, `'\''\''\'`)}' -e bash -c '${safe}; echo; read -r -p "Press Enter to close..." _' 2>/dev/null`;
+  // Attempt each terminal emulator in order; fall back to background bash
+  return `${gnome} || ${konsole} || ${xterm} || bash -c '${safe}' &`;
+};
+
+/** 跨平台：自動依 process.platform 選擇正確的終端啟動方式 */
+export const buildTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart'): string => {
+  if (process.platform === 'win32') {
+    return buildWindowsTerminalLaunchScript(command, title);
+  }
+  if (process.platform === 'linux') {
+    return buildLinuxTerminalLaunchScript(command, title);
+  }
+  return buildMacTerminalLaunchScript(command, title);
+};
+
 export const launchGatewayViaTerminal = async (command: string): Promise<boolean> => {
-  const osascriptCmd = buildTerminalLaunchScript(command);
-  const res = await _runShellCommand(osascriptCmd);
+  const terminalCmd = buildTerminalLaunchScript(command);
+  const res = await _runShellCommand(terminalCmd);
   return (res.code ?? 1) === 0;
 };
 
@@ -106,7 +140,12 @@ export const stopGatewayWatchdog = (reason = 'manual stop'): void => {
   clearGatewayRestartTimer();
   if (gatewayWatchdog.child && !gatewayWatchdog.child.killed) {
     try {
-      gatewayWatchdog.child.kill('SIGTERM');
+      // Windows 不支援 SIGTERM，直接呼叫 kill() 讓 Node 選擇正確方式
+      if (process.platform === 'win32') {
+        gatewayWatchdog.child.kill();
+      } else {
+        gatewayWatchdog.child.kill('SIGTERM');
+      }
     } catch (_) {
       // ignore
     }

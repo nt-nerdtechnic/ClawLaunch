@@ -98,6 +98,6 @@ export async function resolveOpenClawRuntime() {
     gatewayAuthArg,
     gatewayPort: String((openclawConfig?.gateway as Record<string, unknown>)?.port ?? '').trim(),
     gatewayToken: gatewayCredentials.token || '',
-    openclawPrefix: `${cdPrefix}${envPrefix}pnpm openclaw`,
+    openclawPrefix: `${cdPrefix}cross-env ${envPrefix}pnpm openclaw`,
   };
 }

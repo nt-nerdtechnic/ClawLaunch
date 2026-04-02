@@ -40,7 +40,8 @@ import { registerShellExecHandler } from './ipc/shell-exec-handler.js';
 // so that the previous settings can be read on each restart and won't disappear due to PID changes.
 app.setPath('userData', `${app.getPath('userData')}-${process.pid}`);
 mkdirSync(app.getPath('userData'), { recursive: true });
-// Fixed config directory: ~/Library/Application Support/NT-ClawLaunch/
+// Fixed config directory: platform-specific app data path (e.g. ~/Library/Application Support/NT-ClawLaunch/ on macOS,
+// %APPDATA%\NT-ClawLaunch on Windows, ~/.config/NT-ClawLaunch on Linux)
 const PERSISTENT_CONFIG_DIR = path.join(
   app.getPath('appData'),
   app.getName().replace(/ /g, '-'),
@@ -168,8 +169,13 @@ function killAllSubprocesses() {
   for (const proc of activeProcesses) {
     try {
       if (!proc.killed) {
-        proc.kill('SIGTERM');
-        setTimeout(() => { if (!proc.killed) proc.kill('SIGKILL'); }, 2000);
+        if (process.platform === 'win32') {
+          // Windows 不支援 POSIX signal，直接 kill()
+          proc.kill();
+        } else {
+          proc.kill('SIGTERM');
+          setTimeout(() => { if (!proc.killed) proc.kill('SIGKILL'); }, 2000);
+        }
       }
     } catch (e) {
       console.error('Failed to kill subprocess:', e);
@@ -209,12 +215,18 @@ async function createWindow() {
     ? path.join(__dirname, '../public/icon.png')
     : path.join(__dirname, 'icon.png');
 
+  // titleBarStyle: 'hiddenInset' is macOS-only; Windows/Linux use 'hidden' with
+  // frame:false to achieve a frameless window while still allowing dragging.
+  const titleBarStyle: 'hiddenInset' | 'hidden' =
+    process.platform === 'darwin' ? 'hiddenInset' : 'hidden';
+
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
     minWidth: 320,
     minHeight: 500,
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle,
+    ...(process.platform !== 'darwin' ? { frame: false } : {}),
     backgroundColor: '#020617',
     show: false,
     icon: iconPath,

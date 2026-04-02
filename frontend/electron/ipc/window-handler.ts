@@ -1,9 +1,53 @@
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { sleep } from '../utils/shell-utils.js';
+
+// ── Cross-platform helpers ───────────────────────────────────────────────────
+
+/** Returns the Chrome executable path for the current platform. */
+function getChromePath(): string {
+  if (process.platform === 'win32') {
+    const candidates = [
+      process.env['LOCALAPPDATA']
+        ? path.join(process.env['LOCALAPPDATA'], 'Google', 'Chrome', 'Application', 'chrome.exe')
+        : '',
+      process.env['PROGRAMFILES']
+        ? path.join(process.env['PROGRAMFILES'], 'Google', 'Chrome', 'Application', 'chrome.exe')
+        : '',
+      process.env['PROGRAMFILES(X86)']
+        ? path.join(process.env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe')
+        : '',
+    ].filter(Boolean);
+    return candidates[0] || 'chrome.exe';
+  }
+  if (process.platform === 'linux') {
+    // Common Linux Chrome / Chromium installation paths
+    const linuxCandidates = [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      '/snap/bin/chromium',
+    ];
+    return linuxCandidates.find(p => existsSync(p)) || linuxCandidates[0];
+  }
+  return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+}
+
+/** Returns a dedicated Chrome user-data dir for remote debugging. */
+function getChromeUserDataDir(home: string): string {
+  if (process.platform === 'win32') {
+    return path.join(process.env['LOCALAPPDATA'] || home, 'Google', 'Chrome', 'ChromeDebugging');
+  }
+  if (process.platform === 'linux') {
+    return path.join(home, '.config', 'google-chrome-debugging');
+  }
+  return path.join(home, 'Library', 'Application Support', 'Google', 'ChromeDebugging');
+}
 
 export interface WindowHandlerContext {
   getMainWindow: () => BrowserWindow | null;
@@ -73,17 +117,37 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
     }
 
     const launchctlLabel = 'ai.openclaw.gateway';
-    const uid = (await ctx.runShellCommand('id -u')).stdout.trim();
-    if (uid) {
-      await ctx.runShellCommand(`launchctl bootout gui/${uid}/${launchctlLabel} 2>/dev/null || true`);
-      await sleep(300);
+
+    // macOS only: attempt to unload the LaunchAgent before killing the port holder
+    if (process.platform === 'darwin') {
+      const uid = (await ctx.runShellCommand('id -u')).stdout.trim();
+      if (uid) {
+        await ctx.runShellCommand(`launchctl bootout gui/${uid}/${launchctlLabel} 2>/dev/null || true`);
+        await sleep(300);
+      }
     }
 
-    const lookupRes = await ctx.runShellCommand(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`);
-    const pidLines = String(lookupRes.stdout || '')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+    // Resolve PIDs listening on the given port (cross-platform)
+    let pidLines: string[];
+    if (process.platform === 'win32') {
+      // netstat -ano output: "  TCP  0.0.0.0:PORT  0.0.0.0:0  LISTENING  <PID>"
+      const lookupRes = await ctx.runShellCommand(
+        `netstat -ano | findstr :${port} | findstr LISTENING`,
+      );
+      pidLines = String(lookupRes.stdout || '')
+        .split(/\r?\n/)
+        .map((line) => {
+          const parts = line.trim().split(/\s+/);
+          return parts[parts.length - 1] || '';
+        })
+        .filter(Boolean);
+    } else {
+      const lookupRes = await ctx.runShellCommand(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`);
+      pidLines = String(lookupRes.stdout || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
     const pids = Array.from(new Set(pidLines
       .map((line) => Number(line))
       .filter((pid) => Number.isInteger(pid) && pid > 0)));
@@ -98,8 +162,13 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
 
     for (const pid of pids) {
       try {
-        process.kill(pid, 'SIGTERM');
-        termSent.push(pid);
+        if (process.platform === 'win32') {
+          await ctx.runShellCommand(`taskkill /PID ${pid} /F`);
+          termSent.push(pid);
+        } else {
+          process.kill(pid, 'SIGTERM');
+          termSent.push(pid);
+        }
       } catch (e) {
         failed.push({ pid, reason: (e as Error)?.message || 'SIGTERM failed' });
       }
@@ -117,6 +186,11 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
       }
 
       try {
+        if (process.platform === 'win32') {
+          // Already force-killed above via taskkill /F, treat as forceKilled
+          forceKilled.push(pid);
+          continue;
+        }
         process.kill(pid, 'SIGKILL');
         forceKilled.push(pid);
       } catch (e) {
@@ -295,28 +369,44 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
 
   ipcMain.handle('browser:launch-chrome-debug', async (_event, port: number) => {
     const portNum = Math.max(1024, Math.min(65535, Number(port) || 9222));
-    const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    const chromePath = getChromePath();
     const home = app.getPath('home');
     // Chrome forbids --remote-debugging-port with the default profile dir.
     // Use a dedicated non-default dir so DevTools is allowed.
-    const userDataDir = `${home}/Library/Application Support/Google/ChromeDebugging`;
+    const userDataDir = getChromeUserDataDir(home);
+
+    // Platform-aware kill/check commands
+    const killCmd = process.platform === 'win32'
+      ? 'taskkill /F /IM chrome.exe 2>nul & exit 0'
+      : process.platform === 'linux'
+        ? 'pkill -9 -f "google-chrome\\|chromium" 2>/dev/null; true'
+        : 'pkill -9 -f "Google Chrome" 2>/dev/null; true';
+    const checkCmd = process.platform === 'win32'
+      ? 'tasklist /FI "IMAGENAME eq chrome.exe" 2>nul'
+      : process.platform === 'linux'
+        ? 'pgrep -f "google-chrome\\|chromium" 2>/dev/null; true'
+        : 'pgrep -f "Google Chrome" 2>/dev/null; true';
+    const isChromeRunning = (stdout: string): boolean => {
+      if (process.platform === 'win32') return stdout.toLowerCase().includes('chrome.exe');
+      return stdout.trim().length > 0;
+    };
 
     try {
-      // Step 1: Force-kill all Chrome processes (SIGKILL)
-      await ctx.runShellCommand('pkill -9 -f "Google Chrome" 2>/dev/null; true');
+      // Step 1: Force-kill all Chrome processes
+      await ctx.runShellCommand(killCmd);
 
       // Step 2: Fixed wait then poll until Chrome is gone (max 5s)
       await sleep(1500);
       for (let i = 0; i < 7; i++) {
-        const check = await ctx.runShellCommand('pgrep -f "Google Chrome" 2>/dev/null; true');
-        if (!check.stdout.trim()) break;
+        const check = await ctx.runShellCommand(checkCmd);
+        if (!isChromeRunning(check.stdout)) break;
         await sleep(500);
       }
 
-      // Step 3: Remove SingletonLock/Cookie so Chrome won't skip debug flags
-      await ctx.runShellCommand(
-        `rm -f '${userDataDir}/SingletonLock' '${userDataDir}/SingletonCookie' 2>/dev/null; true`
-      );
+      // Step 3: Remove SingletonLock/Cookie so Chrome won't skip debug flags (Node.js fs — cross-platform)
+      for (const name of ['SingletonLock', 'SingletonCookie']) {
+        try { await fs.unlink(path.join(userDataDir, name)); } catch { /* ignore if not found */ }
+      }
       await sleep(300);
 
       // Step 4: Relaunch Chrome with remote debugging and original user data dir
@@ -338,9 +428,16 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
 
   ipcMain.handle('browser:check-chrome-debug', async (_event, port: number) => {
     const portNum = Math.max(1024, Math.min(65535, Number(port) || 9222));
-    // lsof requires elevated perms on macOS 15; use curl against the DevTools endpoint instead
-    const res = await ctx.runShellCommand(`curl -s --max-time 2 http://localhost:${portNum}/json/version`);
-    const running = res.code === 0 && res.stdout.trim().length > 0;
-    return { running, port: portNum };
+    // Use Node.js fetch() (available since Node 18) — works on all platforms without curl
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`http://localhost:${portNum}/json/version`, { signal: controller.signal });
+      clearTimeout(timer);
+      const text = await res.text();
+      return { running: text.trim().length > 0, port: portNum };
+    } catch {
+      return { running: false, port: portNum };
+    }
   });
 }

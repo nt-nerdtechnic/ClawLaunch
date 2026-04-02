@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { watch as fsWatch, existsSync } from 'node:fs';
+import { app } from 'electron';
 import { t } from '../utils/i18n.js';
 import { buildId } from '../utils/normalize.js';
 
@@ -120,7 +121,8 @@ export function inferFsEvent(
 
 // ── Config paths ─────────────────────────────────────────────────────────────
 
-const HOME = process.env['HOME'] || '';
+// Uses Electron API when available; falls back to env vars for cross-platform compatibility
+const HOME = (() => { try { return app.getPath('home'); } catch { return process.env['HOME'] || process.env['USERPROFILE'] || ''; } })();
 
 export async function readLauncherConfigPaths(): Promise<{
   corePath: string; workspacePath: string; configPath: string; stateDir: string;
@@ -198,7 +200,7 @@ export async function scanJsonlFile(filePath: string): Promise<void> {
     await fh.close();
     jsonlOffsets.set(filePath, stat.size);
     const lines = buf.toString('utf-8').split('\n').filter(Boolean);
-    const agentMatch = filePath.match(/agents\/([^/]+)\/sessions\//);
+    const agentMatch = filePath.match(/agents[/\\]([^/\\]+)[/\\]sessions[/\\]/);
     const agentId = agentMatch ? agentMatch[1] : 'unknown';
 
     for (const line of lines) {

@@ -6,6 +6,59 @@ import { writeFileIfMissing } from '../../services/skills.js';
 import type { CommandResult } from './types.js';
 import type { ShellExecContext } from '../shell-exec-handler.js';
 
+// ── Cross-platform shell helpers ─────────────────────────────────────────────
+
+/**
+ * Quote a value for the current platform's shell.
+ * POSIX (macOS/Linux): single quotes.
+ * Windows cmd.exe: double quotes.
+ */
+const platformQuote = (value: string): string =>
+  process.platform === 'win32'
+    ? `"${String(value).replace(/"/g, '\\"')}"`
+    : shellQuote(value);
+
+/**
+ * Wrap a pnpm command with a login shell on macOS/Linux so NVM / Homebrew paths
+ * are available. Tries zsh first (macOS default), then bash (Linux default).
+ * On Windows, runs the command directly.
+ *
+ * @param cmd          The pnpm command to run (no shell quoting needed for the command itself).
+ * @param stderrRedir  stderr redirect suffix, e.g. '2>/dev/null' or '2>&1' (Unix only).
+ */
+const wrapWithZsh = (cmd: string, stderrRedir = '2>&1'): string => {
+  if (process.platform === 'win32') return cmd;
+  // Escape backslashes and double quotes so the command survives the outer double-quote wrapper.
+  const escaped = cmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  if (process.platform === 'linux') {
+    // Linux: prefer bash login shell; fall back to direct invocation
+    return `bash -ilc "${escaped}" ${stderrRedir} || ${cmd}`;
+  }
+  // macOS: prefer zsh login shell; fall back to bash then direct
+  return `zsh -ilc "${escaped}" ${stderrRedir} || bash -ilc "${escaped}" ${stderrRedir} || ${cmd}`;
+};
+
+/**
+ * Returns a shell command that downloads a .tar.gz tarball and extracts it into
+ * destDir, stripping the top-level archive directory.
+ *
+ * macOS/Linux: single `curl | tar` pipeline (reliable on POSIX).
+ * Windows 10+: download to a temp file first, then extract — avoids binary pipe
+ *              issues; requires curl.exe + tar.exe (both built-in since Win 10 1803+).
+ */
+const buildDownloadExtractCmd = (tarballUrl: string, destDir: string): string => {
+  if (process.platform === 'win32') {
+    const tmpFile = path.join(destDir, '_dl_tmp.tar.gz');
+    const q = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
+    return [
+      `curl.exe -L -o ${q(tmpFile)} ${q(tarballUrl)}`,
+      `tar.exe -xzf ${q(tmpFile)} --strip-components=1 -C ${q(destDir)}`,
+      `del ${q(tmpFile)}`,
+    ].join(' && ');
+  }
+  return `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(destDir)}`;
+};
+
 export async function handleProjectCommands(fullCommand: string, ctx: ShellExecContext): Promise<CommandResult | null> {
   if (fullCommand.startsWith('project:check-empty')) {
     const targetPath = fullCommand.replace('project:check-empty ', '').trim();
@@ -86,16 +139,24 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
 
   if (fullCommand === 'process:force-release') {
     // Kill all orphan openclaw-related processes except openclaw-gateway
-    const killCmd = [
-      `ps -eo pid,command`,
-      `grep -E 'openclaw|models.list'`,
-      `grep -v 'openclaw-gateway'`,
-      `grep -v grep`,
-      `awk '{print $1}'`,
-      `xargs kill -9 2>/dev/null || true`,
-    ].join(' | ');
-    const res = await ctx.runShellCommand(`${killCmd}; echo done`);
-    const countCmd = `pgrep -c openclaw 2>/dev/null || echo 0`;
+    let killCmd: string;
+    let countCmd: string;
+    if (process.platform === 'win32') {
+      // PowerShell: kill matching processes, skip openclaw-gateway
+      killCmd = `powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match 'openclaw|models.list' -and $_.Name -notmatch 'openclaw-gateway' } | Stop-Process -Force -ErrorAction SilentlyContinue; Write-Output done"`;
+      countCmd = `powershell -NoProfile -Command "(Get-Process | Where-Object { $_.Name -match 'openclaw' }).Count"`;
+    } else {
+      killCmd = [
+        `ps -eo pid,command`,
+        `grep -E 'openclaw|models.list'`,
+        `grep -v 'openclaw-gateway'`,
+        `grep -v grep`,
+        `awk '{print $1}'`,
+        `xargs kill -9 2>/dev/null || true`,
+      ].join(' | ') + '; echo done';
+      countCmd = `pgrep -c openclaw 2>/dev/null || echo 0`;
+    }
+    const res = await ctx.runShellCommand(killCmd);
     const countRes = await ctx.runShellCommand(countCmd);
     const remaining = parseInt(String(countRes.stdout || '0').trim(), 10);
     return {
@@ -150,7 +211,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
           });
 
         if (downloadMethod === 'zip') {
-          const actualCmd = `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(finalCorePath)}`;
+          const actualCmd = buildDownloadExtractCmd(tarballUrl, finalCorePath);
           childProcess = spawn(actualCmd, { shell: true });
         } else {
           const versionArgs = `--branch ${shellQuote(targetVersion)} --depth 1 --single-branch`;
@@ -219,21 +280,21 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
             await trackPreExisting(extensionsDir);
             for (const name of bootstrapFileNames) await trackPreExisting(path.join(finalWorkspacePath, name));
 
-            const pnpmCheckRes = await runCommandWithStreaming('zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version', 'Checking pnpm availability...');
+            const pnpmCheckRes = await runCommandWithStreaming(wrapWithZsh('pnpm --version', '2>/dev/null'), 'Checking pnpm availability...');
             if (pnpmCheckRes.code !== 0) {
               const detail = [String(pnpmCheckRes.stderr || '').trim(), String(pnpmCheckRes.stdout || '').trim()].filter(Boolean).join('\n');
               resolve({ code: 1, stderr: detail || 'pnpm is unavailable. Please install pnpm (https://pnpm.io/) and ensure it is in your PATH.', exitCode: 1 });
               return;
             }
 
-            const installRes = await runCommandWithStreaming('zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile', 'Installing OpenClaw dependencies...');
+            const installRes = await runCommandWithStreaming(wrapWithZsh('pnpm install --no-frozen-lockfile'), 'Installing OpenClaw dependencies...');
             if (installRes.code !== 0) {
               const detail = [String(installRes.stderr || '').trim(), String(installRes.stdout || '').trim()].filter(Boolean).join('\n');
               resolve({ code: 1, stderr: detail || `Dependency installation failed (exit code ${installRes.code}).`, exitCode: 1 });
               return;
             }
 
-            const warmupRes = await runCommandWithStreaming('zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version', 'Prebuilding OpenClaw runtime...');
+            const warmupRes = await runCommandWithStreaming(wrapWithZsh('pnpm openclaw --version'), 'Prebuilding OpenClaw runtime...');
             if (warmupRes.code !== 0) {
               resolve({ code: 1, stderr: warmupRes.stderr || 'OpenClaw runtime warm-up failed.', exitCode: 1 });
               return;
@@ -242,11 +303,11 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
             ctx.emitShellStdout(`>>> Initializing config at ${finalConfigPath}...\n`, 'stdout');
             await ensureDirWithTracking(finalConfigPath);
 
-            const setupEnv = `OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_STATE_DIR=${shellQuote(finalConfigPath)}`;
-            const setupRes = await runCommandWithStreaming(
-              `zsh -ilc "${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}" 2>&1 || ${setupEnv} pnpm openclaw setup --workspace ${shellQuote(finalWorkspacePath)}`,
-              'Initializing OpenClaw config...'
-            );
+            const pnpmSetupArgs = `pnpm openclaw setup --workspace ${platformQuote(finalWorkspacePath)}`;
+            const setupCmd = process.platform === 'win32'
+              ? `set "OPENCLAW_CONFIG_PATH=${configFilePath}" && set "OPENCLAW_STATE_DIR=${finalConfigPath}" && ${pnpmSetupArgs}`
+              : wrapWithZsh(`OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_STATE_DIR=${shellQuote(finalConfigPath)} ${pnpmSetupArgs}`);
+            const setupRes = await runCommandWithStreaming(setupCmd, 'Initializing OpenClaw config...');
             if (setupRes.code !== 0) {
               resolve({ code: 1, stderr: setupRes.stderr || 'openclaw setup failed.', exitCode: 1 });
               return;
@@ -393,7 +454,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
           proc.on('close', (code: number) => { ctx.activeProcesses.delete(proc); resolveStep({ code: code ?? 0, stdout, stderr }); });
         });
 
-      const installRes = await runCmd('zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile');
+      const installRes = await runCmd(wrapWithZsh('pnpm install --no-frozen-lockfile'));
       if (installRes.code !== 0) {
         const detail = [String(installRes.stderr || '').trim(), String(installRes.stdout || '').trim()].filter(Boolean).join('\n');
         return { code: 1, stderr: detail || 'Dependency reinstall failed during rollback.', exitCode: 1 };
@@ -433,7 +494,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       }
 
       // ── Step 1: check pnpm availability ──────────────────────────────────
-      const pnpmCheck = await runCmd('zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version', 'Checking pnpm availability...');
+      const pnpmCheck = await runCmd(wrapWithZsh('pnpm --version', '2>/dev/null'), 'Checking pnpm availability...');
       if (pnpmCheck.code !== 0) {
         const detail = [String(pnpmCheck.stderr || '').trim(), String(pnpmCheck.stdout || '').trim()].filter(Boolean).join('\n');
         return { code: 1, stderr: detail || 'pnpm is unavailable. Please install pnpm (https://pnpm.io/) and ensure it is in your PATH.', exitCode: 1 };
@@ -442,7 +503,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       // ── Step 2: snapshot current version label (best-effort) ─────────────
       let currentVersionLabel = 'unknown';
       try {
-        const verRes = await runCmd('zsh -ilc "pnpm openclaw --version" 2>/dev/null || pnpm openclaw --version', 'Detecting current version...');
+        const verRes = await runCmd(wrapWithZsh('pnpm openclaw --version', '2>/dev/null'), 'Detecting current version...');
         const match = (verRes.stdout || '').match(/\d{4}\.\d+\.\d+/);
         if (match) currentVersionLabel = match[0];
       } catch { /* non-fatal */ }
@@ -470,7 +531,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       await fs.mkdir(updateTmpPath, { recursive: true });
 
       const dlRes = await runCmd(
-        `curl -L ${shellQuote(tarballUrl)} | tar -xz --strip-components=1 -C ${shellQuote(updateTmpPath)}`,
+        buildDownloadExtractCmd(tarballUrl, updateTmpPath),
         `Downloading ${targetVersion}...`
       );
       if (dlRes.code !== 0) {
@@ -531,7 +592,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
 
       // ── Step 6: install dependencies ─────────────────────────────────────
       const installRes = await runCmd(
-        'zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile',
+        wrapWithZsh('pnpm install --no-frozen-lockfile'),
         'Installing OpenClaw dependencies...'
       );
       if (installRes.code !== 0) {
@@ -543,7 +604,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
 
       // ── Step 7: warmup to verify runtime is operational ──────────────────
       const warmupRes = await runCmd(
-        'zsh -ilc "pnpm openclaw --version" 2>&1 || pnpm openclaw --version',
+        wrapWithZsh('pnpm openclaw --version'),
         'Prebuilding OpenClaw runtime...'
       );
       if (warmupRes.code !== 0) {
@@ -551,7 +612,7 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
         if (rolledBack) {
           // node_modules was updated by the successful pnpm install; reinstall against restored source
           await runCmd(
-            'zsh -ilc "pnpm install --no-frozen-lockfile" 2>&1 || pnpm install --no-frozen-lockfile',
+            wrapWithZsh('pnpm install --no-frozen-lockfile'),
             'Reinstalling dependencies after rollback...'
           ).catch(() => {});
         }

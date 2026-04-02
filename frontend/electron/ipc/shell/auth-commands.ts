@@ -143,7 +143,8 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         return { code: 0, stdout: JSON.stringify({ authChoice, provider: 'minimax-portal', mode: 'token', baseUrl }), stderr: '', exitCode: 0 };
       }
       const mainAgentDir = path.join(configDir, 'agents', 'main', 'agent');
-      const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_AGENT_DIR=${shellQuote(mainAgentDir)} `;
+      // cross-env ensures KEY=VALUE syntax works on both POSIX and Windows cmd.exe
+      const envPrefix = `cross-env OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_AGENT_DIR=${shellQuote(mainAgentDir)} `;
       const workspaceFlag = String(payload?.workspacePath || '').trim() ? ` --workspace ${shellQuote(String(payload.workspacePath).trim())}` : '';
       let authFlags = '';
       if (authChoice === 'token') {
