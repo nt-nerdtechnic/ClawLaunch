@@ -238,7 +238,10 @@
       "lastFail": "Failed",
       "errorCount": "{{count}} error(s)",
       "timeout": "timeout {{val}}",
-      "lastRun": "last run {{val}}"
+      "lastRun": "last run {{val}}",
+      "fix": "Fix",
+      "fixing": "Fixing...",
+      "fixAndRetry": "Auto-fix errors and re-run (openclaw cron run)"
     },
     "activeSessions": {
       "filterRunning": "Running Only",

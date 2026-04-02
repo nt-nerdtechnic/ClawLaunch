@@ -238,7 +238,10 @@
       "lastFail": "失敗",
       "errorCount": "{{count}} 次錯誤",
       "timeout": "逾時 {{val}}",
-      "lastRun": "最後執行 {{val}}"
+      "lastRun": "最後執行 {{val}}",
+      "fix": "修復",
+      "fixing": "修復中…",
+      "fixAndRetry": "自動排除錯誤並重新執行（openclaw cron run）"
     },
     "activeSessions": {
       "filterRunning": "僅執行中",

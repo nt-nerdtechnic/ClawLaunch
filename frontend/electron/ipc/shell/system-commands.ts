@@ -324,6 +324,37 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     }
   }
 
+  // Reset consecutiveErrors / lastError / lastStatus so the job can be retried cleanly.
+  // The state file is owned by OpenClaw; we patch only the error counters and then the
+  // caller fires `cron:trigger` (openclaw cron run) to re-execute immediately.
+  if (fullCommand.startsWith('cron:reset-errors ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:reset-errors ', '').trim() || '{}');
+      const jobId = String(payload?.jobId || '').trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(getHomeDir(), '.openclaw')).trim();
+      if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
+      const cronPath = path.join(stateDir, 'cron', 'jobs.json');
+      const raw = await fs.readFile(cronPath, 'utf-8');
+      const data = JSON.parse(raw) as { jobs?: Record<string, unknown>[] };
+      let found = false;
+      data.jobs = (data.jobs || []).map((job) => {
+        if (job['id'] !== jobId) return job;
+        found = true;
+        const existingState = (job['state'] as Record<string, unknown>) || {};
+        const { consecutiveErrors: _ce, lastError: _le, lastStatus: _ls, ...restState } = existingState as {
+          consecutiveErrors?: unknown; lastError?: unknown; lastStatus?: unknown; [k: string]: unknown;
+        };
+        void _ce; void _le; void _ls;
+        return { ...job, state: { ...restState, consecutiveErrors: 0 }, updatedAtMs: Date.now() };
+      });
+      if (!found) return { code: 1, stdout: '', stderr: `job ${jobId} not found`, exitCode: 1 };
+      await fs.writeFile(cronPath, JSON.stringify(data, null, 2), 'utf-8');
+      return { code: 0, stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'cron reset-errors failed', exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('cron:update ')) {
     try {
       const payload = JSON.parse(fullCommand.replace('cron:update ', '').trim() || '{}');

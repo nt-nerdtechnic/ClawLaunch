@@ -5,7 +5,7 @@ import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
-  Pencil, Save, X, Zap, Bell, BellOff,
+  Pencil, Save, X, Zap, Bell, BellOff, Wrench,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
@@ -232,6 +232,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [lastSystemScanned, setLastSystemScanned] = useState<Date | null>(null);
   const [abortingSessionKeys, setAbortingSessionKeys] = useState<Set<string>>(new Set());
   const [triggeringJobIds, setTriggeringJobIds] = useState<Set<string>>(new Set());
+  const [fixingJobIds, setFixingJobIds] = useState<Set<string>>(new Set());
   const [error, setError]             = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
   const [activeSessionFilter, setActiveSessionFilter] = useState<'all' | 'running' | 'stopped'>('running');
@@ -470,6 +471,24 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   };
 
+  // One-click auto-fix: resets OpenClaw cron error state then fires `openclaw cron run` natively.
+  const fixAndRetry = async (jobId: string) => {
+    try {
+      setError('');
+      setFixingJobIds((prev) => { const next = new Set(prev); next.add(jobId); return next; });
+      // Step 1: Clear consecutiveErrors / lastError in jobs.json (OpenClaw's own cron state file)
+      await execCmd(`cron:reset-errors ${JSON.stringify({ jobId, stateDir })}`);
+      // Step 2: Fire `openclaw cron run <jobId>` natively in background
+      window.electronAPI.exec(`cron:trigger ${JSON.stringify({ jobId, stateDir, fireAndForget: true })}`);
+      await new Promise(r => setTimeout(r, 800));
+      await loadCron();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Fix and retry failed');
+    } finally {
+      setFixingJobIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
+    }
+  };
+
   const deleteCron = async (jobId: string) => {
     try {
       setError('');
@@ -606,16 +625,26 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   // ── KPI ────────────────────────────────────────────────────────────────────
 
   const kpi = useMemo(() => {
-    const totalCrons = (cronJobs || []).length;
-    const activeCrons = (cronJobs || []).filter(j => j.enabled).length;
-    const totalAgents = (launchAgents || []).length;
-    const runningAgents = (launchAgents || []).filter(a => a.running || a.loaded).length;
-    const activeSessionsCount = (activeSessions || []).filter(s => s.isRunning === true).length;
+    const cronJobsArray = cronJobs || [];
+    const totalCrons = cronJobsArray.length;
+    const activeCrons = cronJobsArray.filter(j => j.enabled).length;
+
+    const launchAgentsArray = launchAgents || [];
+    const totalAgents = launchAgentsArray.length;
+    const runningAgents = launchAgentsArray.filter(a => a.running || a.loaded).length;
+
+    const activeSessionsArray = activeSessions || [];
+    const totalSessions = activeSessionsArray.length;
+    const runningSessions = activeSessionsArray.filter(s => s.isRunning === true).length;
+
+    const crontabArray = crontabEntries || [];
+    const totalCrontab = crontabArray.length;
+    const enabledCrontab = crontabArray.filter(e => e.enabled !== false).length;
 
     return {
-      activeSessions: activeSessionsCount,
+      activeSessions: { running: runningSessions, total: totalSessions },
       systemServices: { running: runningAgents, total: totalAgents },
-      crontabEntriesCount: (crontabEntries || []).length,
+      crontabEntries: { enabled: enabledCrontab, total: totalCrontab },
       cronSchedules: { active: activeCrons, total: totalCrons },
     };
   }, [activeSessions, cronJobs, launchAgents, crontabEntries]);
@@ -654,36 +683,44 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         {[
           {
             label: t('controlCenter.kpi.activeSessions', '執行中工作'),
-            value: kpi.activeSessions,
+            active: kpi.activeSessions.running,
+            total: kpi.activeSessions.total,
             color: 'text-indigo-600 dark:text-indigo-400',
             targetId: 'active-sessions-section'
           },
           {
             label: t('controlCenter.kpi.cronSchedules', '應用排程'),
-            value: kpi.cronSchedules.total,
+            active: kpi.cronSchedules.active,
+            total: kpi.cronSchedules.total,
             color: 'text-violet-600 dark:text-violet-400',
             targetId: 'application-scheduling-section'
           },
           {
             label: t('controlCenter.kpi.crontabEntries', '系統排程'),
-            value: kpi.crontabEntriesCount,
+            active: kpi.crontabEntries.enabled,
+            total: kpi.crontabEntries.total,
             color: 'text-amber-600 dark:text-amber-400',
             targetId: 'system-crontab-section'
           },
           {
             label: t('controlCenter.kpi.systemServices', '系統服務'),
-            value: kpi.systemServices.total,
+            active: kpi.systemServices.running,
+            total: kpi.systemServices.total,
             color: kpi.systemServices.running < kpi.systemServices.total ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400',
             targetId: 'system-services-section'
           },
-        ].map(({ label, value, color, targetId }) => (
+        ].map(({ label, active, total, color, targetId }) => (
           <button
             key={label}
             onClick={() => scrollToSection(targetId)}
             className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[22px] p-4 shadow-sm text-center transition-all hover:scale-[1.02] hover:shadow-md hover:bg-white dark:hover:bg-slate-800/40 group active:scale-95"
           >
-            <div className={`text-2xl font-black ${color} group-hover:drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] transition-all`}>{value}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5 tracking-wide group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">{label}</div>
+            <div className={`text-2xl font-black ${color} group-hover:drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] transition-all flex items-baseline justify-center gap-1.5`}>
+              <span>{active}</span>
+              <span className="text-sm opacity-40">/</span>
+              <span className="text-sm opacity-60 font-bold">{total}</span>
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5 tracking-wide group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors uppercase font-bold">{label}</div>
           </button>
         ))}
       </div>
@@ -970,12 +1007,28 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             {job.state.lastStatus === 'ok' ? t('controlCenter.cronJobs.lastOk') : t('controlCenter.cronJobs.lastFail')}
                           </span>
                         )}
-                        {/* 連續錯誤次數 badge */}
+                        {/* 連續錯誤次數 badge + 快速修復按鈕 */}
                         {hasError && (
-                          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40">
-                            <AlertTriangle size={8} />
-                            {t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
-                          </span>
+                          <>
+                            <span
+                              title={job.state?.lastError || t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
+                              className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40 cursor-help"
+                            >
+                              <AlertTriangle size={8} />
+                              {t('controlCenter.cronJobs.errorCount', { count: job.state?.consecutiveErrors })}
+                            </span>
+                            <button
+                              onClick={() => void fixAndRetry(job.id)}
+                              title={t('controlCenter.cronJobs.fixAndRetry', '自動排除錯誤並重新執行（openclaw cron run）')}
+                              disabled={fixingJobIds.has(job.id)}
+                              className="shrink-0 flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-rose-50 dark:bg-rose-950/30 text-rose-500 dark:text-rose-400 border-rose-200 dark:border-rose-800/40 hover:bg-rose-100 dark:hover:bg-rose-950/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Wrench size={8} className={fixingJobIds.has(job.id) ? 'animate-spin' : ''} />
+                              {fixingJobIds.has(job.id)
+                                ? t('controlCenter.cronJobs.fixing', '修復中…')
+                                : t('controlCenter.cronJobs.fix', '修復')}
+                            </button>
+                          </>
                         )}
                         {/* 操作按鈕 */}
                         <div className="flex items-center gap-0.5 shrink-0">
