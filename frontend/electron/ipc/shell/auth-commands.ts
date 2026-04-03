@@ -346,11 +346,9 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       const discoveryService = new ModelDiscoveryService();
       let remoteGroups: any[] = [];
       if (payload?.syncRemote) {
-        const healthyProfiles = authOverview.profiles.filter(p => p.agentPresent && p.credentialHealthy) as any[];
-        
-        // --- 效能優化區：建立 Secret 快取 Map，避免 O(N*M) 磁碟讀取 ---
+        // --- 先建 Secret 快取 Map，再決定哪些 profile 可參與遠端拉取 ---
         const secretsMap = new Map<string, string>();
-        
+
         // 1. 預填全域 Secrets
         const globalProfiles = (authOverview.configJson as any)?.auth?.profiles || {};
         for (const [pid, p] of Object.entries(globalProfiles)) {
@@ -370,6 +368,11 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
             if (secret) secretsMap.set(pid, secret);
           }
         }
+
+        // 同時接受：agent profile 健康 OR 有全域 secret 的 profile（global-only 也能拉遠端）
+        const healthyProfiles = authOverview.profiles.filter(p =>
+          (p.agentPresent && p.credentialHealthy) || secretsMap.has(p.profileId)
+        ) as any[];
 
         const profilesWithSecrets = healthyProfiles.map(p => ({
           ...p,

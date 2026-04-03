@@ -108,7 +108,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   });
 
   useEffect(() => {
-    void loadDynamicModelOptions(config.corePath, effectiveAuthorizedProviders);
+    void loadDynamicModelOptions(config.corePath, effectiveAuthorizedProviders, true);
   }, [config.corePath, effectiveAuthorizedProviders, loadDynamicModelOptions]);
 
   const CHANNEL_OPTIONS = useMemo<ChannelOption[]>(() => [
