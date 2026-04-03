@@ -24,11 +24,12 @@ export class ModelDiscoveryService {
    * 根據多個授權 Profile 獲取所有可用的遠端模型。
    */
   async fetchAllRemoteModels(profiles: AuthProfile[]): Promise<RemoteModelGroup[]> {
+    console.log(`[ModelDiscovery] Starting discovery for ${profiles.length} profiles...`);
     // 限制並行數量或確保每個都有硬性超時
     const tasks = profiles.map(profile => {
       return this.withTimeout(
         this.fetchProviderModels(profile),
-        5000,
+        3000,
         `Fetch ${profile.provider}`
       );
     });
@@ -41,6 +42,7 @@ export class ModelDiscoveryService {
         groups.push(result.value);
       }
     }
+    console.log(`[ModelDiscovery] Discovery finished. Groups found: ${groups.length}`);
     return groups;
   }
 
@@ -101,7 +103,7 @@ export class ModelDiscoveryService {
       return {
         provider,
         group: this.getDisplayName(provider),
-        models: Array.from(new Set(models)).sort(),
+        models: Array.from(new Set(models)).sort().map(m => m.includes('/') ? m : `${provider}/${m}`),
       };
     } catch (e) {
       console.error(`[ModelDiscovery] Failed to fetch models for ${provider}:`, e);

@@ -86,28 +86,51 @@ const emitShellStdout = (data: string, source: 'stdout' | 'stderr' = 'stdout') =
 
 // ── Shell command runner ─────────────────────────────────────────────────────
 
-const runShellCommand = (command: string) => new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+const runShellCommand = (command: string, timeoutMs = 20000) => new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
   const child = spawn(command, { shell: true });
   activeProcesses.add(child);
   let stdout = '';
   let stderr = '';
   let settled = false;
 
+  const timer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    console.warn(`[runShellCommand] Command timed out after ${timeoutMs}ms: ${command}`);
+    
+    // Attempt graceful kill then force kill
+    if (process.platform === 'win32') {
+      child.kill();
+    } else {
+      child.kill('SIGTERM');
+      setTimeout(() => { if (!child.killed) child.kill('SIGKILL'); }, 1000);
+    }
+    
+    activeProcesses.delete(child);
+    resolve({ 
+      code: 124, 
+      stdout: stdout.trim(), 
+      stderr: `${stderr}\n[Timeout] Command took over ${timeoutMs}ms` 
+    });
+  }, timeoutMs);
+
   child.stdout.on('data', (data) => { stdout += data.toString(); });
   child.stderr.on('data', (data) => { stderr += data.toString(); });
 
   child.on('error', (error) => {
+    clearTimeout(timer);
     activeProcesses.delete(child);
     if (settled) return;
     settled = true;
-    resolve({ code: 1, stdout, stderr: stderr || String((error as Error)?.message || error) });
+    resolve({ code: 1, stdout: stdout.trim(), stderr: stderr || String((error as Error)?.message || error) });
   });
 
   child.on('close', (code: number) => {
+    clearTimeout(timer);
     activeProcesses.delete(child);
     if (settled) return;
     settled = true;
-    resolve({ code: code ?? 1, stdout, stderr });
+    resolve({ code: code ?? 1, stdout: stdout.trim(), stderr: stderr.trim() });
   });
 });
 

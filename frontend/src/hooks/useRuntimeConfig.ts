@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import type { DetectedConfig } from '../store';
@@ -85,65 +85,66 @@ export function useRuntimeConfig(
   }, [activeTab, runtimeProfile, detectedConfig]);
 
   // Load dynamic model options
-  const loadDynamicModelOptions = async (
-    corePath: string,
-    effectiveAuthorizedProviders: string[],
-    syncRemote = false
-  ) => {
-    if (isLoadingModelOptionsRef.current) return;
-    if (!window.electronAPI || !resolvedConfigDir) {
-      setDynamicModelOptions([]);
-      setDynamicModelSource('');
-      return;
-    }
-
-    isLoadingModelOptionsRef.current = true;
-    setDynamicModelLoading(true);
-    try {
-      console.log('[useRuntimeConfig] Starting loadDynamicModelOptions...', { syncRemote });
-      const payload = {
-        corePath,
-        configPath: resolvedConfigDir,
-        providers: effectiveAuthorizedProviders,
-        syncRemote,
-      };
-
-      // 15 秒保值超時，避免後端卡死導致 UI 永久轉圈
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Sync timeout')), 15000)
-      );
-
-      const res = await Promise.race([
-        window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`),
-        timeoutPromise
-      ]);
-
-      console.log('[useRuntimeConfig] Received response from config:model-options', res);
-
-      if ((res.code ?? res.exitCode) !== 0) {
-        throw new Error(res.stderr || t('runtime.errors.loadDynamicModelsFailed'));
+  const loadDynamicModelOptions = useCallback(
+    async (corePath: string, effectiveAuthorizedProviders: string[], syncRemote = false) => {
+      if (isLoadingModelOptionsRef.current) return;
+      if (!window.electronAPI || !resolvedConfigDir) {
+        setDynamicModelOptions([]);
+        setDynamicModelSource('');
+        return;
       }
-      const parsed = JSON.parse(res.stdout || '{}');
-      const groups = Array.isArray(parsed?.groups)
-        ? parsed.groups
-            .map((group: { provider?: unknown; group?: unknown; models?: unknown[] }) => ({
-              provider: String(group?.provider || group?.group || '').trim().toLowerCase() || 'unknown',
-              group: String(group?.group || group?.provider || '').trim() || 'unknown',
-              models: Array.isArray(group?.models) ? group.models.map((m: unknown) => String(m || '').trim()).filter(Boolean) : [],
-            }))
-            .filter((group: { models: string[] }) => group.models.length > 0)
-        : [];
-      setDynamicModelOptions(groups);
-      setDynamicModelSource(String(parsed?.source || ''));
-    } catch (err) {
-      console.error('[useRuntimeConfig] Error or timeout during model loading:', err);
-      setDynamicModelOptions([]);
-      setDynamicModelSource('');
-    } finally {
-      setDynamicModelLoading(false);
-      isLoadingModelOptionsRef.current = false;
-    }
-  };
+
+      isLoadingModelOptionsRef.current = true;
+      setDynamicModelLoading(true);
+      try {
+        console.log('[useRuntimeConfig] Starting loadDynamicModelOptions...', { syncRemote });
+        const payload = {
+          corePath,
+          configPath: resolvedConfigDir,
+          providers: effectiveAuthorizedProviders,
+          syncRemote,
+        };
+
+        // 15 秒保值超時，避免後端卡死導致 UI 永久轉圈
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Sync timeout')), 15000)
+        );
+
+        const res = await Promise.race([
+          window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`),
+          timeoutPromise,
+        ]);
+
+        console.log('[useRuntimeConfig] Received response from config:model-options', res);
+
+        if ((res.code ?? res.exitCode) !== 0) {
+          throw new Error(res.stderr || t('runtime.errors.loadDynamicModelsFailed'));
+        }
+        const parsed = JSON.parse(res.stdout || '{}');
+        const groups = Array.isArray(parsed?.groups)
+          ? parsed.groups
+              .map((group: { provider?: unknown; group?: unknown; models?: unknown[] }) => ({
+                provider: String(group?.provider || group?.group || '').trim().toLowerCase() || 'unknown',
+                group: String(group?.group || group?.provider || '').trim() || 'unknown',
+                models: Array.isArray(group?.models)
+                  ? group.models.map((m: unknown) => String(m || '').trim()).filter(Boolean)
+                  : [],
+              }))
+              .filter((group: { models: string[] }) => group.models.length > 0)
+          : [];
+        setDynamicModelOptions(groups);
+        setDynamicModelSource(String(parsed?.source || ''));
+      } catch (err) {
+        console.error('[useRuntimeConfig] Error or timeout during model loading:', err);
+        setDynamicModelOptions([]);
+        setDynamicModelSource('');
+      } finally {
+        setDynamicModelLoading(false);
+        isLoadingModelOptionsRef.current = false;
+      }
+    },
+    [resolvedConfigDir, t]
+  );
 
   return {
     runtimeProfile,

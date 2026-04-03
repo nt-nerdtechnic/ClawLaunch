@@ -327,6 +327,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
   if (fullCommand.startsWith('config:model-options')) {
     try {
       const payloadStr = fullCommand.replace('config:model-options', '').trim();
+      console.log(`[IPC] config:model-options triggered. payload length: ${payloadStr.length}`);
       const payload = payloadStr ? JSON.parse(payloadStr) : {};
       const corePath = String(payload?.corePath || '').trim();
       const configDir = normalizeConfigDir(String(payload?.configPath || ''));
@@ -382,13 +383,26 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       
       const configFilePath = path.join(configDir, 'openclaw.json');
       const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} `;
+
+      const grouped = new Map<string, Set<string>>();
+      
+      // 1. 先加入遠端抓到的內容
+      for (const rg of remoteGroups) {
+        if (!grouped.has(rg.provider)) grouped.set(rg.provider, new Set<string>());
+        const models = rg.models || [];
+        for (const m of models) {
+          const finalM = m.includes('/') ? m : `${rg.provider}/${m}`;
+          grouped.get(rg.provider)?.add(finalM);
+        }
+      }
+
+      let usedCoreCli = false;
       if (corePath) {
         const listCmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw models list --all --json`;
         const listRes = await ctx.runShellCommand(listCmd);
         if ((listRes.code ?? 0) === 0 && String(listRes.stdout || '').trim()) {
           const parsedList = JSON.parse(listRes.stdout);
           const rows = Array.isArray(parsedList?.models) ? parsedList.models : [];
-          const grouped = new Map<string, Set<string>>();
           for (const row of rows) {
             const key = String(row?.key || '').trim();
             if (!key || row?.available === false) continue;
@@ -397,57 +411,44 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
             if (!grouped.has(provider)) grouped.set(provider, new Set<string>());
             grouped.get(provider)?.add(key);
           }
-          const groups = Array.from(grouped.entries())
-            .map(([provider, models]) => ({ provider, group: provider, models: Array.from(models).sort((a, b) => a.localeCompare(b)) }))
-            .filter((group) => group.models.length > 0)
-            .sort((a, b) => a.group.localeCompare(b.group));
-          if (groups.length > 0) {
-            return { code: 0, stdout: JSON.stringify({ groups, source: 'openclaw models list --all --json' }), stderr: '', exitCode: 0 };
+          usedCoreCli = true;
+        }
+      }
+
+      if (!usedCoreCli) {
+        const agentsRoot = path.join(configDir, 'agents');
+        let entries: import('node:fs').Dirent[] = [];
+        try { entries = await fs.readdir(agentsRoot, { withFileTypes: true }); } catch { /* ignore */ }
+        const modelFiles: string[] = [];
+        const mainFirst = entries
+          .filter((entry) => entry.isDirectory())
+          .sort((a, b) => { if (a.name === 'main') return -1; if (b.name === 'main') return 1; return a.name.localeCompare(b.name); });
+        for (const entry of mainFirst) {
+          const candidate = path.join(agentsRoot, entry.name, 'agent', 'models.json');
+          try { await fs.access(candidate); modelFiles.push(candidate); } catch { /* ignore */ }
+        }
+        for (const modelFile of modelFiles) {
+          const parsed = (await loadJsonFile(modelFile)) || {};
+          const providers = parsed?.providers || {};
+          for (const [providerKey, providerConfig] of Object.entries(providers)) {
+            const provider = String(providerKey || '').toLowerCase();
+            if (!providerMatchesAny(provider, effectiveFilters)) continue;
+            const rawModels = Array.isArray((providerConfig as Record<string, unknown>)?.models) ? (providerConfig as Record<string, unknown>).models as unknown[] : [];
+            const resolvedModels = rawModels.map((item) => String((item as Record<string, unknown>)?.id || (item as Record<string, unknown>)?.name || '').trim()).filter(Boolean);
+            if (!grouped.has(provider)) grouped.set(provider, new Set<string>());
+            for (const model of resolvedModels) {
+              const finalM = model.includes('/') ? model : `${provider}/${model}`;
+              grouped.get(provider)?.add(finalM);
+            }
           }
         }
       }
-      const agentsRoot = path.join(configDir, 'agents');
-      let entries: import('node:fs').Dirent[] = [];
-      try { entries = await fs.readdir(agentsRoot, { withFileTypes: true }); } catch {
-        return { code: 0, stdout: JSON.stringify({ groups: [], source: '' }), stderr: '', exitCode: 0 };
-      }
-      const modelFiles: string[] = [];
-      const mainFirst = entries
-        .filter((entry) => entry.isDirectory())
-        .sort((a, b) => { if (a.name === 'main') return -1; if (b.name === 'main') return 1; return a.name.localeCompare(b.name); });
-      for (const entry of mainFirst) {
-        const candidate = path.join(agentsRoot, entry.name, 'agent', 'models.json');
-        try { await fs.access(candidate); modelFiles.push(candidate); } catch { /* ignore */ }
-      }
-      if (!modelFiles.length) {
-        return { code: 0, stdout: JSON.stringify({ groups: [], source: '' }), stderr: '', exitCode: 0 };
-      }
-      const grouped = new Map<string, Set<string>>();
-      
-      // 先加入遠端抓到的內容
-      for (const rg of remoteGroups) {
-        if (!grouped.has(rg.provider)) grouped.set(rg.provider, new Set<string>());
-        const models = rg.models || [];
-        for (const m of models) grouped.get(rg.provider)?.add(m);
-      }
 
-      for (const modelFile of modelFiles) {
-        const parsed = (await loadJsonFile(modelFile)) || {};
-        const providers = parsed?.providers || {};
-        for (const [providerKey, providerConfig] of Object.entries(providers)) {
-          const provider = String(providerKey || '').toLowerCase();
-          if (!providerMatchesAny(provider, effectiveFilters)) continue;
-          const rawModels = Array.isArray((providerConfig as Record<string, unknown>)?.models) ? (providerConfig as Record<string, unknown>).models as unknown[] : [];
-          const resolvedModels = rawModels.map((item) => String((item as Record<string, unknown>)?.id || (item as Record<string, unknown>)?.name || '').trim()).filter(Boolean);
-          if (!grouped.has(provider)) grouped.set(provider, new Set<string>());
-          for (const model of resolvedModels) grouped.get(provider)?.add(model);
-        }
-      }
       const groups = Array.from(grouped.entries())
         .map(([provider, models]) => ({ provider, group: provider, models: Array.from(models).sort((a, b) => a.localeCompare(b)) }))
         .filter((group) => group.models.length > 0)
         .sort((a, b) => a.group.localeCompare(b.group));
-      return { code: 0, stdout: JSON.stringify({ groups, source: modelFiles[0] }), stderr: '', exitCode: 0 };
+      return { code: 0, stdout: JSON.stringify({ groups, source: usedCoreCli ? 'remote + local(cli)' : 'remote + local(fs)' }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'config model-options failed', exitCode: 1 };
     }
