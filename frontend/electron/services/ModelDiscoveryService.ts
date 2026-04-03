@@ -21,6 +21,52 @@ interface AuthProfile {
 
 export class ModelDiscoveryService {
   /**
+   * 從 OpenRouter 公開 API 取得所有主流 provider 的最新模型清單。
+   * 不需要任何 API key，用於無授權情境下的模型目錄更新。
+   */
+  async fetchPublicCatalogue(filters: string[] = []): Promise<RemoteModelGroup[]> {
+    try {
+      const resp = await fetch('https://openrouter.ai/api/v1/models', {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) return [];
+
+      const data = await resp.json() as { data: Array<{ id: string; name?: string }> };
+      if (!Array.isArray(data?.data)) return [];
+
+      // 過濾掉非文字生成模型
+      const textModels = data.data
+        .map(m => m.id)
+        .filter(id => {
+          const low = id.toLowerCase();
+          return !low.includes('embedding') && !low.includes('dall-e') &&
+                 !low.includes('tts') && !low.includes('whisper') &&
+                 !low.includes('vision-only') && !low.includes('image');
+        });
+
+      // 依 provider 分組（OpenRouter ID 格式：provider/model-name）
+      const grouped = new Map<string, Set<string>>();
+      for (const modelId of textModels) {
+        const slashIdx = modelId.indexOf('/');
+        if (slashIdx === -1) continue;
+        const provider = modelId.slice(0, slashIdx).toLowerCase();
+        if (filters.length > 0 && !filters.some(f => provider.includes(f) || f.includes(provider))) continue;
+        if (!grouped.has(provider)) grouped.set(provider, new Set());
+        grouped.get(provider)!.add(modelId);
+      }
+
+      return Array.from(grouped.entries()).map(([provider, models]) => ({
+        provider,
+        group: this.getDisplayName(provider),
+        models: Array.from(models).sort(),
+      }));
+    } catch (e) {
+      console.warn('[ModelDiscovery] fetchPublicCatalogue failed:', e);
+      return [];
+    }
+  }
+
+  /**
    * 根據多個授權 Profile 獲取所有可用的遠端模型。
    */
   async fetchAllRemoteModels(profiles: AuthProfile[]): Promise<RemoteModelGroup[]> {
@@ -70,15 +116,21 @@ export class ModelDiscoveryService {
     const key = (profile.apiKey || profile.api_key || profile.token || profile.bearer || '').trim();
     if (!key && !this.isCredentialless(provider)) return null;
 
+    // 統一 provider 別名到標準名稱（對應 OpenClaw auth profile 命名慣例）
+    const normalizedProvider = this.normalizeProvider(provider);
+
     try {
       let models: string[] = [];
-      switch (provider) {
+      switch (normalizedProvider) {
         case 'openai':
+        case 'openai-codex':
+          models = await this.fetchOpenAiCompatibleModels('openai', key);
+          break;
         case 'deepseek':
         case 'mistral':
         case 'groq':
         case 'xai':
-          models = await this.fetchOpenAiCompatibleModels(provider, key);
+          models = await this.fetchOpenAiCompatibleModels(normalizedProvider, key);
           break;
         case 'anthropic':
           models = await this.fetchAnthropicModels(key);
@@ -91,8 +143,13 @@ export class ModelDiscoveryService {
           models = await this.fetchOpenRouterModels(key);
           break;
         case 'minimax':
-          // MiniMax 端點通常不支援 list models，在此提供靜態補齊
           models = await this.fetchMiniMaxModels(key);
+          break;
+        case 'moonshot':
+          models = await this.fetchMoonshotModels(key);
+          break;
+        case 'ollama':
+          models = await this.fetchOllamaModels();
           break;
         default:
           return null;
@@ -101,14 +158,26 @@ export class ModelDiscoveryService {
       if (models.length === 0) return null;
 
       return {
-        provider,
-        group: this.getDisplayName(provider),
-        models: Array.from(new Set(models)).sort().map(m => m.includes('/') ? m : `${provider}/${m}`),
+        provider: normalizedProvider,
+        group: this.getDisplayName(normalizedProvider),
+        models: Array.from(new Set(models)).sort().map(m => m.includes('/') ? m : `${normalizedProvider}/${m}`),
       };
     } catch (e) {
       console.error(`[ModelDiscovery] Failed to fetch models for ${provider}:`, e);
       return null;
     }
+  }
+
+  private normalizeProvider(provider: string): string {
+    const aliasMap: Record<string, string> = {
+      'minimax-portal': 'minimax',
+      'google-gemini-cli': 'google',
+      'google-gemini': 'google',
+      'gemini': 'gemini',
+      'openai-codex': 'openai-codex',
+      'qwen-portal': 'qwen',
+    };
+    return aliasMap[provider] || provider;
   }
 
   private isCredentialless(provider: string): boolean {
@@ -118,6 +187,7 @@ export class ModelDiscoveryService {
   private getDisplayName(provider: string): string {
     const map: Record<string, string> = {
       openai: 'OpenAI (Cloud)',
+      'openai-codex': 'OpenAI (Cloud)',
       anthropic: 'Anthropic (Claude)',
       gemini: 'Google Gemini',
       google: 'Google Gemini',
@@ -127,6 +197,8 @@ export class ModelDiscoveryService {
       groq: 'Groq Cloud',
       xai: 'xAI (Grok)',
       minimax: 'MiniMax',
+      moonshot: 'Moonshot (Kimi)',
+      ollama: 'Ollama (Local)',
     };
     return map[provider] || provider.toUpperCase();
   }
@@ -191,14 +263,13 @@ export class ModelDiscoveryService {
    */
   private async fetchMiniMaxModels(key: string): Promise<string[]> {
     // MiniMax 目前不穩定支援 list models，因此採靜態補齊與動態組合
-    const staticModels = [
+    return [
       'MiniMax-M2.7',
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.5',
       'MiniMax-M2.5-highspeed',
-      'MiniMax-Text-01'
+      'MiniMax-Text-01',
     ];
-    return staticModels;
   }
 
   /**
@@ -229,5 +300,39 @@ export class ModelDiscoveryService {
     if (!resp.ok) return [];
     const data = await resp.json() as { data: Array<{ id: string }> };
     return Array.isArray(data?.data) ? data.data.map(m => m.id) : [];
+  }
+
+  /**
+   * Moonshot (Kimi) 接口
+   */
+  private async fetchMoonshotModels(key: string): Promise<string[]> {
+    try {
+      const resp = await fetch('https://api.moonshot.cn/v1/models', {
+        headers: { 'Authorization': `Bearer ${key}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!resp.ok) return ['kimi-k2.5', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'];
+      const data = await resp.json() as { data: Array<{ id: string }> };
+      const models = Array.isArray(data?.data) ? data.data.map(m => m.id) : [];
+      return models.length > 0 ? models : ['kimi-k2.5', 'moonshot-v1-8k', 'moonshot-v1-32k'];
+    } catch {
+      return ['kimi-k2.5', 'moonshot-v1-8k', 'moonshot-v1-32k'];
+    }
+  }
+
+  /**
+   * Ollama 本地接口
+   */
+  private async fetchOllamaModels(): Promise<string[]> {
+    try {
+      const resp = await fetch('http://localhost:11434/api/tags', {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!resp.ok) return [];
+      const data = await resp.json() as { models: Array<{ name: string }> };
+      return Array.isArray(data?.models) ? data.models.map(m => m.name) : [];
+    } catch {
+      return [];
+    }
   }
 }

@@ -336,9 +336,20 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         ? payload.providers.map((item: unknown) => String(item || '').toLowerCase()).filter(Boolean)
         : [];
       const authOverview = await collectAuthProfiles(configDir);
+
+      // 收集全域 profile 的 secret（用於 effectiveFilters 推斷）
+      const globalProfileSecrets = new Map<string, string>();
+      const globalProfilesForFilter = ((authOverview.configJson as any)?.auth?.profiles) || {};
+      for (const [pid, p] of Object.entries(globalProfilesForFilter)) {
+        const profile = p as any;
+        const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
+        if (secret) globalProfileSecrets.set(pid, secret);
+      }
+
+      // 同時接受：agent 健康的 profile 或有全域 secret 的 profile
       const healthyProviders = Array.from(new Set(
         authOverview.profiles
-          .filter((profile) => profile.agentPresent && profile.credentialHealthy)
+          .filter((profile) => (profile.agentPresent && profile.credentialHealthy) || globalProfileSecrets.has(String(profile.profileId)))
           .flatMap((profile) => getProfileProviderAliases(String(profile.profileId || ''), { provider: profile.provider }))
       ));
       const effectiveFilters = healthyProviders.length > 0 ? healthyProviders : filters;
@@ -371,7 +382,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
 
         // 同時接受：agent profile 健康 OR 有全域 secret 的 profile（global-only 也能拉遠端）
         const healthyProfiles = authOverview.profiles.filter(p =>
-          (p.agentPresent && p.credentialHealthy) || secretsMap.has(p.profileId)
+          (p.agentPresent && p.credentialHealthy) || secretsMap.has(String(p.profileId))
         ) as any[];
 
         const profilesWithSecrets = healthyProfiles.map(p => ({
@@ -380,8 +391,17 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         }));
 
         console.log(`[config:model-options] Starting remote discovery for ${profilesWithSecrets.length} profiles...`);
-        remoteGroups = await discoveryService.fetchAllRemoteModels(profilesWithSecrets);
-        console.log(`[config:model-options] Remote discovery finished. Groups found: ${remoteGroups.length}`);
+        const [authGroups, publicGroups] = await Promise.all([
+          discoveryService.fetchAllRemoteModels(profilesWithSecrets),
+          discoveryService.fetchPublicCatalogue(effectiveFilters),
+        ]);
+        // 合併：auth 結果優先，公開目錄補充 auth 沒有的 provider
+        const authProviders = new Set(authGroups.map(g => g.provider));
+        remoteGroups = [
+          ...authGroups,
+          ...publicGroups.filter(g => !authProviders.has(g.provider)),
+        ];
+        console.log(`[config:model-options] Remote discovery finished. auth=${authGroups.length} public=${publicGroups.length} merged=${remoteGroups.length}`);
       }
       
       const configFilePath = path.join(configDir, 'openclaw.json');

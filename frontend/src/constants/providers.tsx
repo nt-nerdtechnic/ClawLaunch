@@ -53,12 +53,12 @@ export const PROVIDER_ALIAS_MAP: Record<string, string[]> = {
 };
 
 export const PROVIDER_MODEL_CATALOGUE: Record<string, { label: string; models: string[] }> = {
-  anthropic: { label: 'Anthropic (Claude)', models: ['claude-3-7-sonnet-latest', 'anthropic/claude-opus-4', 'anthropic/claude-sonnet-4-5', 'anthropic/claude-3-5-haiku-latest'] },
-  openai: { label: 'OpenAI (GPT)', models: ['openai/gpt-4o', 'openai/gpt-4-turbo', 'openai/o3'] },
-  google: { label: 'Google (Gemini)', models: ['gemini-2.0-flash', 'google/gemini-2.5-pro', 'google/gemini-2.0-flash-thinking'] },
-  minimax: { label: 'MiniMax', models: ['MiniMax-M2.5'] },
-  moonshot: { label: 'Moonshot (Kimi)', models: ['kimi-k2.5'] },
-  openrouter: { label: 'OpenRouter', models: ['openrouter/auto', 'openrouter/anthropic/claude-opus-4'] },
+  anthropic: { label: 'Anthropic (Claude)', models: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-opus-4', 'claude-3-7-sonnet-latest', 'claude-haiku-3-5', 'anthropic/claude-3-5-haiku-latest'] },
+  openai: { label: 'OpenAI (GPT)', models: ['openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'openai/gpt-4o', 'openai/o3', 'openai/o4-mini', 'openai/o3-mini'] },
+  google: { label: 'Google (Gemini)', models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', 'google/gemini-2.0-flash-lite', 'google/gemini-1.5-pro'] },
+  minimax: { label: 'MiniMax', models: ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-Text-01'] },
+  moonshot: { label: 'Moonshot (Kimi)', models: ['moonshot-v1-128k', 'moonshot-v1-32k', 'moonshot-v1-8k', 'kimi-latest'] },
+  openrouter: { label: 'OpenRouter', models: ['openrouter/auto', 'openrouter/anthropic/claude-opus-4-5', 'openrouter/openai/gpt-4.1', 'openrouter/google/gemini-2.5-pro'] },
   ollama: { label: 'Ollama (Local)', models: ['ollama/llama3', 'ollama/qwen2.5:14b', 'ollama/deepseek-r1:7b'] },
   chutes: { label: 'Chutes', models: ['chutes/deepseek-ai/DeepSeek-R2'] },
   xai: { label: 'xAI (Grok)', models: ['xai/grok-3', 'xai/grok-2-vision'] },
