@@ -25,6 +25,7 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const agentsRef = useRef<PixelAgent[]>([]);
+  const prevRoomRef = useRef<RoomConfig | null>(null);
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number; y: number; agent: PixelAgentSummary } | null>(null);
 
@@ -41,21 +42,20 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
   const { summaries } = usePixelOfficeAgents();
 
   // Sync pixel agents with snapshot summaries.
-  // When officeSceneId changes, force-rebuild all agents so they spawn at the new room's spawnPoint.
+  // When room reference changes (scene switch), clear agents first so they respawn at new spawn point.
   useEffect(() => {
+    if (prevRoomRef.current !== null && prevRoomRef.current !== room) {
+      agentsRef.current = [];
+    }
+    prevRoomRef.current = room;
+
     const existing = agentsRef.current;
     const existingMap = new Map(existing.map(a => [a.id, a]));
     const newAgents: PixelAgent[] = [];
 
     for (const summary of summaries) {
-      // On scene change we intentionally skip re-using existing agents (existingMap is stale).
-      // We detect this by checking if the agent's position is outside the new room bounds.
       const agent = existingMap.get(summary.id);
-      const roomW = room.widthTiles * 20; // TILE_SIZE = 20
-      const roomH = room.heightTiles * 20;
-      const isInBounds = agent && agent.x >= 0 && agent.x <= roomW && agent.y >= 0 && agent.y <= roomH;
-
-      if (agent && isInBounds) {
+      if (agent) {
         // Update existing agent in-place
         agent.displayName = summary.displayName;
         agent.model = summary.model;
@@ -67,7 +67,7 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
         newAgents.push(agent);
       } else {
         // Create new agent at spawn point (first time or scene change)
-        const deskIdx = summary.id ? (summaries.indexOf(summary) % room.deskSlots.length) : 0;
+        const deskIdx = summaries.indexOf(summary) % Math.max(1, room.deskSlots.length);
         const newAgent = createAgent(
           summary.id,
           summary.displayName,
@@ -86,7 +86,7 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     }
 
     agentsRef.current = newAgents;
-  }, [summaries, room, officeSceneId]);
+  }, [summaries, room]);
 
   // Run game loop
   usePixelOfficeLoop({

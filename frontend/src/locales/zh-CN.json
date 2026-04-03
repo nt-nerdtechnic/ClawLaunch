@@ -23,6 +23,7 @@
       "executing": "执行中",
       "execute": "执行",
       "static": "静态",
+      "syncRemote": "从云端获取最新清单",
       "dynamic": "动态",
       "collapse": "折叠",
       "expandAll": "全部展开"

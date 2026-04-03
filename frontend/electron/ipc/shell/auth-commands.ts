@@ -11,6 +11,7 @@ import {
   sanitizeSecret, isLikelyNaturalLanguageSentence, isPlausibleMachineToken,
   getProfileProviderAliases, getChoiceAliases, providerMatchesAny, profileMatchesAliases,
 } from '../../services/auth.js';
+import { ModelDiscoveryService } from '../../services/ModelDiscoveryService.js';
 import type { CommandResult } from './types.js';
 import type { ShellExecContext } from '../shell-exec-handler.js';
 
@@ -340,6 +341,45 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
           .flatMap((profile) => getProfileProviderAliases(String(profile.profileId || ''), { provider: profile.provider }))
       ));
       const effectiveFilters = healthyProviders.length > 0 ? healthyProviders : filters;
+      
+      const discoveryService = new ModelDiscoveryService();
+      let remoteGroups: any[] = [];
+      if (payload?.syncRemote) {
+        const healthyProfiles = authOverview.profiles.filter(p => p.agentPresent && p.credentialHealthy) as any[];
+        
+        // --- 效能優化區：建立 Secret 快取 Map，避免 O(N*M) 磁碟讀取 ---
+        const secretsMap = new Map<string, string>();
+        
+        // 1. 預填全域 Secrets
+        const globalProfiles = (authOverview.configJson as any)?.auth?.profiles || {};
+        for (const [pid, p] of Object.entries(globalProfiles)) {
+          const profile = p as any;
+          const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
+          if (secret) secretsMap.set(pid, secret);
+        }
+
+        // 2. 批次掃描 Agent 並補全 Secrets
+        for (const authPath of authOverview.agentFiles) {
+          const parsed = (await loadJsonFile(authPath)) as any || {};
+          const agentProfiles = parsed?.profiles || {};
+          for (const [pid, p] of Object.entries(agentProfiles)) {
+            if (secretsMap.has(pid)) continue;
+            const profile = p as any;
+            const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
+            if (secret) secretsMap.set(pid, secret);
+          }
+        }
+
+        const profilesWithSecrets = healthyProfiles.map(p => ({
+          ...p,
+          apiKey: secretsMap.get(p.profileId) || ''
+        }));
+
+        console.log(`[config:model-options] Starting remote discovery for ${profilesWithSecrets.length} profiles...`);
+        remoteGroups = await discoveryService.fetchAllRemoteModels(profilesWithSecrets);
+        console.log(`[config:model-options] Remote discovery finished. Groups found: ${remoteGroups.length}`);
+      }
+      
       const configFilePath = path.join(configDir, 'openclaw.json');
       const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} `;
       if (corePath) {
@@ -383,6 +423,14 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         return { code: 0, stdout: JSON.stringify({ groups: [], source: '' }), stderr: '', exitCode: 0 };
       }
       const grouped = new Map<string, Set<string>>();
+      
+      // 先加入遠端抓到的內容
+      for (const rg of remoteGroups) {
+        if (!grouped.has(rg.provider)) grouped.set(rg.provider, new Set<string>());
+        const models = rg.models || [];
+        for (const m of models) grouped.get(rg.provider)?.add(m);
+      }
+
       for (const modelFile of modelFiles) {
         const parsed = (await loadJsonFile(modelFile)) || {};
         const providers = parsed?.providers || {};

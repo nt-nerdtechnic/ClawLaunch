@@ -47,7 +47,8 @@
       "dynamic": "動態",
       "cancel": "取消",
       "collapse": "摺疊",
-      "expandAll": "全部展開"
+      "expandAll": "全部展開",
+      "syncRemote": "從雲端獲取最新清單"
     },
     "punctuation": {
       "comma": "、"

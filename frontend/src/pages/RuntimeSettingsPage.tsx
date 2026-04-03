@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2 } from 'lucide-react';
+import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { ConfigService } from '../services/configService';
@@ -30,7 +30,7 @@ interface RuntimeSettingsPageProps {
   setRuntimeDraftCronMaxConcurrentRuns: (n: number) => void;
   dynamicModelOptions: Array<{ provider: string; group: string; models: string[] }>;
   dynamicModelLoading: boolean;
-  loadDynamicModelOptions: (corePath: string, effectiveAuthorizedProviders: string[]) => Promise<void>;
+  loadDynamicModelOptions: (corePath: string, effectiveAuthorizedProviders: string[], syncRemote?: boolean) => Promise<void>;
   runtimeProfileError?: string;
 }
 
@@ -281,8 +281,16 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
             {/* Model Selection */}
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
                   {t('settings.inferenceEngine')}
+                  <button
+                    onClick={() => loadDynamicModelOptions(config.corePath, effectiveAuthorizedProviders, true)}
+                    disabled={dynamicModelLoading}
+                    className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-md transition-colors text-blue-500 disabled:opacity-50"
+                    title={t('common.labels.syncRemote')}
+                  >
+                    <RefreshCw size={12} className={dynamicModelLoading ? 'animate-spin' : ''} />
+                  </button>
                 </label>
                 {selectedModelProvider && (
                   <span

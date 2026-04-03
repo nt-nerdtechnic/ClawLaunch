@@ -87,7 +87,8 @@ export function useRuntimeConfig(
   // Load dynamic model options
   const loadDynamicModelOptions = async (
     corePath: string,
-    effectiveAuthorizedProviders: string[]
+    effectiveAuthorizedProviders: string[],
+    syncRemote = false
   ) => {
     if (isLoadingModelOptionsRef.current) return;
     if (!window.electronAPI || !resolvedConfigDir) {
@@ -99,12 +100,26 @@ export function useRuntimeConfig(
     isLoadingModelOptionsRef.current = true;
     setDynamicModelLoading(true);
     try {
+      console.log('[useRuntimeConfig] Starting loadDynamicModelOptions...', { syncRemote });
       const payload = {
         corePath,
         configPath: resolvedConfigDir,
         providers: effectiveAuthorizedProviders,
+        syncRemote,
       };
-      const res = await window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`);
+
+      // 15 秒保值超時，避免後端卡死導致 UI 永久轉圈
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Sync timeout')), 15000)
+      );
+
+      const res = await Promise.race([
+        window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`),
+        timeoutPromise
+      ]);
+
+      console.log('[useRuntimeConfig] Received response from config:model-options', res);
+
       if ((res.code ?? res.exitCode) !== 0) {
         throw new Error(res.stderr || t('runtime.errors.loadDynamicModelsFailed'));
       }
@@ -120,7 +135,8 @@ export function useRuntimeConfig(
         : [];
       setDynamicModelOptions(groups);
       setDynamicModelSource(String(parsed?.source || ''));
-    } catch {
+    } catch (err) {
+      console.error('[useRuntimeConfig] Error or timeout during model loading:', err);
       setDynamicModelOptions([]);
       setDynamicModelSource('');
     } finally {

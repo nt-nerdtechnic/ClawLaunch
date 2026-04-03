@@ -47,7 +47,8 @@
       "dynamic": "Dynamic",
       "cancel": "Cancel",
       "collapse": "Collapse",
-      "expandAll": "Expand All"
+      "expandAll": "Expand All",
+      "syncRemote": "Sync latest from Cloud"
     },
     "punctuation": {
       "comma": ", "
