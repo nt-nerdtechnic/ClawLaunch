@@ -309,6 +309,14 @@
       "creating": "Creating…",
       "create": "Create Agent",
       "success": "Agent created!"
+    },
+    "scenes": {
+      "switchScene": "Switch Scene",
+      "soon": "Soon",
+      "default": "Default Office",
+      "procedural": "Procedural",
+      "night": "Night Office",
+      "cafe": "Café"
     }
   },
   "chat": {

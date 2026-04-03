@@ -6,6 +6,7 @@ import { buildSpriteCache, type SpriteCache } from './engine/spriteCache';
 import { createMainHall, applyDeskSlotsConfig } from './engine/room';
 import { applyNavMaskToRoom } from './engine/navmask';
 import type { DeskSlotsConfig } from './engine/types';
+import { getScene } from './engine/scenes';
 import { createAgent, syncAgentWithSnapshot } from './engine/agent';
 import { hitTestAgent } from './engine/tooltip';
 import { usePixelOfficeAgents, type PixelAgentSummary } from './hooks/usePixelOfficeAgents';
@@ -23,37 +24,44 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
   const { t } = useTranslation();
   const theme = useStore(s => s.theme);
   const dark = theme === 'dark';
+  const officeSceneId = useStore(s => s.officeSceneId);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const agentsRef = useRef<PixelAgent[]>([]);
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number; y: number; agent: PixelAgentSummary } | null>(null);
 
-  // Load AI-generated background image (falls back to procedural tiles if missing)
+  // Load scene assets dynamically based on the selected scene
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [navMaskImage, setNavMaskImage] = useState<HTMLImageElement | null>(null);
   const [deskSlotsConfig, setDeskSlotsConfig] = useState<DeskSlotsConfig | null>(null);
 
   useEffect(() => {
+    const scene = getScene(officeSceneId);
+    if (!scene.bg) { setBgImage(null); return; }
     const img = new Image();
     img.onload = () => setBgImage(img);
-    img.onerror = () => setBgImage(null); // graceful fallback
-    img.src = '/pixel_office_bg.png';
-  }, []);
+    img.onerror = () => setBgImage(null);
+    img.src = scene.bg;
+  }, [officeSceneId]);
 
   useEffect(() => {
+    const scene = getScene(officeSceneId);
+    if (!scene.navmask) { setNavMaskImage(null); return; }
     const img = new Image();
     img.onload = () => setNavMaskImage(img);
-    img.onerror = () => setNavMaskImage(null); // optional asset
-    img.src = '/pixel_office_navmask.png';
-  }, []);
+    img.onerror = () => setNavMaskImage(null);
+    img.src = scene.navmask;
+  }, [officeSceneId]);
 
   useEffect(() => {
-    fetch('/pixel_office_deskslots.json')
+    const scene = getScene(officeSceneId);
+    if (!scene.deskslots) { setDeskSlotsConfig(null); return; }
+    fetch(scene.deskslots)
       .then(res => res.json())
       .then(data => setDeskSlotsConfig(data))
-      .catch(() => setDeskSlotsConfig(null)); // optional asset
-  }, []);
+      .catch(() => setDeskSlotsConfig(null));
+  }, [officeSceneId]);
 
   // Build room (stable singleton)
   const room = useMemo<RoomConfig>(() => {

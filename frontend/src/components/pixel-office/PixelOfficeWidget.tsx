@@ -6,6 +6,7 @@ import OfficeHUD from './OfficeHUD';
 import AgentContextMenu from './AgentContextMenu';
 import AgentSettingsDrawer from './AgentSettingsDrawer';
 import AddAgentModal from './AddAgentModal';
+import ScenePicker from './ScenePicker';
 import { usePixelOfficeAgents } from './hooks/usePixelOfficeAgents';
 import { useStore } from '../../store';
 
@@ -175,13 +176,16 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={toggle}
-              className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            >
-              <X size={14} />
-            </button>
+            <div className="flex items-center gap-1">
+              <ScenePicker />
+              <button
+                type="button"
+                onClick={toggle}
+                className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
 
           {/* Canvas area */}

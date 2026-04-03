@@ -151,12 +151,39 @@ function SkillCard({
   );
 }
 
+function SkillCardSkeleton() {
+  return (
+    <div className="flex flex-col bg-white dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 rounded-[2rem] p-6 h-full animate-pulse">
+      <div className="flex items-start justify-between mb-4">
+        <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl w-12 h-12" />
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-xl" />
+          <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-xl" />
+        </div>
+      </div>
+      <div className="mb-3">
+        <div className="w-16 h-4 bg-slate-100 dark:bg-slate-800 rounded-full" />
+      </div>
+      <div className="space-y-2 mb-4 flex-grow">
+        <div className="w-3/4 h-5 bg-slate-100 dark:bg-slate-800 rounded-lg" />
+        <div className="w-full h-3 bg-slate-100/60 dark:bg-slate-800/60 rounded" />
+        <div className="w-5/6 h-3 bg-slate-100/60 dark:bg-slate-800/60 rounded" />
+      </div>
+      <div className="pt-4 border-t border-slate-50 dark:border-slate-800/50 flex justify-between items-center">
+        <div className="w-20 h-3 bg-slate-100 dark:bg-slate-800 rounded" />
+        <div className="w-12 h-3 bg-slate-100/60 dark:bg-slate-800/60 rounded" />
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────────────
 export function SkillManager() {
   const { t } = useTranslation();
   const { coreSkills, workspaceSkills, setCoreSkills, setWorkspaceSkills, config } = useStore();
   const [activeTab, setActiveTab] = useState<'core' | 'workspace'>('workspace');
   const [scanning, setScanning] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [scanError, setScanError] = useState('');
   const [coreUnlocked, setCoreUnlocked] = useState(false);
@@ -189,6 +216,7 @@ export function SkillManager() {
       setScanError(e instanceof Error ? e.message : t('skillManager.status.unknownScanError'));
     }
     setScanning(false);
+    setInitialLoading(false);
   }, [setCoreSkills, setWorkspaceSkills, t]);
 
   useEffect(() => {
@@ -404,8 +432,8 @@ export function SkillManager() {
           >
             {tab.icon}
             {tab.label}
-            <span className="ml-2 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded-md text-[9px] opacity-70">
-              {tab.count}
+            <span className={`ml-2 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded-md text-[9px] opacity-70 ${initialLoading ? 'animate-pulse opacity-20' : ''}`}>
+              {initialLoading ? '—' : tab.count}
             </span>
           </button>
         ))}
@@ -413,7 +441,9 @@ export function SkillManager() {
 
       <div className="animate-in fade-in duration-500 slide-in-from-bottom-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {activeTab === 'core' ? (
+          {initialLoading ? (
+            Array.from({ length: 4 }).map((_, i) => <SkillCardSkeleton key={i} />)
+          ) : activeTab === 'core' ? (
             coreSkills.map((skill: SkillItem) => (
               <SkillCard
                 key={skill.id}

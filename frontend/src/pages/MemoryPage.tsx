@@ -217,6 +217,16 @@ const ENCODING_GROUPS: { label: string; options: { value: string; label: string 
 
 const ALL_ENCODINGS = ENCODING_GROUPS.flatMap(g => g.options);
 
+const SkeletonBrowserItem: React.FC<{ variant?: 'group' | 'file' }> = ({ variant = 'group' }) => (
+  <div className={`w-full flex items-center gap-2 px-3 py-2 animate-pulse ${variant === 'file' ? 'pl-8 py-1.5' : 'py-2.5'}`}>
+    <div className={`flex-shrink-0 bg-slate-100 dark:bg-slate-800 rounded ${variant === 'group' ? 'w-4 h-4' : 'w-3.5 h-3.5'}`} />
+    <div className="flex-1 space-y-1.5">
+      <div className={`bg-slate-100 dark:bg-slate-800 rounded ${variant === 'group' ? 'h-3 w-1/2' : 'h-2.5 w-3/4'}`} />
+    </div>
+    {variant === 'group' && <div className="w-4 h-2.5 bg-slate-100/50 dark:bg-slate-800/50 rounded ml-auto" />}
+  </div>
+);
+
 // ── MemoryPage ─────────────────────────────────────────────────────────────
 
 export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
@@ -234,6 +244,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
   const [fileError, setFileError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [totalScanning, setTotalScanning] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [lastScanAt, setLastScanAt] = useState<string>('');
 
   // ── Edit state ───────────────────────────────────────────────────────────
@@ -622,6 +633,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
     setGroups([...standardResults, ...uncategorizedResults, ...imageGroupResults]);
     setLastScanAt(new Date().toLocaleTimeString());
     setTotalScanning(false);
+    setInitialLoading(false);
   }, [buildGroupDefs, scanDir, workspacePath, scanImageGroups]);
 
   useEffect(() => {
@@ -993,13 +1005,13 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
 
         {/* Stats bar */}
         <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-800 flex gap-4">
-          <div className="flex items-center gap-1.5">
+          <div className={`flex items-center gap-1.5 ${initialLoading ? 'animate-pulse opacity-40' : ''}`}>
             <FileText size={11} className="text-slate-400" />
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{totalFiles} {t('memory.files')}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{initialLoading ? '—' : totalFiles} {t('memory.files')}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className={`flex items-center gap-1.5 ${initialLoading ? 'animate-pulse opacity-40' : ''}`}>
             <HardDrive size={11} className="text-slate-400" />
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{formatBytes(totalSize)}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{initialLoading ? '—' : formatBytes(totalSize)}</span>
           </div>
         </div>
 
@@ -1033,7 +1045,9 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
                 <div className="px-4 py-2 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
                   {t('memory.sections.soul')}
                 </div>
-                {soulGroups.map(renderGroup)}
+                {initialLoading 
+                  ? Array.from({ length: 4 }).map((_, i) => <SkeletonBrowserItem key={i} />)
+                  : soulGroups.map(renderGroup)}
               </>
             );
           })()}
@@ -1047,7 +1061,9 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
                 <div className="px-4 py-2 mt-4 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-t border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
                   {t('memory.sections.docs')}
                 </div>
-                {docsGroups.map(renderGroup)}
+                {initialLoading 
+                  ? Array.from({ length: 3 }).map((_, i) => <SkeletonBrowserItem key={i} />)
+                  : docsGroups.map(renderGroup)}
               </>
             );
           })()}
@@ -1080,7 +1096,9 @@ export const MemoryPage: React.FC<MemoryPageProps> = ({ config }) => {
                   </div>
                   <span className="font-mono text-pink-300 dark:text-pink-600">{totalImgFiles}</span>
                 </div>
-                {imgGroups.map(renderGroup)}
+                {initialLoading 
+                  ? Array.from({ length: 2 }).map((_, i) => <SkeletonBrowserItem key={i} />)
+                  : imgGroups.map(renderGroup)}
               </>
             );
           })()}

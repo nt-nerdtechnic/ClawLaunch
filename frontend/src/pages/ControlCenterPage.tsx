@@ -215,6 +215,10 @@ const CHANNEL_META: { id: string; name: string }[] = [
   { id: 'irc',        name: 'IRC'         },
 ];
 
+const SkeletonItem: React.FC<{ className?: string }> = ({ className = 'h-12' }) => (
+  <div className={`w-full rounded-xl bg-slate-100/50 dark:bg-slate-800/30 animate-pulse border border-slate-50 dark:border-slate-800/50 ${className}`} />
+);
+
 export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshSnapshot, stateDir }) => {
   const { t, i18n } = useTranslation();
   const runtimeProfile = useStore(s => s.runtimeProfile);
@@ -233,6 +237,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [abortingSessionKeys, setAbortingSessionKeys] = useState<Set<string>>(new Set());
   const [triggeringJobIds, setTriggeringJobIds] = useState<Set<string>>(new Set());
   const [fixingJobIds, setFixingJobIds] = useState<Set<string>>(new Set());
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError]             = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ name: string; onConfirm: () => void } | null>(null);
   const [activeSessionFilter, setActiveSessionFilter] = useState<'all' | 'running' | 'stopped'>('running');
@@ -429,8 +434,15 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   }, [loadCron, loadSystem, loadAuthorizedRecipients, onRefreshSnapshot, t]);
 
   useEffect(() => {
-    refresh();
-    loadActiveSessions();
+    const init = async () => {
+      setInitialLoading(true);
+      try {
+        await Promise.all([refresh(), loadActiveSessions()]);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    init();
   }, [refresh, loadActiveSessions]);
 
   useEffect(() => {
@@ -718,10 +730,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
             onClick={() => scrollToSection(targetId)}
             className="bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 rounded-[22px] p-4 shadow-sm text-center transition-all hover:scale-[1.02] hover:shadow-md hover:bg-white dark:hover:bg-slate-800/40 group active:scale-95"
           >
-            <div className={`text-2xl font-black ${color} group-hover:drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] transition-all flex items-baseline justify-center gap-1.5`}>
-              <span>{active}</span>
+            <div className={`text-2xl font-black ${initialLoading ? 'animate-pulse opacity-40 text-slate-400' : color} group-hover:drop-shadow-[0_0_8px_rgba(99,102,241,0.3)] transition-all flex items-baseline justify-center gap-1.5`}>
+              <span>{initialLoading ? '—' : active}</span>
               <span className="text-sm opacity-40">/</span>
-              <span className="text-sm opacity-60 font-bold">{total}</span>
+              <span className="text-sm opacity-60 font-bold">{initialLoading ? '—' : total}</span>
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5 tracking-wide group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors uppercase font-bold">{label}</div>
           </button>
@@ -777,7 +789,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
 
             {/* Sessions list */}
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-0.5">
-              {filteredActiveSessions.length === 0 ? (
+              {initialLoading ? (
+                Array.from({ length: 3 }).map((_, i) => <SkeletonItem key={i} className="h-16" />)
+              ) : filteredActiveSessions.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                   <Activity size={28} className="mb-2 opacity-25" />
                   <span className="text-sm">
@@ -932,7 +946,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                 </div>
               </div>
               <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5">
-                {filteredCronJobs.length === 0 ? (
+                {initialLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => <SkeletonItem key={i} className="h-14" />)
+                ) : filteredCronJobs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                     <CalendarClock size={24} className="mb-2 opacity-30" />
                     <span className="text-sm">
@@ -1358,7 +1374,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
-              {filteredCrontabEntries.length === 0 ? (
+              {initialLoading ? (
+                Array.from({ length: 3 }).map((_, i) => <SkeletonItem key={i} className="h-12" />)
+              ) : filteredCrontabEntries.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                   <Terminal size={24} className="mb-2 opacity-30" />
                   <span className="text-sm">
@@ -1490,7 +1508,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                   </button>
                 </div>
               </div>
-              {filteredLaunchAgents.length === 0 ? (
+              {initialLoading ? (
+                Array.from({ length: 5 }).map((_, i) => <SkeletonItem key={i} className="h-14" />)
+              ) : filteredLaunchAgents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                   <Server size={24} className="mb-2 opacity-30" />
                   <span className="text-sm">

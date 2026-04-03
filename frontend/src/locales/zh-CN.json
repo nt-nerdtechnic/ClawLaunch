@@ -308,6 +308,14 @@
       "creating": "创建中…",
       "create": "创建 Agent",
       "success": "Agent 创建成功！"
+    },
+    "scenes": {
+      "switchScene": "切换场景",
+      "soon": "即将推出",
+      "default": "默认办公室",
+      "procedural": "程序生成",
+      "night": "夜间办公室",
+      "cafe": "咖啡厅"
     }
   },
   "chat": {

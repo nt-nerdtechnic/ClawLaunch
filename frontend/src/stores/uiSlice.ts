@@ -6,6 +6,8 @@ export interface UiSlice {
   setTheme: (theme: 'light' | 'dark') => void;
   language: string;
   setLanguage: (lang: string) => void;
+  officeSceneId: string;
+  setOfficeSceneId: (id: string) => void;
 }
 
 // setLanguage also updates config.language, so the creator needs access to the full
@@ -22,5 +24,10 @@ export const createUiSlice: StateCreator<UiSlice & ConfigSlice, [], [], UiSlice>
   setLanguage: (lang) => {
     localStorage.setItem('i18nextLng', lang);
     set((state) => ({ language: lang, config: { ...state.config, language: lang } }));
+  },
+  officeSceneId: localStorage.getItem('officeSceneId') || 'default',
+  setOfficeSceneId: (id) => {
+    localStorage.setItem('officeSceneId', id);
+    set({ officeSceneId: id });
   },
 });
