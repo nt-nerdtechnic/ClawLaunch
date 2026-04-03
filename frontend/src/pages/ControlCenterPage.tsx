@@ -1049,7 +1049,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           </span>
                         )}
                         {/* 執行結果與錯誤修復整合標籤 */}
-                        {!isCurrentlyRunning && job.state?.lastRunAtMs && (
+                        {!isCurrentlyRunning && (job.state?.lastRunAtMs ?? 0) > 0 && (
                           (hasError || job.state?.lastStatus === 'error') ? (
                             <div className="shrink-0 flex items-center group transition-all active:scale-95 disabled:opacity-60 disabled:active:scale-100">
                               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-l-md border-y border-l bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/20 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/40 transition-colors text-[9px] font-bold">
@@ -1137,7 +1137,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             <span className="text-amber-400/70">{t('controlCenter.cronJobs.timeout', { val: `${Math.round(job.payload.timeoutSeconds / 60)}m` })}</span>
                           </>
                         )}
-                        {job.state?.lastRunAtMs && (
+                        {(job.state?.lastRunAtMs ?? 0) > 0 && (
                           <>
                             <span className="opacity-40">·</span>
                             <span>{relTime(job.state.lastRunAtMs, t)}</span>
