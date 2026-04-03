@@ -30,16 +30,19 @@ interface Dep {
   installTitle: string;
   openTerminal?: boolean;
   optional?: boolean;
+  platform?: 'darwin' | 'win32' | 'all';
 }
 
-const DEPS: Dep[] = [
+const isWin = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('windows');
+
+const ALL_DEPS: Dep[] = [
   {
     id: 'homebrew',
     label: 'Homebrew',
     description: 'macOS 套件管理器，git / python / node 等工具的安裝基礎',
     checkCmd:
       'brew --version 2>/dev/null || /opt/homebrew/bin/brew --version 2>/dev/null || /usr/local/bin/brew --version 2>/dev/null',
-    parseVersion: (out) => {
+    parseVersion: (out: string) => {
       const m = out.match(/Homebrew\s+([\d.]+)/);
       return m ? m[1] : null;
     },
@@ -47,78 +50,94 @@ const DEPS: Dep[] = [
       '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
     installTitle: '安裝 Homebrew（需要管理員密碼）',
     openTerminal: true,
+    platform: 'darwin' as const,
   },
   {
     id: 'git',
     label: 'Git',
     description: '版本控制工具（ZIP 方式下載 OpenClaw 原始碼時可選）',
     checkCmd: 'git --version',
-    parseVersion: (out) => {
+    parseVersion: (out: string) => {
       const m = out.match(/git version\s+([\d.]+)/);
       return m ? m[1] : null;
     },
-    installCmd: 'brew install git 2>&1',
+    installCmd: isWin 
+      ? 'winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements' 
+      : 'brew install git 2>&1',
     installTitle: '安裝 Git',
   },
   {
     id: 'node',
     label: 'Node.js',
     description: 'JavaScript 執行環境，OpenClaw CLI 核心依賴（需要 v22+）',
-    checkCmd:
-      'zsh -ilc "node --version" 2>/dev/null || node --version 2>/dev/null',
-    parseVersion: (out) => {
+    checkCmd: isWin
+      ? 'node --version 2>&1'
+      : 'zsh -ilc "node --version" 2>/dev/null || node --version 2>/dev/null',
+    parseVersion: (out: string) => {
       const m = out.match(/v(\d+\.\d+\.\d+)/);
       return m ? m[1] : null;
     },
-    versionWarn: (v) => {
+    versionWarn: (v: string) => {
       const major = parseInt(v.split('.')[0], 10);
       return major < 22 ? `目前 v${v}，建議升級至 v22` : null;
     },
-    installCmd:
-      'brew install node@22 2>&1 && brew link node@22 --force --overwrite 2>&1',
+    installCmd: isWin
+      ? 'winget install OpenJS.NodeJS -v 22.13.1 -e --accept-package-agreements --accept-source-agreements'
+      : 'brew install node@22 2>&1 && brew link node@22 --force --overwrite 2>&1',
     installTitle: '安裝 Node.js v22',
   },
   {
     id: 'pnpm',
     label: 'pnpm',
     description: 'Node.js 套件管理器，OpenClaw 安裝與執行的直接依賴',
-    checkCmd:
-      'zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version 2>/dev/null',
-    parseVersion: (out) => {
-      const lines = out.trim().split('\n').filter((l) => /^\d+\.\d+/.test(l));
+    checkCmd: isWin
+      ? 'cmd /c pnpm --version 2>&1'
+      : 'zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version 2>/dev/null',
+    parseVersion: (out: string) => {
+      const lines = out.trim().split('\n').filter((l: string) => /^\d+\.\d+/.test(l));
       return lines[0]?.trim() || null;
     },
-    installCmd:
-      'zsh -ilc "npm install -g pnpm" 2>&1 || npm install -g pnpm 2>&1',
+    installCmd: isWin
+      ? 'cmd /c npm install -g pnpm'
+      : 'zsh -ilc "npm install -g pnpm" 2>&1 || npm install -g pnpm 2>&1',
     installTitle: '安裝 pnpm',
   },
   {
     id: 'python',
     label: 'Python 3',
     description: 'OpenClaw 部分插件與 YAML 設定解析的執行環境',
-    checkCmd: 'python3 --version 2>&1',
-    parseVersion: (out, err) => {
+    checkCmd: isWin
+      ? 'python --version 2>&1 || python3 --version 2>&1'
+      : 'python3 --version 2>&1',
+    parseVersion: (out: string, err: string) => {
       const m = (out + err).match(/Python\s+([\d.]+)/);
       return m ? m[1] : null;
     },
-    installCmd: 'brew install python3 2>&1',
+    installCmd: isWin
+      ? 'winget install --id Python.Python.3.11 -e --source winget --accept-package-agreements --accept-source-agreements'
+      : 'brew install python3 2>&1',
     installTitle: '安裝 Python 3',
   },
   {
     id: 'pyyaml',
     label: 'PyYAML',
     description: 'Python YAML 解析庫，OpenClaw 設定檔格式支援',
-    checkCmd:
-      'python3 -c "import yaml; print(yaml.__version__)" 2>/dev/null',
-    parseVersion: (out) => {
-      const lines = out.trim().split('\n').filter((l) => /^\d+/.test(l));
+    checkCmd: isWin
+      ? 'python -c "import yaml; print(yaml.__version__)" 2>&1'
+      : 'python3 -c "import yaml; print(yaml.__version__)" 2>/dev/null',
+    parseVersion: (out: string) => {
+      const lines = out.trim().split('\n').filter((l: string) => /^\d+/.test(l));
       return lines[0]?.trim() || null;
     },
-    installCmd: 'pip3 install PyYAML 2>&1',
+    installCmd: isWin
+      ? 'python -m pip install PyYAML'
+      : 'pip3 install PyYAML 2>&1',
     installTitle: '安裝 PyYAML',
     optional: true,
   },
 ];
+
+const DEPS = ALL_DEPS.filter(d => !d.platform || (isWin ? d.platform === 'win32' : d.platform === 'darwin'));
 
 const StatusIcon = ({ status }: { status: DepStatus }) => {
   switch (status) {
