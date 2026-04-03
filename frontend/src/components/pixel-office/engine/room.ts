@@ -147,7 +147,7 @@ export function createOpenPlan(): RoomConfig {
   return { widthTiles: W, heightTiles: H, walkable, furniture, deskSlots, spawnPoint: { x: 15 * TILE_SIZE, y: 17 * TILE_SIZE }, renderTheme: 'cafe' };
 }
 
-/** Override desk slots from external config (e.g. from pixel_office_deskslots.json). */
+/** Override desk slots from an external config object. */
 export function applyDeskSlotsConfig(room: RoomConfig, config: DeskSlotsConfig): RoomConfig {
   if (!config?.slots || config.slots.length === 0) return room;
 
