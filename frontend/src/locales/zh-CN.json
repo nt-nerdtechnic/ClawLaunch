@@ -311,11 +311,9 @@
     },
     "scenes": {
       "switchScene": "切换场景",
-      "soon": "即将推出",
-      "default": "默认办公室",
-      "procedural": "程序生成",
-      "night": "夜间办公室",
-      "cafe": "咖啡厅"
+      "mainHall": "主大厅",
+      "smallRoom": "小办公室",
+      "openPlan": "开放空间"
     }
   },
   "chat": {
@@ -556,7 +554,7 @@
     "browseFolder": "浏览文件夹",
     "botToken": "Telegram Bot Token",
     "botTokenPlaceholder": "输入您的 Bot Token...",
-    "inferenceEngine": "Primary Inference Engine",
+    "inferenceEngine": "主要推论引擎",
     "corePath": "OpenClaw 主核心区 (Core)",
     "corePathPlaceholder": "留空则使用系统默认路径",
     "configPath": "OpenClaw 设定区 (Config)",
@@ -1071,6 +1069,11 @@
       "desc": "以下指令将在独立 Terminal 窗口中执行, 完成后按 Enter 关闭。",
       "securityAudit": "资安稽核（自动修复）"
     },
+    "sections": {
+      "gatewayPort": "网关连通端口",
+      "cronSettings": "计划执行设置",
+      "gatewayAndModel": "网关与模型设置"
+    },
     "update": {
       "title": "OpenClaw 核心更新",
       "currentVersion": "当前版本：",
@@ -1101,6 +1104,11 @@
       "failed": "回滚失败：{{msg}}"
     },
     "providers": {
+      "keyLabels": {
+        "botToken": "Bot Token",
+        "webhookUrl": "Webhook URL",
+        "channelAccessToken": "Channel Access Token"
+      },
       "telegram": {
         "desc": "通过 Bot 接收与发送消息",
         "placeholder": "输入 Telegram Bot Token"

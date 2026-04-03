@@ -112,15 +112,15 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   }, [config.corePath, effectiveAuthorizedProviders, loadDynamicModelOptions]);
 
   const CHANNEL_OPTIONS = useMemo<ChannelOption[]>(() => [
-    { id: 'telegram',   name: 'Telegram',    icon: <MessageSquare size={14} />, desc: t('runtime.providers.telegram.desc'),           placeholder: t('runtime.providers.telegram.placeholder'),              keyLabel: 'Bot Token' },
+    { id: 'telegram',   name: 'Telegram',    icon: <MessageSquare size={14} />, desc: t('runtime.providers.telegram.desc'),           placeholder: t('runtime.providers.telegram.placeholder'),              keyLabel: t('runtime.providers.keyLabels.botToken') },
     { id: 'whatsapp',   name: 'WhatsApp',    icon: <Phone size={14} />,         desc: t('runtime.providers.whatsapp.desc'),           placeholder: '',                                    keyLabel: '',                    reqKey: false },
-    { id: 'discord',    name: 'Discord',     icon: <Bot size={14} />,           desc: t('runtime.providers.discord.desc'),                  placeholder: t('runtime.providers.discord.placeholder'),               keyLabel: 'Bot Token' },
+    { id: 'discord',    name: 'Discord',     icon: <Bot size={14} />,           desc: t('runtime.providers.discord.desc'),                  placeholder: t('runtime.providers.discord.placeholder'),               keyLabel: t('runtime.providers.keyLabels.botToken') },
     { id: 'irc',        name: 'IRC',         icon: <Server size={14} />,        desc: t('runtime.providers.irc.desc'),               placeholder: '',                                    keyLabel: '',                    reqKey: false },
-    { id: 'googlechat', name: 'Google Chat', icon: <Mails size={14} />,         desc: t('runtime.providers.googlechat.desc'),        placeholder: t('runtime.providers.googlechat.placeholder'),                     keyLabel: 'Webhook URL' },
-    { id: 'slack',      name: 'Slack',       icon: <Hash size={14} />,          desc: t('runtime.providers.slack.desc'),                  placeholder: t('runtime.providers.slack.placeholder'),     keyLabel: 'Bot Token' },
+    { id: 'googlechat', name: 'Google Chat', icon: <Mails size={14} />,         desc: t('runtime.providers.googlechat.desc'),        placeholder: t('runtime.providers.googlechat.placeholder'),                     keyLabel: t('runtime.providers.keyLabels.webhookUrl') },
+    { id: 'slack',      name: 'Slack',       icon: <Hash size={14} />,          desc: t('runtime.providers.slack.desc'),                  placeholder: t('runtime.providers.slack.placeholder'),     keyLabel: t('runtime.providers.keyLabels.botToken') },
     { id: 'signal',     name: 'Signal',      icon: <Shield size={14} />,        desc: t('runtime.providers.signal.desc'),       placeholder: '',                                    keyLabel: '',                    reqKey: false },
     { id: 'imessage',   name: 'iMessage',    icon: <MessageCircle size={14} />, desc: t('runtime.providers.imessage.desc'),                placeholder: '',                                    keyLabel: '',                    reqKey: false },
-    { id: 'line',       name: 'LINE',        icon: <Waves size={14} />,         desc: t('runtime.providers.line.desc'),        placeholder: t('runtime.providers.line.placeholder'),       keyLabel: 'Channel Access Token' },
+    { id: 'line',       name: 'LINE',        icon: <Waves size={14} />,         desc: t('runtime.providers.line.desc'),        placeholder: t('runtime.providers.line.placeholder'),       keyLabel: t('runtime.providers.keyLabels.channelAccessToken') },
   ], [t]);
 
   const dynamicModelSource = dynamicModelOptions.length > 0 ? t('common.labels.dynamic') : t('common.labels.static');
@@ -194,7 +194,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Gateway Port
+            {t('runtime.sections.gatewayPort')}
           </div>
         </div>
         {/* Gateway Port */}
@@ -261,7 +261,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Gateway & Model
+            {t('runtime.sections.gatewayAndModel')}
           </div>
         </div>
         <div>

@@ -66,3 +66,59 @@ export const DARK_PALETTE = {
   windowSkyTop: '#0a1830',
   windowSkyBot: '#060e1e',
 };
+
+// Server Room (light): steel-grey industrial with green accents
+export const SERVER_ROOM_LIGHT_PALETTE = {
+  floor1:       '#c8ced4',   // steel grey
+  floor2:       '#b8bec6',   // darker steel
+  floorGrout:   '#8898a8',   // deep blue-grey
+  wall:         '#6e7a86',   // slate wall
+  wallTop:      '#4a5560',   // dark slate top
+  wallShadow:   '#5a6672',
+  ledStrip:     '#00ff99',   // bright green LED
+  ledGlow:      'rgba(0,255,120,0.18)',
+  ambientGlow:  'rgba(0,220,100,0.07)',
+};
+
+// Server Room (dark): pitch-black racks lit by green terminal glow
+export const SERVER_ROOM_DARK_PALETTE = {
+  floor1:       '#0a0d0f',   // near black
+  floor2:       '#0d1014',
+  floorGrout:   '#040507',
+  wall:         '#0d1117',
+  wallTop:      '#070a0d',
+  wallShadow:   '#0a0d10',
+  ledStrip:     '#00ff88',
+  ledGlow:      'rgba(0,255,120,0.28)',
+  ambientGlow:  'rgba(0,180,80,0.12)',
+};
+
+// Cafe (light): warm wood + brick
+export const CAFE_LIGHT_PALETTE = {
+  floor1:       '#d4a96a',   // warm honey wood
+  floor2:       '#c49050',   // darker oak plank
+  floorGrout:   '#a07040',   // wood grain line
+  wall:         '#8b3a2a',   // brick red
+  wallTop:      '#6a2818',   // dark brick top
+  wallShadow:   '#a04030',
+  windowFrame:  '#5c3018',   // dark timber
+  windowGlass:  'rgba(255,200,100,0.45)',  // warm afternoon sun
+  windowSkyTop: '#ffb030',
+  windowSkyBot: '#ffe090',
+  warmGlow:     'rgba(255,160,30,0.10)',
+};
+
+// Cafe (dark): evening cafe, candle-lit amber
+export const CAFE_DARK_PALETTE = {
+  floor1:       '#2a1a0a',
+  floor2:       '#221408',
+  floorGrout:   '#150d04',
+  wall:         '#3a1810',
+  wallTop:      '#280e08',
+  wallShadow:   '#301206',
+  windowFrame:  '#1a0c04',
+  windowGlass:  'rgba(180,80,10,0.45)',
+  windowSkyTop: '#3a1800',
+  windowSkyBot: '#1a0c00',
+  warmGlow:     'rgba(220,100,10,0.14)',
+};

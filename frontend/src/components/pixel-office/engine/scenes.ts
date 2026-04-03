@@ -1,49 +1,34 @@
+import type { RoomConfig } from './types';
+import { createMainHall, createSmallRoom, createOpenPlan } from './room';
+
 export interface OfficeScene {
   id: string;
   /** i18n key for display name */
   labelKey: string;
-  /** Path to background image (relative to /public/). null = procedural tile renderer. */
-  bg: string | null;
-  /** Path to nav-mask PNG. null = use default walkable grid from room.ts. */
-  navmask: string | null;
-  /** Path to deskslots JSON. null = use positions calculated by room.ts. */
-  deskslots: string | null;
-  /** Whether this scene has all required assets ready. */
+  /** Factory function that builds the procedural room layout */
+  roomFactory: () => RoomConfig;
+  /** Whether this scene is available in the picker */
   available: boolean;
 }
 
 export const OFFICE_SCENES: OfficeScene[] = [
   {
-    id: 'default',
-    labelKey: 'pixelOffice.scenes.default',
-    bg: '/pixel_office_bg.png',
-    navmask: '/pixel_office_navmask.png',
-    deskslots: '/pixel_office_deskslots.json',
+    id: 'mainHall',
+    labelKey: 'pixelOffice.scenes.mainHall',
+    roomFactory: createMainHall,
     available: true,
   },
   {
-    id: 'procedural',
-    labelKey: 'pixelOffice.scenes.procedural',
-    bg: null,
-    navmask: null,
-    deskslots: null,
+    id: 'smallRoom',
+    labelKey: 'pixelOffice.scenes.smallRoom',
+    roomFactory: createSmallRoom,
     available: true,
   },
   {
-    id: 'night',
-    labelKey: 'pixelOffice.scenes.night',
-    bg: '/scenes/night_office_bg.png',
-    navmask: '/scenes/night_office_navmask.png',
-    deskslots: '/scenes/night_office_deskslots.json',
-    available: false,
-  },
-  {
-    id: 'cafe',
-    labelKey: 'pixelOffice.scenes.cafe',
-    bg: '/scenes/cafe_bg.png',
-    navmask: '/scenes/cafe_navmask.png',
-    deskslots: '/scenes/cafe_deskslots.json',
-    available: false,
+    id: 'openPlan',
+    labelKey: 'pixelOffice.scenes.openPlan',
+    roomFactory: createOpenPlan,
+    available: true,
   },
 ];
 

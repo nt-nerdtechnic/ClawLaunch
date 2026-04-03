@@ -68,6 +68,8 @@ export interface DeskSlotsConfig {
   }>;
 }
 
+export type RenderTheme = 'office' | 'serverRoom' | 'cafe';
+
 export interface RoomConfig {
   widthTiles: number;
   heightTiles: number;
@@ -75,4 +77,5 @@ export interface RoomConfig {
   furniture: Furniture[];
   deskSlots: DeskSlot[];
   spawnPoint: Vec2;
+  renderTheme: RenderTheme;
 }

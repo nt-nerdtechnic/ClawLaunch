@@ -3,9 +3,6 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { PixelAgent, RoomConfig } from './engine/types';
 import { CANVAS_W, CANVAS_H, AGENT_COLORS, SPRITE_DRAW_W, SPRITE_DRAW_H } from './engine/constants';
 import { buildSpriteCache, type SpriteCache } from './engine/spriteCache';
-import { createMainHall, applyDeskSlotsConfig } from './engine/room';
-import { applyNavMaskToRoom } from './engine/navmask';
-import type { DeskSlotsConfig } from './engine/types';
 import { getScene } from './engine/scenes';
 import { createAgent, syncAgentWithSnapshot } from './engine/agent';
 import { hitTestAgent } from './engine/tooltip';
@@ -31,50 +28,11 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number; y: number; agent: PixelAgentSummary } | null>(null);
 
-  // Load scene assets dynamically based on the selected scene
-  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
-  const [navMaskImage, setNavMaskImage] = useState<HTMLImageElement | null>(null);
-  const [deskSlotsConfig, setDeskSlotsConfig] = useState<DeskSlotsConfig | null>(null);
-
-  useEffect(() => {
-    const scene = getScene(officeSceneId);
-    if (!scene.bg) { setBgImage(null); return; }
-    const img = new Image();
-    img.onload = () => setBgImage(img);
-    img.onerror = () => setBgImage(null);
-    img.src = scene.bg;
-  }, [officeSceneId]);
-
-  useEffect(() => {
-    const scene = getScene(officeSceneId);
-    if (!scene.navmask) { setNavMaskImage(null); return; }
-    const img = new Image();
-    img.onload = () => setNavMaskImage(img);
-    img.onerror = () => setNavMaskImage(null);
-    img.src = scene.navmask;
-  }, [officeSceneId]);
-
-  useEffect(() => {
-    const scene = getScene(officeSceneId);
-    if (!scene.deskslots) { setDeskSlotsConfig(null); return; }
-    fetch(scene.deskslots)
-      .then(res => res.json())
-      .then(data => setDeskSlotsConfig(data))
-      .catch(() => setDeskSlotsConfig(null));
-  }, [officeSceneId]);
-
-  // Build room (stable singleton)
+  // Build room from the selected procedural scene factory
   const room = useMemo<RoomConfig>(() => {
-    let baseRoom = createMainHall();
-    if (deskSlotsConfig) {
-      baseRoom = applyDeskSlotsConfig(baseRoom, deskSlotsConfig);
-    }
-    if (!navMaskImage) return baseRoom;
-    return applyNavMaskToRoom(baseRoom, navMaskImage, {
-      walkableMinAlpha: 32,
-      inflateBlockedTiles: 1,
-    });
-  }, [navMaskImage, deskSlotsConfig]);
+    const scene = getScene(officeSceneId);
+    return scene.roomFactory();
+  }, [officeSceneId]);
 
   // Build sprite cache (stable singleton)
   const cache = useMemo<SpriteCache>(() => buildSpriteCache(AGENT_COLORS), []);
@@ -132,7 +90,7 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     hoveredAgentId,
     paused,
     dark,
-    bgImage,
+    bgImage: null,
   });
 
   // Mouse hover handler

@@ -312,11 +312,9 @@
     },
     "scenes": {
       "switchScene": "切換場景",
-      "soon": "即將推出",
-      "default": "預設辦公室",
-      "procedural": "程序生成",
-      "night": "夜間辦公室",
-      "cafe": "咖啡廳"
+      "mainHall": "主大廳",
+      "smallRoom": "小辦公室",
+      "openPlan": "開放空間"
     }
   },
   "chat": {
@@ -557,7 +555,7 @@
     "browseFolder": "瀏覽資料夾",
     "botToken": "Telegram Bot Token",
     "botTokenPlaceholder": "輸入您的 Bot Token...",
-    "inferenceEngine": "Primary Inference Engine",
+    "inferenceEngine": "主要推論引擎",
     "corePath": "主核心區 (Core)",
     "corePathPlaceholder": "留空則使用系統預設路徑",
     "configPath": "設定區 (Config)",
@@ -1334,6 +1332,11 @@
       "oauthDesc": "無須輸入密鑰。點擊「新增授權」後將自動啟動瀏覽器 OAuth 授權流程。",
       "localSvcDesc": "此本地服務直接新增即可，無需 API 密鑰。"
     },
+    "sections": {
+      "gatewayPort": "網關連線埠",
+      "cronSettings": "排程執行設定",
+      "gatewayAndModel": "網關與模型設定"
+    },
     "diag": {
       "title": "快捷診斷工具",
       "desc": "以下指令將在獨立 Terminal 視窗中執行，完成後按 Enter 關閉。",
@@ -1374,6 +1377,11 @@
       "maxConcurrentRunsHelp": "同時最多可執行的 cron job 數量（對應 openclaw.json 的 cron.maxConcurrentRuns）。例如目前有 4 個 job 在跑，系統負擔約為 4 / maxConcurrentRuns × 100%。"
     },
     "providers": {
+      "keyLabels": {
+        "botToken": "Bot Token",
+        "webhookUrl": "Webhook URL",
+        "channelAccessToken": "Channel Access Token"
+      },
       "telegram": {
         "desc": "透過 Bot 接收與傳送訊息",
         "placeholder": "輸入 Telegram Bot Token"

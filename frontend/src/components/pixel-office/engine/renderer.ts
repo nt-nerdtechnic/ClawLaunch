@@ -6,12 +6,14 @@ import {
   SPRITE_DRAW_W, SPRITE_DRAW_H,
   FURNITURE_SCALE,
   LIGHT_PALETTE, DARK_PALETTE,
+  SERVER_ROOM_LIGHT_PALETTE, SERVER_ROOM_DARK_PALETTE,
+  CAFE_LIGHT_PALETTE, CAFE_DARK_PALETTE,
 } from './constants';
 
-// Window columns (tile X) along north wall, every 6 tiles
+// Window columns (tile X) along north wall
 const WINDOW_TILE_XS = [3, 9, 15, 21];
-const WIN_TW = 4;  // tiles wide
-const WIN_TH = 2;  // tiles tall (fills the 2-tile top wall)
+const WIN_TW = 4;
+const WIN_TH = 2;
 
 // Monitor screen pixel offset within the DESK sprite data (28×14),
 // scaled by FURNITURE_SCALE so they match the drawn (56×28) furniture.
@@ -36,67 +38,35 @@ export function renderFrame(
   dark: boolean,
   bgImage: HTMLImageElement | null = null,
 ): void {
-  const palette = dark ? DARK_PALETTE : LIGHT_PALETTE;
-
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.imageSmoothingEnabled = false;
 
   if (bgImage) {
-    // ─── AI-generated background image ──────────────────────────────────────
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bgImage, 0, 0, CANVAS_W, CANVAS_H);
-    // Dark mode tint
     if (dark) {
       ctx.fillStyle = 'rgba(10,12,35,0.58)';
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
     ctx.imageSmoothingEnabled = false;
   } else {
-    // ─── 1. Procedural floor + wall tiles ───────────────────────────────────
-    ctx.imageSmoothingEnabled = false;
-    for (let ty = 0; ty < room.heightTiles; ty++) {
-      for (let tx = 0; tx < room.widthTiles; tx++) {
-        const isTopWall    = ty < 2;
-        const isSideWall   = tx < 1 || tx >= room.widthTiles - 1;
-        const isBottomWall = ty >= room.heightTiles - 1;
-        const isWall       = isTopWall || isSideWall || isBottomWall;
-
-        if (isWall) {
-          ctx.fillStyle = isTopWall && ty === 0 ? palette.wallTop : palette.wall;
-          ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          if (ty === 1 && !isSideWall) {
-            ctx.fillStyle = palette.wallShadow;
-            ctx.fillRect(tx * TILE_SIZE, (ty + 1) * TILE_SIZE - 3, TILE_SIZE, 3);
-          }
-        } else {
-          ctx.fillStyle = (tx + ty) % 2 === 0 ? palette.floor1 : palette.floor2;
-          ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        }
-      }
+    // ─── Theme-based background rendering ───────────────────────────────────
+    switch (room.renderTheme) {
+      case 'serverRoom':
+        drawServerRoomBackground(ctx, room, dark);
+        break;
+      case 'cafe':
+        drawCafeBackground(ctx, room, dark);
+        break;
+      default:
+        drawOfficeBackground(ctx, room, dark);
     }
-
-    // ─── 1b. Floor grout lines ───────────────────────────────────────────────
-    ctx.beginPath();
-    ctx.strokeStyle = dark ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.10)';
-    ctx.lineWidth = 1;
-    for (let tx = 2; tx < room.widthTiles - 1; tx++) {
-      ctx.moveTo(tx * TILE_SIZE, 2 * TILE_SIZE);
-      ctx.lineTo(tx * TILE_SIZE, (room.heightTiles - 1) * TILE_SIZE);
-    }
-    for (let ty = 2; ty < room.heightTiles - 1; ty++) {
-      ctx.moveTo(1 * TILE_SIZE, ty * TILE_SIZE);
-      ctx.lineTo((room.widthTiles - 1) * TILE_SIZE, ty * TILE_SIZE);
-    }
-    ctx.stroke();
-
-    // ─── 1c. North-wall windows ──────────────────────────────────────────────
-    drawNorthWallWindows(ctx, palette, room.widthTiles);
   }
 
   // ─── 2. Collect drawables for Z-sorting ──────────────────────────────────
   const drawables: Drawable[] = [];
 
-  // Only draw procedural furniture when no background image (image has its own furniture)
   if (!bgImage) {
     for (const f of room.furniture) {
       const spriteH = getSpriteNaturalH(f.type);
@@ -119,7 +89,7 @@ export function renderFrame(
   for (const agent of agents) {
     if (agent.state === 'working' && agent.deskIndex >= 0 && agent.deskIndex < room.deskSlots.length) {
       const slot = room.deskSlots[agent.deskIndex];
-      drawMonitorGlow(ctx, slot.deskTile.x * TILE_SIZE, slot.deskTile.y * TILE_SIZE);
+      drawMonitorGlow(ctx, slot.deskTile.x * TILE_SIZE, slot.deskTile.y * TILE_SIZE, room.renderTheme);
     }
   }
 
@@ -142,7 +112,236 @@ function getSpriteNaturalH(type: string): number {
   }
 }
 
-// ─── Drawing helpers ──────────────────────────────────────────────────────────
+// ─── Theme background renderers ───────────────────────────────────────────────
+
+function drawOfficeBackground(ctx: CanvasRenderingContext2D, room: RoomConfig, dark: boolean): void {
+  const palette = dark ? DARK_PALETTE : LIGHT_PALETTE;
+
+  for (let ty = 0; ty < room.heightTiles; ty++) {
+    for (let tx = 0; tx < room.widthTiles; tx++) {
+      const isTopWall    = ty < 2;
+      const isSideWall   = tx < 1 || tx >= room.widthTiles - 1;
+      const isBottomWall = ty >= room.heightTiles - 1;
+      const isWall       = isTopWall || isSideWall || isBottomWall;
+
+      if (isWall) {
+        ctx.fillStyle = isTopWall && ty === 0 ? palette.wallTop : palette.wall;
+        ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        if (ty === 1 && !isSideWall) {
+          ctx.fillStyle = palette.wallShadow;
+          ctx.fillRect(tx * TILE_SIZE, (ty + 1) * TILE_SIZE - 3, TILE_SIZE, 3);
+        }
+      } else {
+        ctx.fillStyle = (tx + ty) % 2 === 0 ? palette.floor1 : palette.floor2;
+        ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      }
+    }
+  }
+
+  // Grout lines
+  ctx.beginPath();
+  ctx.strokeStyle = dark ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.10)';
+  ctx.lineWidth = 1;
+  for (let tx = 2; tx < room.widthTiles - 1; tx++) {
+    ctx.moveTo(tx * TILE_SIZE, 2 * TILE_SIZE);
+    ctx.lineTo(tx * TILE_SIZE, (room.heightTiles - 1) * TILE_SIZE);
+  }
+  for (let ty = 2; ty < room.heightTiles - 1; ty++) {
+    ctx.moveTo(1 * TILE_SIZE, ty * TILE_SIZE);
+    ctx.lineTo((room.widthTiles - 1) * TILE_SIZE, ty * TILE_SIZE);
+  }
+  ctx.stroke();
+
+  drawNorthWallWindows(ctx, palette, room.widthTiles);
+}
+
+function drawServerRoomBackground(ctx: CanvasRenderingContext2D, room: RoomConfig, dark: boolean): void {
+  const p = dark ? SERVER_ROOM_DARK_PALETTE : SERVER_ROOM_LIGHT_PALETTE;
+  const W = room.widthTiles * TILE_SIZE;
+  const H = room.heightTiles * TILE_SIZE;
+
+  // Fill base floor
+  ctx.fillStyle = p.floor1;
+  ctx.fillRect(0, 0, W, H);
+
+  // Steel panel grid — alternating rows every 2 tiles
+  for (let ty = 2; ty < room.heightTiles - 1; ty++) {
+    ctx.fillStyle = ty % 2 === 0 ? p.floor1 : p.floor2;
+    ctx.fillRect(TILE_SIZE, ty * TILE_SIZE, (room.widthTiles - 2) * TILE_SIZE, TILE_SIZE);
+  }
+
+  // Bolt dot pattern on floor panels
+  ctx.fillStyle = p.floorGrout;
+  for (let ty = 2; ty < room.heightTiles - 1; ty++) {
+    for (let tx = 1; tx < room.widthTiles - 1; tx++) {
+      const bx = tx * TILE_SIZE + 3;
+      const by = ty * TILE_SIZE + 3;
+      ctx.fillRect(bx, by, 2, 2);
+      ctx.fillRect(bx + TILE_SIZE - 6, by, 2, 2);
+      ctx.fillRect(bx, by + TILE_SIZE - 6, 2, 2);
+      ctx.fillRect(bx + TILE_SIZE - 6, by + TILE_SIZE - 6, 2, 2);
+    }
+  }
+
+  // North wall (darkest)
+  ctx.fillStyle = p.wallTop;
+  ctx.fillRect(0, 0, W, 2 * TILE_SIZE);
+
+  // Side + bottom walls
+  ctx.fillStyle = p.wall;
+  ctx.fillRect(0, 0, TILE_SIZE, H);
+  ctx.fillRect(W - TILE_SIZE, 0, TILE_SIZE, H);
+  ctx.fillRect(0, H - TILE_SIZE, W, TILE_SIZE);
+
+  // LED strips on north wall — one strip at ty=1 bottom edge
+  const ledY = 2 * TILE_SIZE - 3;
+  ctx.save();
+  ctx.shadowColor = p.ledStrip;
+  ctx.shadowBlur = dark ? 12 : 6;
+  ctx.fillStyle = p.ledStrip;
+  ctx.fillRect(TILE_SIZE, ledY, (room.widthTiles - 2) * TILE_SIZE, 3);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // LED strips on side walls
+  for (const wallX of [TILE_SIZE, W - TILE_SIZE - 2]) {
+    ctx.save();
+    ctx.shadowColor = p.ledStrip;
+    ctx.shadowBlur = dark ? 10 : 5;
+    ctx.fillStyle = p.ledStrip;
+    ctx.fillRect(wallX, 2 * TILE_SIZE, 2, (room.heightTiles - 3) * TILE_SIZE);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  // Ambient green glow from ceiling
+  const grd = ctx.createLinearGradient(0, 0, 0, 4 * TILE_SIZE);
+  grd.addColorStop(0, p.ambientGlow);
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, 4 * TILE_SIZE);
+
+  // Wall shadow under north wall
+  ctx.fillStyle = dark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.18)';
+  ctx.fillRect(TILE_SIZE, 2 * TILE_SIZE, (room.widthTiles - 2) * TILE_SIZE, 4);
+}
+
+function drawCafeBackground(ctx: CanvasRenderingContext2D, room: RoomConfig, dark: boolean): void {
+  const p = dark ? CAFE_DARK_PALETTE : CAFE_LIGHT_PALETTE;
+  const W = room.widthTiles * TILE_SIZE;
+  const H = room.heightTiles * TILE_SIZE;
+
+  // Fill base wall color
+  ctx.fillStyle = p.wallTop;
+  ctx.fillRect(0, 0, W, H);
+
+  // Brick pattern on north wall (ty 0-1)
+  const brickRowH = Math.floor(TILE_SIZE * 0.55);
+  const brickW = TILE_SIZE * 2;
+  for (let by = 0; by < 2 * TILE_SIZE; by += brickRowH) {
+    const rowOffset = Math.floor(by / brickRowH) % 2 === 0 ? 0 : brickW / 2;
+    ctx.fillStyle = by % (brickRowH * 2) < brickRowH ? p.wall : p.wallShadow;
+    for (let bx = -brickW; bx < W; bx += brickW) {
+      ctx.fillRect(bx + rowOffset + 1, by + 1, brickW - 2, brickRowH - 2);
+    }
+  }
+
+  // Brick on side walls
+  ctx.fillStyle = p.wall;
+  ctx.fillRect(0, 2 * TILE_SIZE, TILE_SIZE, (room.heightTiles - 3) * TILE_SIZE);
+  ctx.fillRect(W - TILE_SIZE, 2 * TILE_SIZE, TILE_SIZE, (room.heightTiles - 3) * TILE_SIZE);
+
+  // Wood plank floor — horizontal planks per tile row, alternating shades
+  const plankH = TILE_SIZE;
+  for (let ty = 2; ty < room.heightTiles - 1; ty++) {
+    const shade = ty % 3;
+    ctx.fillStyle = shade === 0 ? p.floor1 : shade === 1 ? p.floor2 : p.floorGrout;
+    ctx.fillRect(TILE_SIZE, ty * plankH, (room.widthTiles - 2) * TILE_SIZE, plankH);
+  }
+
+  // Wood grain lines — horizontal per plank
+  ctx.strokeStyle = dark ? 'rgba(0,0,0,0.30)' : 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  for (let ty = 2; ty < room.heightTiles - 1; ty++) {
+    ctx.beginPath();
+    ctx.moveTo(TILE_SIZE, ty * TILE_SIZE);
+    ctx.lineTo((room.widthTiles - 1) * TILE_SIZE, ty * TILE_SIZE);
+    ctx.stroke();
+  }
+
+  // Wood plank vertical seams (short breaks every ~3 tiles, alternating row offset)
+  ctx.strokeStyle = dark ? 'rgba(0,0,0,0.20)' : 'rgba(0,0,0,0.08)';
+  for (let ty = 2; ty < room.heightTiles - 1; ty++) {
+    const offset = ty % 2 === 0 ? 0 : Math.floor(TILE_SIZE * 1.5);
+    for (let sx = TILE_SIZE + offset; sx < (room.widthTiles - 1) * TILE_SIZE; sx += TILE_SIZE * 3) {
+      ctx.beginPath();
+      ctx.moveTo(sx, ty * TILE_SIZE + 2);
+      ctx.lineTo(sx, (ty + 1) * TILE_SIZE - 2);
+      ctx.stroke();
+    }
+  }
+
+  // Bottom wall / baseboard
+  ctx.fillStyle = p.wallTop;
+  ctx.fillRect(0, (room.heightTiles - 1) * TILE_SIZE, W, TILE_SIZE);
+
+  // Baseboard trim strip
+  ctx.fillStyle = p.wallShadow;
+  ctx.fillRect(TILE_SIZE, (room.heightTiles - 1) * TILE_SIZE, (room.widthTiles - 2) * TILE_SIZE, 4);
+
+  // Warm windows on north wall
+  drawCafeWindows(ctx, p, room.widthTiles);
+
+  // Warm ambient glow from ceiling
+  const grd = ctx.createLinearGradient(0, 0, 0, 5 * TILE_SIZE);
+  grd.addColorStop(0, p.warmGlow);
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, 5 * TILE_SIZE);
+
+  // Shadow under north wall
+  ctx.fillStyle = dark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.20)';
+  ctx.fillRect(TILE_SIZE, 2 * TILE_SIZE, (room.widthTiles - 2) * TILE_SIZE, 5);
+}
+
+function drawCafeWindows(
+  ctx: CanvasRenderingContext2D,
+  palette: typeof CAFE_LIGHT_PALETTE,
+  widthTiles: number,
+): void {
+  for (const wx of [4, 14, 22]) {
+    if (wx + WIN_TW >= widthTiles - 1) continue;
+    const px = wx * TILE_SIZE;
+    const py = 0;
+    const pw = WIN_TW * TILE_SIZE;
+    const ph = WIN_TH * TILE_SIZE;
+
+    // Warm sky gradient
+    const skyGrad = ctx.createLinearGradient(px, py, px, py + ph);
+    skyGrad.addColorStop(0, palette.windowSkyTop);
+    skyGrad.addColorStop(1, palette.windowSkyBot);
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(px + 2, py + 2, pw - 4, ph - 4);
+
+    ctx.fillStyle = palette.windowGlass;
+    ctx.fillRect(px + 2, py + 2, pw - 4, ph - 4);
+
+    // Arch outline
+    ctx.strokeStyle = palette.windowFrame;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(px + pw / 2, py + ph, pw / 2 - 2, Math.PI, 0);
+    ctx.stroke();
+    ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+
+    // Warm sun ray
+    const rayGrad = ctx.createLinearGradient(px, py + ph, px, py + ph + 5 * TILE_SIZE);
+    rayGrad.addColorStop(0, 'rgba(255,160,30,0.18)');
+    rayGrad.addColorStop(1, 'rgba(255,160,30,0)');
+    ctx.fillStyle = rayGrad;
+    ctx.fillRect(px + 2, py + ph, pw - 4, 5 * TILE_SIZE);
+  }
+}
 
 function drawNorthWallWindows(
   ctx: CanvasRenderingContext2D,
@@ -210,15 +409,19 @@ function drawFurniture(ctx: CanvasRenderingContext2D, f: Furniture, cache: Sprit
   ctx.drawImage(sprite, px, py, rw, rh);
 }
 
-function drawMonitorGlow(ctx: CanvasRenderingContext2D, deskX: number, deskY: number): void {
+function drawMonitorGlow(ctx: CanvasRenderingContext2D, deskX: number, deskY: number, theme: RoomConfig['renderTheme'] = 'office'): void {
   const sx = deskX + DESK_MON_X;
   const sy = deskY + DESK_MON_Y;
 
+  const color = theme === 'serverRoom' ? '#00ff88'
+              : theme === 'cafe'       ? '#ffcc44'
+              :                          '#3ae0a0';
+
   ctx.save();
-  ctx.shadowColor = '#3ae0a0';
+  ctx.shadowColor = color;
   ctx.shadowBlur = 18;
   ctx.globalAlpha = 0.55;
-  ctx.fillStyle = '#3ae0a0';
+  ctx.fillStyle = color;
   ctx.fillRect(sx, sy, DESK_MON_W, DESK_MON_H);
   ctx.shadowBlur = 0;
   ctx.shadowColor = '';

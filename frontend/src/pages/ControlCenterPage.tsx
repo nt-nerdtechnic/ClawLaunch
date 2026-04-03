@@ -6,9 +6,11 @@ import {
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
   Pencil, Save, X, Zap, Bell, BellOff, Wrench,
+  FileText, MessageSquare,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
+import { ErrorLogDialog } from '../components/dialogs/ErrorLogDialog';
 import type { CronSchedule, CronJob } from '../types/cron';
 import { useStore } from '../store';
 import { ConfigService } from '../services/configService';
@@ -246,8 +248,41 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ name: string; agentId: string; model: string; intervalMin: number; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
+  const [logErrorJob, setLogErrorJob] = useState<CronJob | null>(null);
+
+  // Chat actions
+  const setChatOpen = useStore(s => s.setChatOpen);
+  const setActiveChatAgent = useStore(s => s.setActiveChatAgent);
+  const setActiveChatSession = useStore(s => s.setActiveChatSession);
+  const addChatMessage = useStore(s => s.addChatMessage);
 
   const { summaries: allAgents } = usePixelOfficeAgents();
+
+  const openChatToFix = (job: CronJob) => {
+    if (!job) return;
+    
+    // 1. 切換 Agent
+    setActiveChatAgent(job.agentId || 'main');
+    
+    // 2. 設定會話 Key (與 cron 系列一致)
+    const sessionKey = `agent:${job.agentId || 'main'}:cron:${job.id}`;
+    setActiveChatSession(sessionKey);
+    
+    // 3. 打開對話框
+    setChatOpen(true);
+    
+    // 4. 發送診斷 Prompt
+    const prompt = `【任務故障診斷】\n任務名稱：${job.name}\n任務 ID：${job.id}\n錯誤內容：\n"""\n${job.state?.lastError || '未知錯誤'}\n"""\n\n這項排程任務執行失敗了。請幫我分析以上錯誤原因，並提供具體的修復建議。如果是配置問題，請告訴我該如何調整；如果是環境問題，請指導我排除。`;
+    
+    addChatMessage({
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: prompt,
+      sessionKey,
+      agentId: job.agentId || 'main',
+      createdAt: Date.now(),
+    });
+  };
 
   // 從 runtimeProfile 偵測已綁定 bot token 的頻道
   const configuredBotChannels = useMemo(() => {
@@ -1016,21 +1051,38 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         {/* 執行結果與錯誤修復整合標籤 */}
                         {!isCurrentlyRunning && job.state?.lastRunAtMs && (
                           (hasError || job.state?.lastStatus === 'error') ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); void fixAndRetry(job.id); }}
-                              disabled={fixingJobIds.has(job.id)}
-                              title={job.state?.lastError || t('controlCenter.cronJobs.fixAndRetry')}
-                              className="shrink-0 flex items-center group transition-all active:scale-95 disabled:opacity-60 disabled:active:scale-100"
-                            >
+                            <div className="shrink-0 flex items-center group transition-all active:scale-95 disabled:opacity-60 disabled:active:scale-100">
                               <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-l-md border-y border-l bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/20 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/40 transition-colors text-[9px] font-bold">
                                 <AlertTriangle size={8} />
                                 <span>{t('controlCenter.cronJobs.lastFail')} {job.state?.consecutiveErrors ? `(${job.state.consecutiveErrors})` : ''}</span>
                               </div>
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-r-md border bg-rose-500 text-white border-rose-500 group-hover:bg-rose-600 transition-colors shadow-sm text-[9px] font-bold">
+                              {/* 查看 Log 按鈕 */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setLogErrorJob(job); }}
+                                title="查看詳細錯誤日誌"
+                                className="px-1 py-0.5 border-y border-l bg-rose-50 dark:bg-rose-950/30 text-rose-500 border-rose-200 dark:border-rose-800/20 hover:bg-rose-100 dark:hover:bg-white/10 transition-colors"
+                              >
+                                <FileText size={8} />
+                              </button>
+                              {/* 對話修復按鈕 */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openChatToFix(job); }}
+                                title="開啟 Agent 對話進行故障診斷"
+                                className="px-1 py-0.5 border-y border-l bg-rose-50 dark:bg-rose-950/30 text-sky-500 border-rose-200 dark:border-rose-800/20 hover:bg-rose-100 dark:hover:bg-white/10 transition-colors"
+                              >
+                                <MessageSquare size={8} />
+                              </button>
+                              {/* 快速修復按鈕 */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); void fixAndRetry(job.id); }}
+                                disabled={fixingJobIds.has(job.id)}
+                                title={t('controlCenter.cronJobs.fixAndRetry')}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded-r-md border bg-rose-500 text-white border-rose-500 group-hover:bg-rose-600 transition-colors shadow-sm text-[9px] font-bold disabled:opacity-50"
+                              >
                                 <Wrench size={8} className={fixingJobIds.has(job.id) ? 'animate-spin' : ''} />
                                 <span>{fixingJobIds.has(job.id) ? t('controlCenter.cronJobs.fixing') : t('controlCenter.cronJobs.fix')}</span>
-                              </div>
-                            </button>
+                              </button>
+                            </div>
                           ) : job.state?.lastStatus === 'ok' ? (
                             <span className="shrink-0 flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40">
                               <CheckCircle size={8} />
@@ -1638,6 +1690,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         onConfirm={() => { deleteConfirm?.onConfirm(); setDeleteConfirm(null); }}
         t={t}
       />
+
+      {logErrorJob && (
+        <ErrorLogDialog
+          jobName={logErrorJob.name}
+          errorLog={logErrorJob.state?.lastError || ''}
+          onClose={() => setLogErrorJob(null)}
+        />
+      )}
     </div>
   );
 };

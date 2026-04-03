@@ -312,11 +312,9 @@
     },
     "scenes": {
       "switchScene": "Switch Scene",
-      "soon": "Soon",
-      "default": "Default Office",
-      "procedural": "Procedural",
-      "night": "Night Office",
-      "cafe": "Café"
+      "mainHall": "Main Hall",
+      "smallRoom": "Small Room",
+      "openPlan": "Open Plan"
     }
   },
   "chat": {
@@ -1302,6 +1300,11 @@
       "desc": "Commands will run in a separate terminal. Press Enter to close.",
       "securityAudit": "Security Audit (Autofix)"
     },
+    "sections": {
+      "gatewayPort": "Gateway Port",
+      "cronSettings": "Cron Settings",
+      "gatewayAndModel": "Gateway & Model"
+    },
     "update": {
       "title": "OpenClaw Core Update",
       "currentVersion": "Current Version:",
@@ -1337,6 +1340,11 @@
       "maxConcurrentRunsHelp": "Maximum number of cron jobs that can run simultaneously (cron.maxConcurrentRuns in openclaw.json). At 4 concurrent jobs running, load is approximately 4 / maxConcurrentRuns × 100%."
     },
     "providers": {
+      "keyLabels": {
+        "botToken": "Bot Token",
+        "webhookUrl": "Webhook URL",
+        "channelAccessToken": "Channel Access Token"
+      },
       "telegram": {
         "desc": "Send/Receive via Bot",
         "placeholder": "Enter Telegram Bot Token"
