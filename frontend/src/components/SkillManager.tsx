@@ -220,9 +220,11 @@ export function SkillManager() {
   }, [setCoreSkills, setWorkspaceSkills, t]);
 
   useEffect(() => {
-    // Prioritize data detected during App.tsx initialization; trigger only if completely missing and not currently detecting
+    // 優先使用 App.tsx 初始化時偵測到的資料；僅在完全缺失且未偵測中時觸發重整
     if (coreSkills.length === 0 && workspaceSkills.length === 0) {
       rescan();
+    } else {
+      setInitialLoading(false);
     }
   }, [coreSkills.length, workspaceSkills.length, rescan]);
 
