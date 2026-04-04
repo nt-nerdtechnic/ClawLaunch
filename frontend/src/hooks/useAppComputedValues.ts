@@ -54,12 +54,26 @@ export function useAppComputedValues({
 
   const fallbackModelOptions: ModelOptionGroup[] = useMemo(
     () => (effectiveAuthorizedProviders.length > 0
-      ? effectiveAuthorizedProviders
-          .map((provider) => {
-            const entry = PROVIDER_MODEL_CATALOGUE[provider.toLowerCase()];
-            return entry ? { provider: provider.toLowerCase(), group: entry.label, models: entry.models } : null;
-          })
-          .filter(Boolean) as ModelOptionGroup[]
+      ? Array.from(
+          new Map(
+            effectiveAuthorizedProviders
+              .map((provider) => {
+                const normalized = provider.toLowerCase();
+                const aliases = [normalized, ...(PROVIDER_ALIAS_MAP[normalized] || [])];
+                let entry: { label: string; models: string[] } | undefined;
+                let matchedKey = normalized;
+                for (const alias of aliases) {
+                  if (PROVIDER_MODEL_CATALOGUE[alias]) {
+                    entry = PROVIDER_MODEL_CATALOGUE[alias];
+                    matchedKey = alias;
+                    break;
+                  }
+                }
+                return entry ? [matchedKey, { provider: matchedKey, group: entry.label, models: entry.models }] as const : null;
+              })
+              .filter((x): x is [string, ModelOptionGroup] => x !== null)
+          ).values()
+        )
       : Object.entries(PROVIDER_MODEL_CATALOGUE).map(([provider, entry]) => ({ provider, group: entry.label, models: entry.models }))),
     [effectiveAuthorizedProviders]
   );

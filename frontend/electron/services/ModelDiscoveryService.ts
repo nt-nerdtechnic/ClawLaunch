@@ -123,7 +123,6 @@ export class ModelDiscoveryService {
       let models: string[] = [];
       switch (normalizedProvider) {
         case 'openai':
-        case 'openai-codex':
           models = await this.fetchOpenAiCompatibleModels('openai', key);
           break;
         case 'deepseek':
@@ -173,8 +172,7 @@ export class ModelDiscoveryService {
       'minimax-portal': 'minimax',
       'google-gemini-cli': 'google',
       'google-gemini': 'google',
-      'gemini': 'gemini',
-      'openai-codex': 'openai-codex',
+      'openai-codex': 'openai',
       'qwen-portal': 'qwen',
     };
     return aliasMap[provider] || provider;
