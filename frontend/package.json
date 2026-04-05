@@ -44,6 +44,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cronstrue": "^3.14.0",
+    "cross-env": "^10.1.0",
     "framer-motion": "^12.35.2",
     "i18next": "^25.8.18",
     "i18next-browser-languagedetector": "^8.2.1",
@@ -55,8 +56,8 @@
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
-    "zustand": "^5.0.11",
-    "cross-env": "^10.1.0"
+    "ws": "^8.20.0",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -67,6 +68,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/ui": "^4.1.2",
     "autoprefixer": "^10.4.27",

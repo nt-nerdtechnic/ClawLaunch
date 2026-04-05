@@ -2,6 +2,7 @@ import { ipcMain, app } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
+import { WebSocket } from 'ws';
 import { resolveOpenClawRuntime, isGatewayOnlineFromStatus } from '../services/openclaw-runtime.js';
 import { t } from '../utils/i18n.js';
 import { extractCronDisplayNameFromText, extractMessageText, deriveSessionDisplayName, extractRunIdFromSendPayload } from '../utils/chat-helpers.js';
@@ -13,6 +14,8 @@ const HOME = (() => { try { return app.getPath('home'); } catch { return process
 const TAIL_BYTES = 8192;
 async function readLastJsonlMessage(filePath: string): Promise<{ lastMessage: string; lastTimestamp: string }> {
   let fd: fsSync.promises.FileHandle | null = null;
+  let lastMessage = '';
+  let lastTimestamp = '';
   try {
     fd = await fs.open(filePath, 'r');
     const stat = await fd.stat();
@@ -26,8 +29,6 @@ async function readLastJsonlMessage(filePath: string): Promise<{ lastMessage: st
     // Split into complete lines (skip the first partial line if we didn't start at byte 0)
     const lines = chunk.split(/\n/);
     const start = offset > 0 ? 1 : 0; // first element may be a partial line
-    let lastMessage = '';
-    let lastTimestamp = '';
     for (let i = lines.length - 1; i >= start; i--) {
       const line = lines[i].trim();
       if (!line) continue;
@@ -99,48 +100,49 @@ class GatewayWSClient {
     this.connectNonce = null;
     this.connectSent = false;
 
-    const WS = (globalThis as Record<string, unknown>).WebSocket as (new (url: string) => WebSocket) | undefined;
-    if (!WS) {
-      this._emit('[gateway-ws] WebSocket not available in this environment\n', 'stderr');
-      this.onDisconnected?.();
-      return;
-    }
-
     // Diagnostic log
     this._emit(`[gateway-ws] attempting connection to ${wsUrl}...\n`, 'stdout');
 
-    const ws: WebSocket = new WS(wsUrl);
-    this.ws = ws;
+    try {
+      const ws = new WebSocket(wsUrl, {
+        handshakeTimeout: 5000,
+      });
+      this.ws = ws;
 
-    ws.addEventListener('open', () => {
-      this._emit('[gateway-ws] socket opened, waiting for handshake...\n', 'stdout');
-      this.connectTimer = setTimeout(() => { void this.sendConnect(); }, 500);
-    });
+      ws.on('open', () => {
+        this._emit('[gateway-ws] socket opened, waiting for handshake...\n', 'stdout');
+        this.connectTimer = setTimeout(() => { void this.sendConnect(); }, 200);
+      });
 
-    ws.addEventListener('message', (event: MessageEvent) => {
-      let frame: unknown;
-      try { frame = JSON.parse(String(event.data)); } catch { return; }
-      this.handleFrame(frame);
-    });
+      ws.on('message', (data) => {
+        let frame: unknown;
+        try { frame = JSON.parse(data.toString()); } catch { return; }
+        this.handleFrame(frame);
+      });
 
-    ws.addEventListener('close', () => {
-      if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
-      this.ws = null;
-      this.rejectAllPending('WebSocket disconnected');
+      ws.on('close', (code, reason) => {
+        this._emit(`[gateway-ws] socket closed (code: ${code}, reason: ${reason.toString()})\n`, 'stderr');
+        if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+        this.ws = null;
+        this.rejectAllPending('WebSocket disconnected');
+        this.onDisconnected?.();
+      });
+
+      ws.on('error', (err) => {
+        this._emit(`[gateway-ws] socket error: ${err.message}\n`, 'stderr');
+        if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+      });
+    } catch (e) {
+      this._emit(`[gateway-ws] initialization failed: ${(e as Error).message}\n`, 'stderr');
       this.onDisconnected?.();
-    });
-
-    ws.addEventListener('error', (err) => {
-      if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
-      this._emit(`[gateway-ws] socket error: ${String((err as ErrorEvent)?.message || err)}\n`, 'stderr');
-    });
+    }
   }
 
   disconnect(): void {
     if (this.connectTimer !== null) { clearTimeout(this.connectTimer); this.connectTimer = null; }
     const ws = this.ws;
     this.ws = null;
-    try { (ws as WebSocket)?.close(); } catch {}
+    try { ws?.terminate(); } catch {}
     this.rejectAllPending('Client disconnected');
   }
 
@@ -173,7 +175,7 @@ class GatewayWSClient {
 
   get isConnected(): boolean {
     if (!this.ws) return false;
-    return this.ws.readyState === 1;
+    return this.ws.readyState === WebSocket.OPEN;
   }
 
   private async sendConnect(): Promise<void> {
@@ -186,17 +188,12 @@ class GatewayWSClient {
       maxProtocol: 3,
       client: {
         id: 'cli',
-        version: app.getVersion(),
+        version: '1.0.0',
         platform: process.platform,
         mode: 'cli',
       },
-      role: 'admin',
-      scopes: [
-        'operator.admin', 'operator.approvals', 'operator.write', 'operator:*',
-        'chat.write', 'chat.send', 'chat.*',
-        'message.send', 'message:send',
-        'write', 'admin', '*'
-      ],
+      role: 'operator',
+      scopes: ['*'],
       caps: ['chat.stream', 'chat.buttons', 'chat.history', 'chat.thinking', 'chat.tools'],
       auth: this.token ? { token: this.token } : undefined,
     };
@@ -206,7 +203,7 @@ class GatewayWSClient {
       this.onConnected?.();
     } catch (e) {
       this._emit(`[gateway-ws] connect request rejected: ${e instanceof Error ? e.message : String(e)}\n`, 'stderr');
-      (this.ws as WebSocket)?.close(4008, 'connect failed');
+      this.ws?.close(4008, 'connect failed');
     }
   }
 
@@ -303,7 +300,7 @@ async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: 
     return { ok: false, error: `Invalid gateway port: ${gatewayPort}` };
   }
 
-  const wsUrl = `ws://127.0.0.1:${gatewayPort}`;
+  const wsUrl = `ws://localhost:${gatewayPort}`;
   ctx.emitShellStdout(`[gateway-ws] connecting to ${wsUrl} (using port from openclaw.json)${gatewayToken ? ' (with token)' : ''}\n`, 'stdout');
 
   connectingPromise = new Promise<{ ok: boolean; error?: string }>((resolve) => {
