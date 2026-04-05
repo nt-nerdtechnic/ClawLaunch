@@ -106,11 +106,15 @@ class GatewayWSClient {
       return;
     }
 
+    // Diagnostic log
+    this._emit(`[gateway-ws] attempting connection to ${wsUrl}...\n`, 'stdout');
+
     const ws: WebSocket = new WS(wsUrl);
     this.ws = ws;
 
     ws.addEventListener('open', () => {
-      this.connectTimer = setTimeout(() => { void this.sendConnect(); }, 1000);
+      this._emit('[gateway-ws] socket opened, waiting for handshake...\n', 'stdout');
+      this.connectTimer = setTimeout(() => { void this.sendConnect(); }, 500);
     });
 
     ws.addEventListener('message', (event: MessageEvent) => {
@@ -182,7 +186,7 @@ class GatewayWSClient {
       maxProtocol: 3,
       client: {
         id: 'cli',
-        version: '1.0.0',
+        version: app.getVersion(),
         platform: process.platform,
         mode: 'cli',
       },
@@ -190,12 +194,10 @@ class GatewayWSClient {
       scopes: [
         'operator.admin', 'operator.approvals', 'operator.write', 'operator:*',
         'chat.write', 'chat.send', 'chat.*',
-        'operator:admin', 'operator:approvals', 'operator:write',
-        'chat:write', 'chat:send',
         'message.send', 'message:send',
         'write', 'admin', '*'
       ],
-      caps: ['chat.stream', 'chat.buttons', 'chat.history'],
+      caps: ['chat.stream', 'chat.buttons', 'chat.history', 'chat.thinking', 'chat.tools'],
       auth: this.token ? { token: this.token } : undefined,
     };
 
@@ -302,7 +304,7 @@ async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: 
   }
 
   const wsUrl = `ws://127.0.0.1:${gatewayPort}`;
-  ctx.emitShellStdout(`[gateway-ws] connecting to ${wsUrl}${gatewayToken ? ' (with token)' : ''}\n`, 'stdout');
+  ctx.emitShellStdout(`[gateway-ws] connecting to ${wsUrl} (using port from openclaw.json)${gatewayToken ? ' (with token)' : ''}\n`, 'stdout');
 
   connectingPromise = new Promise<{ ok: boolean; error?: string }>((resolve) => {
     const client = new GatewayWSClient();
@@ -319,17 +321,17 @@ async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: 
           ctx.emitShellStdout('[gateway-ws] disconnected\n', 'stderr');
           ctx.sendToRenderer('openclaw:gateway.status', { connected: false });
         };
-        ctx.emitShellStdout('[gateway-ws] connected\n', 'stdout');
+        ctx.emitShellStdout('[gateway-ws] connected successfully!\n', 'stdout');
         ctx.sendToRenderer('openclaw:gateway.status', { connected: true });
       } else {
-        ctx.emitShellStdout(`[gateway-ws] failed: ${result.error}\n`, 'stderr');
+        ctx.emitShellStdout(`[gateway-ws] failed to connect to ${wsUrl}: ${result.error}\n`, 'stderr');
         client.disconnect();
       }
       resolve(result);
     };
 
     const timer = setTimeout(() => {
-      settle({ ok: false, error: 'WebSocket connection timeout (15s)' });
+      settle({ ok: false, error: `Connection timeout after 15s (Check if OpenClaw is running on port ${gatewayPort})` });
     }, 15000);
 
     client.onConnected = () => {
@@ -339,7 +341,7 @@ async function ensureGatewayWsConnected(ctx: ChatHandlerContext): Promise<{ ok: 
 
     client.onDisconnected = () => {
       clearTimeout(timer);
-      settle({ ok: false, error: `WebSocket connection refused (port ${gatewayPort})` });
+      settle({ ok: false, error: `Connection refused. Please ensure OpenClaw core is active and listening on port ${gatewayPort}` });
     };
 
     client.connect(wsUrl, gatewayToken || undefined);
@@ -422,7 +424,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       preview: String(request.message || '').trim().slice(0, 140),
     });
 
-    const emitChunk = (payload: { delta?: string; done?: boolean; state?: string; error?: string }) => {
+    const emitChunk = (payload: { delta?: string; done?: boolean; state?: string; error?: string; toolCall?: unknown }) => {
       ctx.sendToRenderer('openclaw:chat.chunk', {
         requestId: request.requestId,
         messageId,
@@ -430,6 +432,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
         done: payload.done,
         state: payload.state,
         error: payload.error,
+        toolCall: payload.toolCall,
         mode: 'gateway' as const,
         reason: '',
       });
@@ -448,6 +451,9 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       if (state === 'delta') {
         const delta = extractMessageText(p?.message);
         if (delta) emitChunk({ delta, state: 'delta' });
+      } else if (state === 'tool_use' || state === 'thinking') {
+        const toolCall = p?.toolCall || (p?.message as Record<string, unknown>)?.toolCall;
+        emitChunk({ state, toolCall });
       } else if (state === 'final') {
         unsubscribe();
         emitChunk({ done: true, state: 'final' });

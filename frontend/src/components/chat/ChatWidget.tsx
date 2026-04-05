@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, ChevronDown, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X } from 'lucide-react';
+import { Bot, Check, ChevronDown, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X, Settings2, Search, Paperclip } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { marked } from 'marked';
 import { useStore } from '../../store';
-import type { ChatMessage } from '../../store';
+import type { ChatMessage, ChatConfigOverrides } from '../../store';
 import { usePixelOfficeAgents } from '../pixel-office/hooks/usePixelOfficeAgents';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -352,10 +352,31 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
         delete requestMapRef.current[chunk.requestId];
         return;
       }
+      
+      const { patchChatMessage, updateToolCall } = useStore.getState();
+
+      if (chunk.toolCall) {
+        // OpenClaw toolCall might be `{ id, name, input, result, status }`
+        // or embedded differently. We assume a generic structure.
+        const tc = chunk.toolCall as Record<string, unknown>;
+        const tcId = String(tc.id || tc.toolCallId || 'unknown');
+        updateToolCall(messageId, {
+          id: tcId,
+          name: String(tc.name || 'unknown_tool'),
+          input: tc.input || tc.arguments as Record<string, unknown>,
+          output: tc.output || tc.result || tc.response as string,
+          status: (tc.status as 'pending' | 'success' | 'error') || 'pending'
+        });
+      }
+
+      if (chunk.state === 'thinking' || chunk.state === 'tool_use') {
+        patchChatMessage(messageId, { status: chunk.state });
+      }
+
       if (chunk.delta) {
         appendChatChunk(messageId, chunk.delta, chatActiveSessionKeyRef.current, chatActiveAgentIdRef.current);
       }
-      const isDone = chunk.done || (chunk.state && chunk.state !== 'delta');
+      const isDone = chunk.done || (chunk.state && chunk.state !== 'delta' && chunk.state !== 'thinking' && chunk.state !== 'tool_use');
       if (isDone) {
         completeChatMessage(messageId);
         delete requestMapRef.current[chunk.requestId];
@@ -556,23 +577,33 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               {!sessionLoading && ocSessions.map((s) => {
                 const isActive = s.sessionKey === chat.activeSessionKey && s.agentId === chat.activeAgentId;
                 const agentColor = agentOptions.find(a => a.id === s.agentId)?.color ?? '#94a3b8';
+                // Determine if the session is likely active/running
+                const isRunning = s.messageCount === -1 || (s.lastTimestamp && (Date.now() - new Date(s.lastTimestamp).getTime() < 300000));
+
                 return (
-                  <button key={`${s.agentId}/${s.sessionKey}`} type="button" onClick={() => handleSelectSession(s)} className={`mb-1 w-full rounded-xl border px-2.5 py-2 text-left transition-all ${isActive ? 'border-sky-300/70 bg-sky-50 dark:border-sky-700 dark:bg-sky-900/30' : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50 dark:bg-slate-900/60 dark:hover:border-slate-700 dark:hover:bg-slate-800/60'}`}>
+                  <button key={`${s.agentId}/${s.sessionKey}`} type="button" onClick={() => handleSelectSession(s)} className={`group mb-1.5 w-full rounded-xl border px-3 py-2.5 text-left transition-all ${isActive ? 'border-sky-300/70 bg-sky-50 shadow-sm dark:border-sky-700/50 dark:bg-sky-900/30' : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50 dark:bg-slate-900/40 dark:hover:border-slate-700/50 dark:hover:bg-slate-800/60'}`}>
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: agentColor }} />
-                          <span className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-200">{s.displayName || s.agentId}</span>
-                          {isActive && <span className="inline-flex items-center rounded bg-sky-500 px-1 py-0.5 text-[8px] font-bold text-white">✓</span>}
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            {isRunning && <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style={{ backgroundColor: agentColor }}></span>}
+                            <span className="relative inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: agentColor }}></span>
+                          </span>
+                          <span className={`truncate text-[11px] font-bold tracking-tight ${isActive ? 'text-sky-900 dark:text-sky-100' : 'text-slate-700 dark:text-slate-300'}`}>{s.displayName || s.agentId}</span>
+                          {isRunning && <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[8px] font-black uppercase tracking-tighter text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">Live</span>}
                         </div>
-                        <span className="mt-0.5 inline-flex max-w-full items-center rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[8px] text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500" title={s.sessionKey}><span className="truncate">{s.sessionKey}</span></span>
+                        <div className="mt-1 flex items-center gap-1">
+                          <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100/50 px-1.5 py-0.5 font-mono text-[8px] font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-500" title={s.sessionKey}><span className="truncate max-w-[80px]">{s.sessionKey}</span></span>
+                          <span className="text-[8px] text-slate-300 dark:text-slate-600">•</span>
+                          <span className="text-[8px] font-medium text-slate-400">{s.messageCount >= 0 ? s.messageCount : '—'} {t('chat.messageSuffix', '則')}</span>
+                        </div>
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-0.5">
-                        <span className="text-[8px] text-slate-400">{formatRelativeTime(s.lastTimestamp, t)}</span>
-                        <span className="text-[8px] text-slate-300 dark:text-slate-600">{s.messageCount >= 0 ? s.messageCount : '—'} {s.messageCount >= 0 && t('chat.messageSuffix', '則')}</span>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="text-[9px] font-semibold text-slate-400">{formatRelativeTime(s.lastTimestamp, t)}</span>
+                        {isActive && <div className="rounded-full bg-sky-500 p-0.5 text-white shadow-sm"><Check size={8} strokeWidth={4} /></div>}
                       </div>
                     </div>
-                    {s.lastMessage && <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">{s.lastMessage}</p>}
+                    {s.lastMessage && <p className={`mt-2 line-clamp-2 text-[10px] leading-relaxed ${isActive ? 'text-sky-700/80 dark:text-sky-300/80' : 'text-slate-500 dark:text-slate-400'}`}>{s.lastMessage}</p>}
                   </button>
                 );
               })}
@@ -598,6 +629,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.search', '搜尋會話')} aria-label={t('chat.search')}><Search size={14} /></button>
+              <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.config', '覆寫設定')} aria-label={t('chat.config')}><Settings2 size={14} /></button>
               <button type="button" onClick={() => { const newKey = crypto.randomUUID(); setActiveChatSession(newKey); resetChatMessages(); setSessionPanelOpen(false); }} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.sessions.new')} aria-label={t('chat.sessions.new')}><MessageSquarePlus size={16} /></button>
               <button type="button" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title={t('chat.close')} aria-label={t('chat.close')}><X size={16} /></button>
             </div>
@@ -621,7 +654,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             <button type="button" onClick={() => setSessionPanelOpen((v) => !v)} className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-4 text-left transition-colors ${sessionPanelOpen ? 'bg-sky-50/80 dark:bg-sky-900/20' : 'bg-slate-50/60 hover:bg-sky-50/60 dark:bg-slate-900/40 dark:hover:bg-sky-900/20'}`}><span className="text-[9px] text-slate-300 dark:text-slate-600">›</span><span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">{chat.activeSessionKey}</span><MessagesSquare size={10} className={`shrink-0 ${sessionPanelOpen ? 'text-sky-400' : 'text-slate-300 dark:text-slate-600'}`} /></button>
           </div>
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">{activeMessages.length === 0 && (<div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"><div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Bot size={14} /></div><p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p><p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p></div>)}<div className="space-y-2">{activeMessages.map((msg) => (<ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} />))}</div></div>
-          <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">{chat.runtimeMode === 'local' && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><WifiOff size={12} />{t('chat.fallbackLocal')}</div>)}{running && !chat.gatewayWsConnected && (<div className="mb-2 space-y-1"><div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400"><WifiOff size={12} /><span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span><button type="button" onClick={() => void handleManualReconnectGatewayWs()} disabled={reconnectingGatewayWs} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300" title={t('chat.retryWsConnect', '重試連線')} aria-label={t('chat.retryWsConnect', '重試連線')}><RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />{t('chat.retryWsConnect', '重試連線')}</button></div>{gatewayWsReconnectError && (<div className="text-[10px] text-rose-600 dark:text-rose-400">{t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}</div>)}</div>)}{!running && !chat.gatewayWsConnected && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><WifiOff size={12} />{t('chat.coreRequired')}</div>)}<div className="flex items-end gap-2"><textarea ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={t('chat.placeholder')} rows={1} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label={t('chat.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) { e.preventDefault(); void handleSend(); } }} /><div className="relative flex-none">{!chat.isStreaming ? (<button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || (!running && !chat.gatewayWsConnected)} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')} aria-label={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')}><Send size={16} />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>) : (<button type="button" onClick={() => void handleAbort()} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500" title={t('chat.stop')} aria-label={t('chat.stop')}><Square size={14} className="fill-current" />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>)}</div></div><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500"><span className="text-[9px] text-slate-300 dark:text-slate-700">{t('chat.commandHint', '/stop 停止 · /new 新對話')}</span><span>{t('chat.inputHint')}</span></div></div>
+          <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">{chat.runtimeMode === 'local' && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><WifiOff size={12} />{t('chat.fallbackLocal')}</div>)}{running && !chat.gatewayWsConnected && (<div className="mb-2 space-y-1"><div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400"><WifiOff size={12} /><span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span><button type="button" onClick={() => void handleManualReconnectGatewayWs()} disabled={reconnectingGatewayWs} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300" title={t('chat.retryWsConnect', '重試連線')} aria-label={t('chat.retryWsConnect', '重試連線')}><RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />{t('chat.retryWsConnect', '重試連線')}</button></div>{gatewayWsReconnectError && (<div className="text-[10px] text-rose-600 dark:text-rose-400">{t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}</div>)}</div>)}{!running && !chat.gatewayWsConnected && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><WifiOff size={12} />{t('chat.coreRequired')}</div>)}<div className="flex items-end gap-2"><button type="button" className="shrink-0 rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 mb-0.5" title={t('chat.attach', '上傳檔案')} aria-label={t('chat.attach')}><Paperclip size={18} /></button><textarea ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={t('chat.placeholder')} rows={1} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label={t('chat.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) { e.preventDefault(); void handleSend(); } }} /><div className="relative flex-none">{!chat.isStreaming ? (<button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || (!running && !chat.gatewayWsConnected)} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')} aria-label={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')}><Send size={16} />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>) : (<button type="button" onClick={() => void handleAbort()} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500" title={t('chat.stop')} aria-label={t('chat.stop')}><Square size={14} className="fill-current" />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>)}</div></div><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500"><span className="text-[9px] text-slate-300 dark:text-slate-700">{t('chat.commandHint', '/stop 停止 · /new 新對話')}</span><span>{t('chat.inputHint')}</span></div></div>
         </div>
       )}
     </div>
@@ -698,6 +731,11 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
   const isSystem = msg.role === 'system';
   const [copied, setCopied] = useState(false);
   const [spoilerRevealed, setSpoilerRevealed] = useState(false);
+  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+
+  const toggleTool = (toolId: string) => {
+    setExpandedTools(prev => ({ ...prev, [toolId]: !prev[toolId] }));
+  };
 
   const handleCopy = useCallback(async () => {
     try {
@@ -729,8 +767,8 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
   // System message
   if (isSystem) {
     return (
-      <div className="flex justify-center py-1">
-        <span className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+      <div className="flex justify-center py-1.5">
+        <span className="rounded-full border border-slate-200 bg-slate-100/80 px-4 py-1 text-[10px] font-medium tracking-tight text-slate-500 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
           {msg.content}
         </span>
       </div>
@@ -738,23 +776,78 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
   }
 
   return (
-    <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`relative max-w-[92%] rounded-2xl border px-3 py-2.5 text-sm leading-relaxed shadow-sm sm:max-w-[88%] ${
+    <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+      <div className={`relative max-w-[92%] rounded-2xl border px-3.5 py-3 text-[13px] leading-relaxed shadow-sm transition-all sm:max-w-[85%] ${
         isUser
-          ? 'border-sky-500/70 bg-gradient-to-br from-sky-500 to-sky-600 text-white'
-          : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+          ? 'border-sky-500/50 bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-sky-500/10'
+          : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700/50 dark:bg-slate-900 dark:text-slate-200'
       }`}>
+
+        {/* Status Indicator (Thinking / Tool Use) */}
+        {!isUser && (msg.status === 'thinking' || msg.status === 'tool_use') && (!msg.toolCalls || msg.toolCalls.length === 0) && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-50/50 px-2 py-1.5 text-[11px] font-semibold text-sky-600 dark:bg-slate-800/50 dark:text-sky-400">
+            <RefreshCw size={12} className="animate-spin" />
+            <span>{msg.status === 'thinking' ? 'AI 正在思考中...' : '正在準備執行工具...'}</span>
+          </div>
+        )}
+
+        {/* Tool Calls Rendering */}
+        {!isUser && msg.toolCalls && msg.toolCalls.length > 0 && (
+          <div className="mb-3 space-y-1.5">
+            {msg.toolCalls.map(tc => {
+              const isExpanded = expandedTools[tc.id];
+              const isPending = tc.status === 'pending';
+              const isError = tc.status === 'error';
+              return (
+                <div key={tc.id} className="rounded-xl border border-slate-200/60 bg-slate-50/50 overflow-hidden dark:border-slate-800 dark:bg-slate-950/50">
+                  <button 
+                    type="button" 
+                    onClick={() => toggleTool(tc.id)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-medium transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
+                  >
+                    <div className="flex shrink-0 items-center justify-center">
+                      {isPending ? <RefreshCw size={12} className="animate-spin text-sky-500" /> 
+                       : isError ? <X size={12} className="text-rose-500" />
+                       : <Check size={12} className="text-emerald-500" />}
+                    </div>
+                    <span className="flex-1 truncate text-slate-600 dark:text-slate-300">
+                      {isPending ? `正在使用 ${tc.name}...` : isError ? `${tc.name} 執行失敗` : `已使用 ${tc.name}`}
+                    </span>
+                    <ChevronDown size={12} className={`shrink-0 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-slate-200/60 bg-slate-100/30 p-2.5 dark:border-slate-800 dark:bg-slate-900/30">
+                      <div className="space-y-2 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                        {tc.input && (
+                          <div>
+                            <div className="mb-1 font-bold text-slate-600 dark:text-slate-300">Input:</div>
+                            <pre className="whitespace-pre-wrap break-words rounded bg-white/50 p-2 dark:bg-slate-950/50">{typeof tc.input === 'object' ? JSON.stringify(tc.input, null, 2) : String(tc.input)}</pre>
+                          </div>
+                        )}
+                        {tc.output && (
+                          <div>
+                            <div className="mb-1 font-bold text-slate-600 dark:text-slate-300">Output:</div>
+                            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded bg-white/50 p-2 dark:bg-slate-950/50">{typeof tc.output === 'object' ? JSON.stringify(tc.output, null, 2) : String(tc.output)}</pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Copy button (assistant only, hover reveal) */}
         {!isUser && msg.status !== 'streaming' && msg.content && (
           <button
             type="button"
             onClick={() => void handleCopy()}
-            className="absolute right-2 top-2 rounded-md p-1 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            className="absolute -right-1 -top-1 translate-x-1/2 translate-y-1/2 rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 opacity-0 shadow-sm transition-all group-hover:opacity-100 hover:text-sky-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-sky-400"
             title="Copy message"
-            aria-label="Copy message"
           >
-            {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+            {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
           </button>
         )}
 
@@ -762,16 +855,16 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
         {parsedPrefix ? (
           <>
             {/* Source badge row (Telegram/Slack platform prefix) */}
-            <div className="mb-1.5 flex flex-wrap items-center gap-1">
-              <span className="inline-flex items-center rounded-md bg-white/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-100">
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center rounded-md bg-white/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
                 {parsedPrefix.platform}
               </span>
-              <span className="text-[11px] font-semibold text-sky-50">{parsedPrefix.senderName}</span>
-              <span className="text-[9px] text-sky-200/70">{parsedPrefix.timestamp}</span>
+              <span className="text-[11px] font-bold text-sky-50">{parsedPrefix.senderName}</span>
+              <span className="text-[9px] opacity-70">{parsedPrefix.timestamp}</span>
             </div>
             <div className="whitespace-pre-wrap break-words">{parsedPrefix.body}</div>
             {parsedPrefix.messageId && (
-              <div className="mt-1 text-[9px] text-sky-200/50">#{parsedPrefix.messageId}</div>
+              <div className="mt-1.5 text-[8px] opacity-40">#{parsedPrefix.messageId}</div>
             )}
           </>
         ) : isUser ? (
@@ -779,7 +872,6 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
         ) : msg.status === 'streaming' && !msg.content ? (
           <TypingDots />
         ) : useTgHtml ? (
-          /* Telegram HTML mode */
           <div
             className={`tg-message-html break-words ${spoilerRevealed ? 'spoilers-revealed' : ''}`}
             dangerouslySetInnerHTML={{ __html: renderedTgHtml }}
@@ -788,24 +880,23 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
             }}
           />
         ) : (
-          /* Markdown mode */
           <div
-            className="prose-chat break-words"
+            className="prose-chat prose-slate dark:prose-invert max-w-none break-words"
             dangerouslySetInnerHTML={{ __html: renderedMd }}
           />
         )}
 
-        {/* ── Inline keyboard buttons (類 Telegram Inline Keyboard) ── */}
+        {/* ── Inline keyboard buttons ── */}
         {buttonRows.length > 0 && msg.status !== 'streaming' && (
-          <div className="mt-2.5 flex flex-col gap-1.5">
+          <div className="mt-3 flex flex-col gap-1.5">
             {buttonRows.map((row, ri) => (
-              <div key={ri} className="flex gap-1.5">
+              <div key={ri} className="flex flex-wrap gap-1.5">
                 {row.map((label, bi) => (
                   <button
                     key={bi}
                     type="button"
                     onClick={() => onButtonClick?.(label)}
-                    className="tg-kbd-btn flex-1 truncate rounded-xl border border-sky-300/70 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition-all hover:border-sky-400 hover:bg-sky-100 active:scale-95 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:border-sky-600 dark:hover:bg-sky-900/60"
+                    className="flex-1 min-w-[80px] truncate rounded-xl border border-sky-200 bg-sky-50/50 px-3 py-2 text-[11px] font-bold text-sky-700 transition-all hover:border-sky-400 hover:bg-sky-100 active:scale-95 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-300 dark:hover:border-sky-700"
                     title={label}
                   >
                     {label}
@@ -816,11 +907,12 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
           </div>
         )}
 
-        {/* ── Footer: timestamp + status indicator ── */}
-        <div className={`mt-1.5 flex items-center gap-1 text-[10px] ${isUser ? 'text-sky-100/90' : 'text-slate-400 dark:text-slate-500'}`}>
+        {/* ── Footer ── */}
+        <div className={`mt-2 flex items-center justify-end gap-1.5 text-[9px] font-medium tracking-tight ${isUser ? 'text-sky-100/80' : 'text-slate-400 dark:text-slate-500'}`}>
           <span>{formatTime(msg.createdAt)}</span>
           {msg.status === 'streaming' && msg.content && <StreamingIndicator />}
-          {msg.status === 'error' && <span className="text-rose-400">{msg.error}</span>}
+          {msg.status === 'error' && <span className="font-bold text-rose-500 dark:text-rose-400">⚠️ {msg.error}</span>}
+          {msg.status === 'done' && !isUser && <Check size={10} className="text-sky-400/70" />}
         </div>
       </div>
     </div>

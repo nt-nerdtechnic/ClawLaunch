@@ -38,25 +38,69 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       if (!configDir || !profileId) return { code: 1, stdout: '', stderr: 'Missing configPath or profileId', exitCode: 1 };
       if (!/^[A-Za-z0-9._:-]+$/.test(profileId)) return { code: 1, stdout: '', stderr: 'Invalid profileId', exitCode: 1 };
       const configFilePath = path.join(configDir, 'openclaw.json');
+
+      // Fix 3: backup openclaw.json before any destructive modification
+      try { await fs.copyFile(configFilePath, `${configFilePath}.bak`); } catch { /* first-time or missing, ignore */ }
+
       const configJson = (await loadJsonFile(configFilePath)) || {};
       let removedGlobal = false;
       const configAuth = configJson.auth as Record<string, unknown> | undefined;
       const configProfiles = configAuth?.profiles as Record<string, unknown> | undefined;
       if (configProfiles && Object.prototype.hasOwnProperty.call(configProfiles, profileId)) {
+        // Fix 2: if the removed profile is a minimax-portal type, also clean
+        // models.providers['minimax-portal'].apiKey and credentials/minimax.key
+        const removedProfileData = configProfiles[profileId] as Record<string, unknown> | undefined;
+        const removedProvider = String(removedProfileData?.provider || profileId.split(':')[0]).toLowerCase();
+        if (removedProvider === 'minimax-portal' || profileId.startsWith('minimax-portal:')) {
+          const configModels = configJson.models as Record<string, unknown> | undefined;
+          const configProviders = configModels?.providers as Record<string, unknown> | undefined;
+          if (configProviders && typeof configProviders['minimax-portal'] === 'object' && configProviders['minimax-portal']) {
+            const portal = configProviders['minimax-portal'] as Record<string, unknown>;
+            delete portal.apiKey;
+            // remove the whole entry if nothing meaningful remains (only baseUrl left)
+            const remainingKeys = Object.keys(portal).filter(k => k !== 'baseUrl' && k !== 'api');
+            if (remainingKeys.length === 0) delete configProviders['minimax-portal'];
+          }
+          try { await fs.unlink(path.join(configDir, 'credentials', 'minimax.key')); } catch { /* ignore if absent */ }
+        }
         delete configProfiles[profileId];
         removedGlobal = true;
       }
       if (removedGlobal) await saveJsonFile(configFilePath, configJson);
+
       const agentFiles = await getAgentAuthProfilePaths(configDir);
       let removedAgentFiles = 0;
       for (const authPath of agentFiles) {
         const parsed = (await loadJsonFile(authPath)) || {};
         const parsedProfiles = parsed.profiles as Record<string, unknown> | undefined;
+        let agentFileDirty = false;
+
         if (parsedProfiles && Object.prototype.hasOwnProperty.call(parsedProfiles, profileId)) {
           delete parsedProfiles[profileId];
-          await saveJsonFile(authPath, parsed);
+          agentFileDirty = true;
           removedAgentFiles += 1;
         }
+
+        // Fix 1: always clean lastGood / usageStats regardless of whether
+        // profiles[profileId] existed in this file — a stale lastGood entry
+        // can exist even when the profile was already absent from profiles.
+        const lastGood = parsed.lastGood as Record<string, unknown> | undefined;
+        if (lastGood) {
+          for (const provider of Object.keys(lastGood)) {
+            if (lastGood[provider] === profileId) {
+              delete lastGood[provider];
+              agentFileDirty = true;
+            }
+          }
+        }
+
+        const usageStats = parsed.usageStats as Record<string, unknown> | undefined;
+        if (usageStats && Object.prototype.hasOwnProperty.call(usageStats, profileId)) {
+          delete usageStats[profileId];
+          agentFileDirty = true;
+        }
+
+        if (agentFileDirty) await saveJsonFile(authPath, parsed);
       }
       return { code: 0, stdout: JSON.stringify({ removedGlobal, removedAgentFiles }), stderr: '', exitCode: 0 };
     } catch (e) {

@@ -247,7 +247,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [ctFilter, setCtFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ name: string; agentId: string; model: string; intervalMin: number; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; agentId: string; model: string; scheduleKind: 'every' | 'cron'; intervalMin: number; cronFreq: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'; cronMinute: number; cronHour: number; cronDow: number; cronDom: number; cronExpr: string; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
   const [logErrorJob, setLogErrorJob] = useState<CronJob | null>(null);
   const [fetchedLog, setFetchedLog] = useState<string | null>(null);
   const [isFetchingLog, setIsFetchingLog] = useState(false);
@@ -570,7 +570,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     }
   };
 
-  const updateCron = async (jobId: string, updates: { name?: string; agentId?: string; model?: string; everyMs?: number; timeoutSeconds?: number; delivery?: { mode: string; channel?: string; to?: string }; payloadMessage?: string }) => {
+  const updateCron = async (jobId: string, updates: { name?: string; agentId?: string; model?: string; everyMs?: number; scheduleExpr?: string; timeoutSeconds?: number; delivery?: { mode: string; channel?: string; to?: string }; payloadMessage?: string }) => {
     try {
       setError('');
       await execCmd(`cron:update ${JSON.stringify({ jobId, stateDir, ...updates })}`);
@@ -590,7 +590,38 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     });
   };
 
+  const parseCronExpr = (expr: string): { freq: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'; minute: number; hour: number; dow: number; dom: number } => {
+    const parts = expr.trim().split(/\s+/);
+    const isNum = (s: string) => /^\d+$/.test(s);
+    const def = { minute: 0, hour: 0, dow: 0, dom: 1 };
+    if (parts.length !== 5) return { freq: 'custom', ...def };
+    const [min, hr, dom, mon, dow] = parts;
+    if (isNum(min) && hr === '*' && dom === '*' && mon === '*' && dow === '*')
+      return { freq: 'hourly', minute: +min, hour: 0, dow: 0, dom: 1 };
+    if (isNum(min) && isNum(hr) && dom === '*' && mon === '*' && dow === '*')
+      return { freq: 'daily', minute: +min, hour: +hr, dow: 0, dom: 1 };
+    if (isNum(min) && isNum(hr) && dom === '*' && mon === '*' && isNum(dow))
+      return { freq: 'weekly', minute: +min, hour: +hr, dow: +dow, dom: 1 };
+    if (isNum(min) && isNum(hr) && isNum(dom) && mon === '*' && dow === '*')
+      return { freq: 'monthly', minute: +min, hour: +hr, dow: 0, dom: +dom };
+    return { freq: 'custom', ...def };
+  };
+
+  type EditDraftType = NonNullable<typeof editDraft>;
+  const buildCronExpr = (d: EditDraftType): string => {
+    switch (d.cronFreq) {
+      case 'hourly':  return `${d.cronMinute} * * * *`;
+      case 'daily':   return `${d.cronMinute} ${d.cronHour} * * *`;
+      case 'weekly':  return `${d.cronMinute} ${d.cronHour} * * ${d.cronDow}`;
+      case 'monthly': return `${d.cronMinute} ${d.cronHour} ${d.cronDom} * *`;
+      default:        return d.cronExpr;
+    }
+  };
+
   const startEditCron = (job: CronJob) => {
+    const scheduleKind: 'every' | 'cron' = job.schedule?.kind === 'cron' ? 'cron' : 'every';
+    const rawExpr = job.schedule?.expr || '';
+    const { freq, minute, hour, dow, dom } = parseCronExpr(rawExpr);
     const intervalMin = job.schedule?.everyMs ? Math.round(job.schedule.everyMs / 60000) : 10;
     const timeoutMin = job.payload?.timeoutSeconds ? Math.round(job.payload.timeoutSeconds / 60) : '';
     const existingTo = job.delivery?.to || '';
@@ -598,7 +629,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       name: job.name,
       agentId: job.agentId || 'main',
       model: job.payload?.model || '',
+      scheduleKind,
       intervalMin,
+      cronFreq: freq,
+      cronMinute: minute,
+      cronHour: hour,
+      cronDow: dow,
+      cronDom: dom,
+      cronExpr: freq === 'custom' ? rawExpr : '',
       timeoutMin,
       deliveryMode: job.delivery?.mode || 'none',
       deliveryChannel: job.delivery?.channel || '',
@@ -1208,18 +1246,118 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                                 ))}
                               </select>
                             </div>
-                            <div>
-                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">排程（分鐘）</label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={1440}
-                                value={editDraft.intervalMin}
-                                onChange={e => setEditDraft(d => d ? { ...d, intervalMin: Math.max(1, Number(e.target.value)) } : d)}
-                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
-                              />
+                            <div className={editDraft.scheduleKind === 'cron' ? 'col-span-3' : undefined}>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <label className="block text-[9px] font-bold text-slate-500">排程</label>
+                                <div className="flex items-center gap-0.5">
+                                  {(['every', 'cron'] as const).map(k => (
+                                    <button
+                                      key={k}
+                                      type="button"
+                                      onClick={() => setEditDraft(d => d ? { ...d, scheduleKind: k } : d)}
+                                      className={`px-1.5 py-0 text-[8px] font-bold rounded border transition-all ${
+                                        editDraft.scheduleKind === k
+                                          ? 'bg-violet-500 text-white border-violet-500'
+                                          : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700 hover:border-violet-300'
+                                      }`}
+                                    >
+                                      {k === 'every' ? '間隔' : 'Cron'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {editDraft.scheduleKind === 'every' ? (
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={1440}
+                                  value={editDraft.intervalMin}
+                                  onChange={e => setEditDraft(d => d ? { ...d, intervalMin: Math.max(1, Number(e.target.value)) } : d)}
+                                  className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                />
+                              ) : (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {/* 頻率 */}
+                                    <select
+                                      value={editDraft.cronFreq}
+                                      onChange={e => setEditDraft(d => d ? { ...d, cronFreq: e.target.value as typeof d.cronFreq } : d)}
+                                      className="text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                    >
+                                      <option value="hourly">每小時</option>
+                                      <option value="daily">每天</option>
+                                      <option value="weekly">每週</option>
+                                      <option value="monthly">每月</option>
+                                      <option value="custom">自訂</option>
+                                    </select>
+                                    {/* 週幾 */}
+                                    {editDraft.cronFreq === 'weekly' && (
+                                      <select
+                                        value={editDraft.cronDow}
+                                        onChange={e => setEditDraft(d => d ? { ...d, cronDow: Number(e.target.value) } : d)}
+                                        className="text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                      >
+                                        {['週日','週一','週二','週三','週四','週五','週六'].map((label, i) => (
+                                          <option key={i} value={i}>{label}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    {/* 幾號 */}
+                                    {editDraft.cronFreq === 'monthly' && (
+                                      <select
+                                        value={editDraft.cronDom}
+                                        onChange={e => setEditDraft(d => d ? { ...d, cronDom: Number(e.target.value) } : d)}
+                                        className="text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                      >
+                                        {Array.from({ length: 31 }, (_, i) => (
+                                          <option key={i + 1} value={i + 1}>{i + 1} 日</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    {/* 時 */}
+                                    {(editDraft.cronFreq === 'daily' || editDraft.cronFreq === 'weekly' || editDraft.cronFreq === 'monthly') && (
+                                      <select
+                                        value={editDraft.cronHour}
+                                        onChange={e => setEditDraft(d => d ? { ...d, cronHour: Number(e.target.value) } : d)}
+                                        className="text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                      >
+                                        {Array.from({ length: 24 }, (_, i) => (
+                                          <option key={i} value={i}>{String(i).padStart(2, '0')} 時</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    {/* 分 */}
+                                    {editDraft.cronFreq !== 'custom' && (
+                                      <select
+                                        value={editDraft.cronMinute}
+                                        onChange={e => setEditDraft(d => d ? { ...d, cronMinute: Number(e.target.value) } : d)}
+                                        className="text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                      >
+                                        {Array.from({ length: 60 }, (_, i) => (
+                                          <option key={i} value={i}>{String(i).padStart(2, '0')} 分</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    {/* 自訂原始表達式 */}
+                                    {editDraft.cronFreq === 'custom' && (
+                                      <input
+                                        type="text"
+                                        value={editDraft.cronExpr}
+                                        placeholder="0 10 * * 0"
+                                        onChange={e => setEditDraft(d => d ? { ...d, cronExpr: e.target.value } : d)}
+                                        className="flex-1 min-w-0 text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400 font-mono"
+                                      />
+                                    )}
+                                  </div>
+                                  {(() => {
+                                    const expr = buildCronExpr(editDraft);
+                                    try { return <p className="text-[9px] text-violet-500 truncate">{cronstrue.toString(expr, { locale: 'zh_TW' })}</p>; }
+                                    catch { return editDraft.cronFreq === 'custom' ? <p className="text-[9px] text-rose-400">格式無效</p> : null; }
+                                  })()}
+                                </div>
+                              )}
                             </div>
-                            <div>
+                            <div className={editDraft.scheduleKind === 'cron' ? 'col-span-1' : undefined}>
                               <label className="block text-[9px] font-bold text-slate-500 mb-0.5">逾時（分鐘）</label>
                               <input
                                 type="number"
@@ -1231,7 +1369,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                                 className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
                               />
                             </div>
-                            <div className="col-span-1" />
+                            {editDraft.scheduleKind !== 'cron' && <div className="col-span-1" />}
                           </div>
                           {/* 通知格式 */}
                           <div className="pt-1.5 border-t border-violet-50 dark:border-violet-900/20">
@@ -1326,7 +1464,9 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                                 name: editDraft.name,
                                 agentId: editDraft.agentId,
                                 ...(editDraft.model ? { model: editDraft.model } : { model: '' }),
-                                everyMs: editDraft.intervalMin * 60000,
+                                ...(editDraft.scheduleKind === 'cron'
+                                  ? { scheduleExpr: buildCronExpr(editDraft) }
+                                  : { everyMs: editDraft.intervalMin * 60000 }),
                                 ...(editDraft.timeoutMin !== '' ? { timeoutSeconds: editDraft.timeoutMin * 60 } : {}),
                                 delivery: {
                                   mode: editDraft.deliveryMode,

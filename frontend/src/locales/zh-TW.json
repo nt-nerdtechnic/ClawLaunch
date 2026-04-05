@@ -1447,11 +1447,40 @@
       "minimaxOauthCn": {
         "desc": "中國區平台 Token"
       },
+      "moonshot": {
+        "desc": "Moonshot 平台密鑰"
+      },
       "xai": {
         "desc": "xAI 平台密鑰"
+      },
+      "chutes": {
+        "desc": "去中心化平台授權"
+      },
+      "ollama": {
+        "desc": "本地 Ollama 服務"
+      },
+      "vllm": {
+        "desc": "自定義本地伺服器"
+      },
+      "qwen": {
+        "desc": "Qwen 通義千問密鑰"
       }
     },
     "channel": {
+      "management": "頻道通訊波段管理",
+      "desc": "為每個通訊頻道設置 Bot Token。Telegram 另支援配對管理。",
+      "configuredTokens": "已配置密鑰",
+      "noKeyNeeded": "{{name}} 無須密鑰",
+      "noKeyDesc": "此頻道採用帳號繫結模式整合，不需要 Bot Token。請參閱官方文件完成帳號授權。",
+      "applyingToken": "套用中...",
+      "appliedToken": "已套用",
+      "applyToken": "套用此 Token",
+      "telegramTokenHelp": "Telegram Token 亦可透過下方的全部儲存按鈕寫入",
+      "title": "通訊頻道配置 (Communication Channel)",
+      "platform": "頻道類型 (Platform)",
+      "token": "存取憑證 (Token / Key)",
+      "groupPolicy": "群組權限策略 (Group Policy)",
+      "groupAllowFrom": "允許的群組 ID (Allow From)",
       "groupPolicyOpen": "開放 (Open) - 允許所有私聊與群聊",
       "groupPolicyAllowlist": "白名單 (Allowlist) - 僅限指定群組",
       "groupPolicyNone": "關閉 (None) - 僅限私聊",

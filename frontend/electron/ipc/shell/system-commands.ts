@@ -382,9 +382,12 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
           const existingPayload = ((next['payload'] || job['payload'] || {}) as Record<string, unknown>);
           next['payload'] = { ...existingPayload, model: modelStr || undefined };
         }
-        if (payload.everyMs !== undefined) {
+        if (payload.scheduleExpr !== undefined) {
+          const expr = String(payload.scheduleExpr).trim();
+          if (expr) next['schedule'] = { kind: 'cron', expr, ...(payload.tz ? { tz: String(payload.tz) } : {}) };
+        } else if (payload.everyMs !== undefined) {
           const everyMs = Math.max(60000, Number(payload.everyMs));
-          next['schedule'] = { ...(job['schedule'] as Record<string, unknown>), everyMs };
+          next['schedule'] = { kind: 'every', everyMs };
         }
         if (payload.timeoutSeconds !== undefined) {
           const timeoutSeconds = Math.max(60, Number(payload.timeoutSeconds));
