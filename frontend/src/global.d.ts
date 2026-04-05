@@ -83,8 +83,8 @@ declare global {
       invokeChat: (request: OpenClawChatRequest) => Promise<OpenClawChatResult>;
       abortChat: (requestId: string) => Promise<{ success: boolean; error?: string }>;
       ensureGatewayWs: () => Promise<{ connected: boolean; error?: string }>;
-      listChatSessions: (payload?: { limit?: number; offset?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;
-      loadChatSession: (payload: { sessionKey: string; agentId: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
+      getGatewayInfo: () => Promise<{ baseUrl: string; token: string }>;
+      listChatSessions: (payload?: { limit?: number; offset?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;      loadChatSession: (payload: { sessionKey: string; agentId: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
       onChatChunk: (callback: (chunk: OpenClawChatChunk) => void) => () => void;
       onGatewayStatus: (callback: (status: { connected: boolean }) => void) => () => void;
       scanActiveSessions: (payload?: { activeMinutes?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;

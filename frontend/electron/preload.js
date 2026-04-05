@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanSessions: (payload) => ipcRenderer.invoke('usage:scan-sessions', payload),
   invokeChat: (request) => ipcRenderer.invoke('openclaw:chat.invoke', request),
   abortChat: (requestId) => ipcRenderer.invoke('openclaw:chat.abort', requestId),
-  ensureGatewayWs: () => ipcRenderer.invoke('openclaw:gateway.ws-ensure'),
+  getGatewayInfo: () => ipcRenderer.invoke('openclaw:gateway.info'),
   listChatSessions: (payload) => ipcRenderer.invoke('openclaw:sessions.list', payload ? JSON.stringify(payload) : undefined),
   loadChatSession: (payload) => ipcRenderer.invoke('openclaw:session.load', payload),
   listActivityEvents: (payload) => ipcRenderer.invoke('activity:events:list', payload ? JSON.stringify(payload) : undefined),

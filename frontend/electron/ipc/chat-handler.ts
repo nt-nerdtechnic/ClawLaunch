@@ -527,13 +527,16 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
     }
   });
 
-  ipcMain.handle('openclaw:gateway.ws-ensure', async () => {
-    const result = await ensureGatewayWsConnected(ctx);
-    return { connected: result.ok, error: result.error };
+  ipcMain.handle('openclaw:gateway.info', async () => {
+    const runtime = await resolveOpenClawRuntime();
+    return {
+      baseUrl: `http://localhost:${runtime.gatewayPort}`,
+      token: runtime.gatewayToken,
+    };
   });
 
   ipcMain.handle('openclaw:gateway.ws-status', () => {
-    return { connected: gwsClient?.isConnected ?? false };
+    return { connected: true }; // HTTP mode is always "connected" concept-wise
   });
 
   ipcMain.handle('openclaw:sessions.list', async (_event, payloadRaw?: string) => {

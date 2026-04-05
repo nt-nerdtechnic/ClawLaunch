@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { marked } from 'marked';
 import { useStore } from '../../store';
-import type { ChatMessage, ChatConfigOverrides } from '../../store';
+import type { ChatMessage } from '../../store';
 import { usePixelOfficeAgents } from '../pixel-office/hooks/usePixelOfficeAgents';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -263,16 +263,15 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   }, [setActiveChatAgent, setActiveChatSession, resetChatMessages, loadSessionHistory]);
 
   const handleManualReconnectGatewayWs = useCallback(async () => {
-    if (!window.electronAPI?.ensureGatewayWs) {
+    if (!window.electronAPI?.getGatewayInfo) {
       setGatewayWsReconnectError(t('chat.unavailable'));
       return;
     }
     setReconnectingGatewayWs(true);
     setGatewayWsReconnectError('');
     try {
-      const result = await window.electronAPI.ensureGatewayWs();
-      setGatewayWsConnected(result.connected);
-      if (!result.connected) setGatewayWsReconnectError(result.error || t('chat.wsDisconnected'));
+      const result = await window.electronAPI.getGatewayInfo();
+      setGatewayWsConnected(Boolean(result.baseUrl));
     } catch (e) {
       setGatewayWsReconnectError(e instanceof Error ? e.message : t('chat.errorGeneric'));
     } finally {
@@ -334,93 +333,12 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     [chat.messages, chat.activeSessionKey, chat.activeAgentId]
   );
 
-  const chatActiveSessionKeyRef = useRef(chat.activeSessionKey);
-  const chatActiveAgentIdRef = useRef(chat.activeAgentId);
   const chatIsOpenRef = useRef(chat.isOpen);
-  chatActiveSessionKeyRef.current = chat.activeSessionKey;
-  chatActiveAgentIdRef.current = chat.activeAgentId;
   chatIsOpenRef.current = chat.isOpen;
-
-  useEffect(() => {
-    if (!window.electronAPI?.onChatChunk) return;
-    const off = window.electronAPI.onChatChunk((chunk) => {
-      const messageId = requestMapRef.current[chunk.requestId] || chunk.messageId;
-      if (!messageId) return;
-      if (chunk.mode) setChatRuntimeMode(chunk.mode, chunk.reason || '');
-      if (chunk.error) {
-        markChatMessageError(messageId, chunk.error);
-        delete requestMapRef.current[chunk.requestId];
-        return;
-      }
-      
-      const { patchChatMessage, updateToolCall } = useStore.getState();
-
-      if (chunk.toolCall) {
-        // OpenClaw toolCall might be `{ id, name, input, result, status }`
-        // or embedded differently. We assume a generic structure.
-        const tc = chunk.toolCall as Record<string, unknown>;
-        const tcId = String(tc.id || tc.toolCallId || 'unknown');
-        updateToolCall(messageId, {
-          id: tcId,
-          name: String(tc.name || 'unknown_tool'),
-          input: tc.input || tc.arguments as Record<string, unknown>,
-          output: tc.output || tc.result || tc.response as string,
-          status: (tc.status as 'pending' | 'success' | 'error') || 'pending'
-        });
-      }
-
-      if (chunk.state === 'thinking' || chunk.state === 'tool_use') {
-        patchChatMessage(messageId, { status: chunk.state });
-      }
-
-      if (chunk.delta) {
-        appendChatChunk(messageId, chunk.delta, chatActiveSessionKeyRef.current, chatActiveAgentIdRef.current);
-      }
-      const isDone = chunk.done || (chunk.state && chunk.state !== 'delta' && chunk.state !== 'thinking' && chunk.state !== 'tool_use');
-      if (isDone) {
-        completeChatMessage(messageId);
-        delete requestMapRef.current[chunk.requestId];
-        if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
-          const preview = (chunk.delta || '').slice(0, 100).trim();
-          if (preview) {
-            const n = new Notification('OpenClaw Core', { body: preview, silent: false });
-            n.onclick = () => { window.focus(); };
-          }
-        }
-      }
-    });
-    return () => off();
-  }, [appendChatChunk, completeChatMessage, markChatMessageError, setChatRuntimeMode]);
-
-  useEffect(() => {
-    if (!window.electronAPI?.onGatewayStatus) return;
-    const off = window.electronAPI.onGatewayStatus((status) => {
-      setGatewayWsConnected(status.connected);
-    });
-    return () => off();
-  }, [setGatewayWsConnected]);
-
-  useEffect(() => {
-    if (!window.electronAPI?.ensureGatewayWs) return;
-    let cancelled = false;
-    const tryConnect = async () => {
-      if (cancelled || chat.gatewayWsConnected) return;
-      const result = await window.electronAPI.ensureGatewayWs();
-      if (!result.connected && !cancelled) {
-        setTimeout(() => { void tryConnect(); }, 5000);
-      }
-    };
-    void tryConnect();
-    return () => { cancelled = true; };
-  }, [chat.gatewayWsConnected]);
 
   useEffect(() => {
     if (chat.isOpen) clearChatUnread();
   }, [chat.isOpen, clearChatUnread]);
-
-  useEffect(() => {
-    if (chat.gatewayWsConnected) setGatewayWsReconnectError('');
-  }, [chat.gatewayWsConnected]);
 
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -456,17 +374,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     prevIsStreaming.current = chat.isStreaming;
   }, [chat.isStreaming, sessionPanelOpen, fetchSessions]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (sessionPanelOpen) { setSessionPanelOpen(false); return; }
-        if (chat.isOpen) setChatOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [chat.isOpen, sessionPanelOpen, setChatOpen]);
-
   const handleAbort = useCallback(async () => {
     if (!window.electronAPI?.abortChat) return;
     const pendingRequestIds = Object.keys(requestMapRef.current);
@@ -475,10 +382,31 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     await window.electronAPI.abortChat(latest);
   }, []);
 
+  const handleAbortLocal = useCallback(() => {
+    const controller = (window as any)._activeChatAbort;
+    if (controller) {
+      controller.abort();
+    } else {
+      void handleAbort(); // Fallback to backend abort
+    }
+  }, [handleAbort]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (sessionPanelOpen) { setSessionPanelOpen(false); return; }
+        if (chat.isStreaming) { handleAbortLocal(); return; }
+        if (chat.isOpen) setChatOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [chat.isOpen, sessionPanelOpen, chat.isStreaming, setChatOpen, handleAbortLocal]);
+
   const handleSend = useCallback(async (msgOverride?: string) => {
     const message = (msgOverride ?? inputValue).trim();
     if (!message) return;
-    if (isStopCommand(message)) { setInputValue(''); void handleAbort(); return; }
+    if (isStopCommand(message)) { setInputValue(''); handleAbortLocal(); return; }
     if (isNewSessionCommand(message)) {
       setInputValue('');
       const newKey = crypto.randomUUID();
@@ -487,7 +415,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       setSessionPanelOpen(false);
       return;
     }
-    if (!running && !chat.gatewayWsConnected) {
+    if (!running) {
       addChatMessage({
         id: `${nextRequestId()}-system`,
         role: 'system',
@@ -507,8 +435,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     }
     if (!msgOverride) setInputValue('');
     applySessionAgent();
+    
     const requestId = nextRequestId();
     const assistantMessageId = `${requestId}-assistant`;
+    
     addChatMessage({
       id: `${requestId}-user`,
       role: 'user',
@@ -518,6 +448,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       agentId: chat.activeAgentId,
       status: 'done',
     });
+    
     addChatMessage({
       id: assistantMessageId,
       role: 'assistant',
@@ -525,32 +456,107 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       createdAt: Date.now(),
       sessionKey: chat.activeSessionKey,
       agentId: chat.activeAgentId,
-      status: 'streaming',
+      status: 'thinking',
     });
+
     requestMapRef.current[requestId] = assistantMessageId;
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    if (!window.electronAPI?.invokeChat) {
-      markChatMessageError(assistantMessageId, t('chat.unavailable'));
-      return;
+
+    try {
+      const { baseUrl, token } = await window.electronAPI.getGatewayInfo();
+      const abortController = new AbortController();
+      (window as any)._activeChatAbort = abortController;
+
+      const response = await fetch(`${baseUrl}/chat/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          message,
+          stream: true,
+          sessionKey: chat.activeSessionKey,
+          agentId: chat.activeAgentId,
+          idempotencyKey: requestId,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Response body is null');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const { patchChatMessage, appendChatChunk, updateToolCall, completeChatMessage } = useStore.getState();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+          
+          const jsonStr = trimmedLine.slice(6);
+          if (jsonStr === '[DONE]') {
+            completeChatMessage(assistantMessageId);
+            continue;
+          }
+
+          try {
+            const chunk = JSON.parse(jsonStr);
+            const state = chunk.state || '';
+            
+            if (chunk.toolCall) {
+              const tc = chunk.toolCall;
+              updateToolCall(assistantMessageId, {
+                id: tc.id || tc.toolCallId || 'unknown',
+                name: tc.name,
+                input: tc.input || tc.arguments,
+                output: tc.output || tc.result,
+                status: tc.status || 'pending',
+              });
+            }
+
+            if (state === 'thinking' || state === 'tool_use') {
+              patchChatMessage(assistantMessageId, { status: state });
+            }
+
+            const delta = chunk.delta || (chunk.message ? (typeof chunk.message === 'string' ? chunk.message : chunk.message.content) : '');
+            if (delta) {
+              appendChatChunk(assistantMessageId, delta, chat.activeSessionKey, chat.activeAgentId);
+            }
+
+            if (chunk.done || (state && state !== 'delta' && state !== 'thinking' && state !== 'tool_use')) {
+              completeChatMessage(assistantMessageId);
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE chunk', e);
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        const { patchChatMessage } = useStore.getState();
+        patchChatMessage(assistantMessageId, { status: 'done', content: (useStore.getState().chat.messages.find(m => m.id === assistantMessageId)?.content || '') + '\n\n[已停止生成]' });
+      } else {
+        markChatMessageError(assistantMessageId, err.message || t('chat.errorGeneric'));
+      }
+    } finally {
+      delete requestMapRef.current[requestId];
+      (window as any)._activeChatAbort = null;
     }
-    const res = await window.electronAPI.invokeChat({
-      requestId,
-      sessionKey: chat.activeSessionKey,
-      agentId: chat.activeAgentId,
-      message,
-      stream: true,
-      deliver: false,
-    });
-    if (res.mode) setChatRuntimeMode(res.mode, res.reason || '');
-    if (!res.success) {
-      markChatMessageError(assistantMessageId, res.error || t('chat.errorGeneric'));
-      return;
-    }
-    if (res.content && !chat.isStreaming) {
-      appendChatChunk(assistantMessageId, res.content, chat.activeSessionKey, chat.activeAgentId);
-      completeChatMessage(assistantMessageId);
-    }
-  }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running, chat.gatewayWsConnected, addChatMessage, applySessionAgent, markChatMessageError, t, setChatRuntimeMode, appendChatChunk, completeChatMessage, setActiveChatSession, resetChatMessages, handleAbort]);
+  }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running, addChatMessage, applySessionAgent, markChatMessageError, t, setActiveChatSession, resetChatMessages, handleAbortLocal]);
 
   useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
 
@@ -577,7 +583,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               {!sessionLoading && ocSessions.map((s) => {
                 const isActive = s.sessionKey === chat.activeSessionKey && s.agentId === chat.activeAgentId;
                 const agentColor = agentOptions.find(a => a.id === s.agentId)?.color ?? '#94a3b8';
-                // Determine if the session is likely active/running
                 const isRunning = s.messageCount === -1 || (s.lastTimestamp && (Date.now() - new Date(s.lastTimestamp).getTime() < 300000));
 
                 return (
@@ -654,7 +659,50 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             <button type="button" onClick={() => setSessionPanelOpen((v) => !v)} className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-4 text-left transition-colors ${sessionPanelOpen ? 'bg-sky-50/80 dark:bg-sky-900/20' : 'bg-slate-50/60 hover:bg-sky-50/60 dark:bg-slate-900/40 dark:hover:bg-sky-900/20'}`}><span className="text-[9px] text-slate-300 dark:text-slate-600">›</span><span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">{chat.activeSessionKey}</span><MessagesSquare size={10} className={`shrink-0 ${sessionPanelOpen ? 'text-sky-400' : 'text-slate-300 dark:text-slate-600'}`} /></button>
           </div>
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">{activeMessages.length === 0 && (<div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"><div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Bot size={14} /></div><p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p><p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p></div>)}<div className="space-y-2">{activeMessages.map((msg) => (<ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} />))}</div></div>
-          <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">{chat.runtimeMode === 'local' && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><WifiOff size={12} />{t('chat.fallbackLocal')}</div>)}{running && !chat.gatewayWsConnected && (<div className="mb-2 space-y-1"><div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400"><WifiOff size={12} /><span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span><button type="button" onClick={() => void handleManualReconnectGatewayWs()} disabled={reconnectingGatewayWs} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300" title={t('chat.retryWsConnect', '重試連線')} aria-label={t('chat.retryWsConnect', '重試連線')}><RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />{t('chat.retryWsConnect', '重試連線')}</button></div>{gatewayWsReconnectError && (<div className="text-[10px] text-rose-600 dark:text-rose-400">{t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}</div>)}</div>)}{!running && !chat.gatewayWsConnected && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><WifiOff size={12} />{t('chat.coreRequired')}</div>)}<div className="flex items-end gap-2"><button type="button" className="shrink-0 rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 mb-0.5" title={t('chat.attach', '上傳檔案')} aria-label={t('chat.attach')}><Paperclip size={18} /></button><textarea ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={t('chat.placeholder')} rows={1} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label={t('chat.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) { e.preventDefault(); void handleSend(); } }} /><div className="relative flex-none">{!chat.isStreaming ? (<button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || (!running && !chat.gatewayWsConnected)} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')} aria-label={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')}><Send size={16} />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>) : (<button type="button" onClick={() => void handleAbort()} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500" title={t('chat.stop')} aria-label={t('chat.stop')}><Square size={14} className="fill-current" />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>)}</div></div><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500"><span className="text-[9px] text-slate-300 dark:text-slate-700">{t('chat.commandHint', '/stop 停止 · /new 新對話')}</span><span>{t('chat.inputHint')}</span></div></div>
+          <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">
+            {chat.runtimeMode === 'local' && (
+              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><WifiOff size={12} />{t('chat.fallbackLocal')}</div>
+            )}
+            {running && !chat.gatewayWsConnected && (
+              <div className="mb-2 space-y-1">
+                <div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+                  <WifiOff size={12} />
+                  <span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span>
+                  <button type="button" onClick={() => void handleManualReconnectGatewayWs()} disabled={reconnectingGatewayWs} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300" title={t('chat.retryWsConnect', '重試連線')} aria-label={t('chat.retryWsConnect', '重試連線')}>
+                    <RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />
+                    {t('chat.retryWsConnect', '重試連線')}
+                  </button>
+                </div>
+                {gatewayWsReconnectError && (
+                  <div className="text-[10px] text-rose-600 dark:text-rose-400">{t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}</div>
+                )}
+              </div>
+            )}
+            {!running && !chat.gatewayWsConnected && (
+              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><WifiOff size={12} />{t('chat.coreRequired')}</div>
+            )}
+            <div className="flex items-end gap-2">
+              <button type="button" className="shrink-0 rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 mb-0.5" title={t('chat.attach', '上傳檔案')} aria-label={t('chat.attach')}><Paperclip size={18} /></button>
+              <textarea ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={t('chat.placeholder')} rows={1} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label={t('chat.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) { e.preventDefault(); void handleSend(); } }} />
+              <div className="relative flex-none">
+                {!chat.isStreaming ? (
+                  <button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || (!running && !chat.gatewayWsConnected)} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')} aria-label={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')}>
+                    <Send size={16} />
+                    {queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => handleAbortLocal()} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500" title={t('chat.stop')} aria-label={t('chat.stop')}>
+                    <Square size={14} className="fill-current" />
+                    {queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
+              <span className="text-[9px] text-slate-300 dark:text-slate-700">{t('chat.commandHint', '/stop 停止 · /new 新對話')}</span>
+              <span>{t('chat.inputHint')}</span>
+            </div>
+          </div>
         </div>
       )}
     </div>
