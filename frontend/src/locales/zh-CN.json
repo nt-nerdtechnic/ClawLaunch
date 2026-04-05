@@ -1019,7 +1019,6 @@
     "errors": {
       "loadProfilesFailed": "读取授权列表失败",
       "missingCorePath": "缺少 Core Path，无法启动完整引导",
-      "missingConfigPath": "缺少 Config Path，无法启动完整引导",
       "addAuthMissingConfig": "缺少 Config Path，无法新增授权",
       "addAuthMissingCore": "缺少 Core Path，无法新增授权",
       "credentialRequired": "此授权方式需要输入凭据",
@@ -1046,7 +1045,20 @@
       "securityAuditFailed": "启动资安稽核失败：{{msg}}",
       "missingCorePathToken": "缺少 Core Path，无法更新通道 Token。",
       "missingConfigPathToken": "缺少 Config Path，无法更新通道 Token。",
-      "updateChannelTokenFailed": "更新 {{channel}} Token 失败：{{msg}}"
+      "updateChannelTokenFailed": "更新 {{channel}} Token 失败：{{msg}}",
+      "missingConfigPath": "尚未设定 Config Path，无法读取 openclaw.json。",
+      "configNotFound": "找不到 openclaw.json：已搜索 {{path}}，均不存在或无法读取。",
+      "loadDynamicModelsFailed": "读取动态模型列表失败",
+      "missingCorePathAction": "缺少 Core Path，无法更新 OpenClaw 动态设定",
+      "missingConfigPathAction": "缺少 Config Path，无法更新 OpenClaw 动态设定",
+      "invalidPort": "Gateway Port 格式不正确，请填入正整数或留空（移除设定）。",
+      "emptyModel": "Model 不能为空值",
+      "unauthorizedModel": "所选模型与目前授权 provider 不相符，请改用授权列表中的模型。",
+      "updateModelFailed": "更新模型设置失败",
+      "updateTokenFailed": "更新 Telegram Bot Token 失败",
+      "updatePortFailed": "更新 Gateway Port 失败",
+      "saveLauncherFailed": "保存 Launcher 设置失败",
+      "updateCronMaxConcurrentRunsFailed": "更新 cron.maxConcurrentRuns 失败"
     },
     "auth": {
       "management": "认证管理",
@@ -1103,6 +1115,11 @@
       "rollingBack": "回滚中...",
       "success": "已成功回滚至 {{path}}",
       "failed": "回滚失败：{{msg}}"
+    },
+    "cron": {
+      "title": "计划执行设置",
+      "maxConcurrentRuns": "最大并发任务数",
+      "maxConcurrentRunsHelp": "定义可同时执行的 cron 任务上限（对应 openclaw.json 的 cron.maxConcurrentRuns）。目前负载约为 {{count}} / {{max}}。"
     },
     "providers": {
       "keyLabels": {
