@@ -7,6 +7,17 @@ import { useStore } from '../../store';
 import type { ChatMessage } from '../../store';
 import { usePixelOfficeAgents } from '../pixel-office/hooks/usePixelOfficeAgents';
 
+// ─── Types ──────────────────────────────────────────────────────────────────
+export interface OpenClawSessionEntry {
+  sessionKey: string;
+  agentId: string;
+  sessionId: string;
+  displayName: string;
+  lastMessage: string;
+  lastTimestamp: string;
+  messageCount: number;
+}
+
 // Configure marked for chat rendering
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -154,9 +165,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [agentDraft, setAgentDraft] = useState(chat.activeAgentId);
   const [sessionHistory, setSessionHistory] = useState<string[]>(() => loadRecentList('chat_recent_sessions', [chat.activeSessionKey]));
   const [agentHistory, setAgentHistory] = useState<string[]>(() => loadRecentList('chat_recent_agents', [chat.activeAgentId]));
-  // requestMap: requestId → assistantMessageId
-  // Stored in a ref so the onChatChunk listener never needs to re-register
-  // when a new request is added (avoids mid-stream listener teardown).
   const requestMapRef = useRef<Record<string, string>>({});
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
   const [ocSessions, setOcSessions] = useState<OpenClawSessionEntry[]>([]);
@@ -170,194 +178,25 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const agentPickerRef = useRef<HTMLDivElement>(null);
   const { summaries: knownAgents } = usePixelOfficeAgents();
 
-  // Ensure current agent is always present in picker, even if not in snapshot
   const agentOptions = useMemo(() => {
     const has = knownAgents.some(a => a.id === chat.activeAgentId);
     if (has) return knownAgents;
     return [{ id: chat.activeAgentId, displayName: chat.activeAgentId, color: '#94a3b8', snapshotState: 'idle' as const, tokensIn: 0, tokensOut: 0, cost: 0, sessionCount: 0 }, ...knownAgents];
   }, [knownAgents, chat.activeAgentId]);
 
-  // Close agent picker on outside click
-  useEffect(() => {
-    if (!agentPickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) {
-        setAgentPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [agentPickerOpen]);
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const composingRef = useRef(false);
-  const messageQueueRef = useRef<string[]>([]);
-  const [queueCount, setQueueCount] = useState(0);
-  const handleSendRef = useRef<(msgOverride?: string) => Promise<void>>(undefined as unknown as (msgOverride?: string) => Promise<void>);
+  const currentAgentColor = useMemo(() => {
+    return agentOptions.find(a => a.id === chat.activeAgentId)?.color ?? '#94a3b8';
+  }, [agentOptions, chat.activeAgentId]);
 
-  const activeMessages = useMemo(
-    () => chat.messages.filter((item) => item.sessionKey === chat.activeSessionKey && item.agentId === chat.activeAgentId),
-    [chat.messages, chat.activeSessionKey, chat.activeAgentId]
-  );
-
-  // Stable refs so the listener closure never goes stale without re-registering.
-  const chatActiveSessionKeyRef = useRef(chat.activeSessionKey);
-  const chatActiveAgentIdRef = useRef(chat.activeAgentId);
-  const chatIsOpenRef = useRef(chat.isOpen);
-  chatActiveSessionKeyRef.current = chat.activeSessionKey;
-  chatActiveAgentIdRef.current = chat.activeAgentId;
-  chatIsOpenRef.current = chat.isOpen;
-
-  useEffect(() => {
-    if (!window.electronAPI?.onChatChunk) return;
-    const off = window.electronAPI.onChatChunk((chunk) => {
-      const messageId = requestMapRef.current[chunk.requestId] || chunk.messageId;
-      if (!messageId) return;
-
-      if (chunk.mode) {
-        setChatRuntimeMode(chunk.mode, chunk.reason || '');
-      }
-
-      if (chunk.error) {
-        markChatMessageError(messageId, chunk.error);
-        delete requestMapRef.current[chunk.requestId];
-        return;
-      }
-
-      if (chunk.delta) {
-        appendChatChunk(messageId, chunk.delta, chatActiveSessionKeyRef.current, chatActiveAgentIdRef.current);
-      }
-
-      const isDone = chunk.done || (chunk.state && chunk.state !== 'delta');
-      if (isDone) {
-        completeChatMessage(messageId);
-        delete requestMapRef.current[chunk.requestId];
-        // Desktop notification when window is not focused
-        if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
-          const preview = (chunk.delta || '').slice(0, 100).trim();
-          if (preview) {
-            const n = new Notification('OpenClaw Core', { body: preview, silent: false });
-            n.onclick = () => { window.focus(); };
-          }
-        }
-      }
-    });
-
-    return () => off();
-  // Stable store actions are safe deps; refs handle the rest without re-registering.
-  }, [appendChatChunk, completeChatMessage, markChatMessageError, setChatRuntimeMode]);
-
-  useEffect(() => {
-    if (!window.electronAPI?.onGatewayStatus) return;
-    const off = window.electronAPI.onGatewayStatus((status) => {
-      setGatewayWsConnected(status.connected);
-    });
-    return () => off();
-  }, [setGatewayWsConnected]);
-
-  // Proactively connect WebSocket when Core starts; retry every 5s until connected
-  useEffect(() => {
-    if (!running || !window.electronAPI?.ensureGatewayWs) return;
-
-    let cancelled = false;
-    const tryConnect = async () => {
-      if (cancelled || chat.gatewayWsConnected) return;
-      const result = await window.electronAPI.ensureGatewayWs();
-      if (!result.connected && !cancelled) {
-        // Retry after 5 seconds
-        setTimeout(() => { void tryConnect(); }, 5000);
-      }
-    };
-
-    void tryConnect();
-    return () => { cancelled = true; };
-  }, [running, chat.gatewayWsConnected]);
-
-  useEffect(() => {
-    if (!chat.isOpen) return;
-    clearChatUnread();
-  }, [chat.isOpen, clearChatUnread]);
-
-  useEffect(() => {
-    if (chat.gatewayWsConnected) {
-      setGatewayWsReconnectError('');
-    }
-  }, [chat.gatewayWsConnected]);
-
-  // Request desktop notification permission once
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      void Notification.requestPermission();
-    }
-  }, []);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (!textareaRef.current) return;
-    textareaRef.current.style.height = 'auto';
-    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
-  }, [inputValue]);
-
-  useEffect(() => {
-    if (!listRef.current) return;
-    listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [activeMessages]);
-
-  // Fetch sessions — offset=0 replaces list, offset>0 appends (Load More)
-  const fetchSessions = async (offset = 0) => {
-    if (!window.electronAPI?.listChatSessions) return;
-    const isLoadMore = offset > 0;
-    if (isLoadMore) setSessionLoadingMore(true);
-    else setSessionLoading(true);
-    try {
-      const res = await window.electronAPI.listChatSessions({ limit: 20, offset });
-      if (res.code === 0) {
-        const parsed = JSON.parse(res.stdout) as { sessions: OpenClawSessionEntry[]; total: number; hasMore: boolean };
-        const incoming = Array.isArray(parsed.sessions) ? parsed.sessions : [];
-        setOcSessions((prev) => isLoadMore ? [...prev, ...incoming] : incoming);
-        setSessionTotal(typeof parsed.total === 'number' ? parsed.total : incoming.length);
-        setSessionHasMore(Boolean(parsed.hasMore));
-      }
-    } catch (_) {
-      // ignore
-    } finally {
-      if (isLoadMore) setSessionLoadingMore(false);
-      else setSessionLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (sessionPanelOpen) {
-      void fetchSessions();
-    }
-     
-  }, [sessionPanelOpen]);
-
-  // 串流結束後，若面板開著則自動刷新 session 列表（讓新建的 session 能即時出現）
-  const prevIsStreaming = useRef(false);
-  useEffect(() => {
-    if (prevIsStreaming.current && !chat.isStreaming) {
-      if (sessionPanelOpen) void fetchSessions();
-      // Flush queued messages
-      if (messageQueueRef.current.length > 0) {
-        const next = messageQueueRef.current.shift()!;
-        setQueueCount(messageQueueRef.current.length);
-        void handleSendRef.current?.(next);
-      }
-    }
-    prevIsStreaming.current = chat.isStreaming;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.isStreaming]);
-
-  // Load openclaw session history from JSONL into chat UI
-  const loadSessionHistory = async (sessionKey: string, agentId: string) => {
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const loadSessionHistory = useCallback(async (sessionKey: string, agentId: string) => {
     if (!window.electronAPI?.loadChatSession) return;
     try {
       const res = await window.electronAPI.loadChatSession({ sessionKey, agentId });
       if (res.code === 0) {
         const loaded: Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: string }> =
           JSON.parse(res.stdout);
-        if (Array.isArray(loaded) && loaded.length > 0) {
+        if (Array.isArray(loaded)) {
           resetChatMessages();
           for (const msg of loaded) {
             addChatMessage({
@@ -372,25 +211,68 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           }
         }
       }
-    } catch (_) {
-      // ignore
+    } catch (_) { /* ignore */ }
+  }, [addChatMessage, resetChatMessages]);
+
+  const fetchSessions = useCallback(async (offset = 0) => {
+    if (!window.electronAPI?.listChatSessions) return;
+    const isLoadMore = offset > 0;
+    if (isLoadMore) setSessionLoadingMore(true);
+    else setSessionLoading(true);
+    try {
+      const res = await window.electronAPI.listChatSessions({ limit: 20, offset });
+      if (res.code === 0) {
+        const parsed = JSON.parse(res.stdout) as { sessions: OpenClawSessionEntry[]; total: number; hasMore: boolean };
+        const incoming = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+        setOcSessions((prev) => isLoadMore ? [...prev, ...incoming] : incoming);
+        setSessionTotal(typeof parsed.total === 'number' ? parsed.total : incoming.length);
+        setSessionHasMore(Boolean(parsed.hasMore));
+      }
+    } catch (_) { /* ignore */ }
+    finally {
+      if (isLoadMore) setSessionLoadingMore(false);
+      else setSessionLoading(false);
     }
-  };
+  }, []);
+
+  const handleSwitchAgent = useCallback(async (agentId: string) => {
+    setActiveChatAgent(agentId);
+    setAgentDraft(agentId);
+    setAgentPickerOpen(false);
+
+    if (window.electronAPI?.listChatSessions) {
+      try {
+        const res = await window.electronAPI.listChatSessions({ limit: 20, offset: 0 });
+        if (res.code === 0) {
+          const parsed = JSON.parse(res.stdout) as { sessions: OpenClawSessionEntry[] };
+          const lastSession = parsed.sessions.find(s => s.agentId === agentId);
+          if (lastSession) {
+            setActiveChatSession(lastSession.sessionKey);
+            setSessionDraft(lastSession.sessionKey);
+            void loadSessionHistory(lastSession.sessionKey, agentId);
+            return;
+          }
+        }
+      } catch (_) { /* fallback */ }
+    }
+
+    const newKey = `agent:${agentId}:local:${crypto.randomUUID()}`;
+    setActiveChatSession(newKey);
+    setSessionDraft(newKey);
+    resetChatMessages();
+  }, [setActiveChatAgent, setActiveChatSession, resetChatMessages, loadSessionHistory]);
 
   const handleManualReconnectGatewayWs = useCallback(async () => {
     if (!window.electronAPI?.ensureGatewayWs) {
       setGatewayWsReconnectError(t('chat.unavailable'));
       return;
     }
-
     setReconnectingGatewayWs(true);
     setGatewayWsReconnectError('');
     try {
       const result = await window.electronAPI.ensureGatewayWs();
       setGatewayWsConnected(result.connected);
-      if (!result.connected) {
-        setGatewayWsReconnectError(result.error || t('chat.wsDisconnected'));
-      }
+      if (!result.connected) setGatewayWsReconnectError(result.error || t('chat.wsDisconnected'));
     } catch (e) {
       setGatewayWsReconnectError(e instanceof Error ? e.message : t('chat.errorGeneric'));
     } finally {
@@ -398,8 +280,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     }
   }, [setGatewayWsConnected, t]);
 
-  // Switch to the selected session and load its history
-  const handleSelectSession = (session: OpenClawSessionEntry) => {
+  const handleSelectSession = useCallback((session: OpenClawSessionEntry) => {
     const key = session.sessionKey.trim();
     const agent = session.agentId.trim();
     setActiveChatSession(key);
@@ -414,50 +295,169 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     persistRecentList('chat_recent_agents', nextAgents);
     setSessionPanelOpen(false);
     void loadSessionHistory(key, agent);
-  };
+  }, [sessionHistory, agentHistory, setActiveChatSession, setActiveChatAgent, loadSessionHistory]);
 
-  const applySessionAgent = () => {
+  const applySessionAgent = useCallback(() => {
     const normalizedSession = clampText(sessionDraft || chat.activeSessionKey);
     const normalizedAgent = clampText(agentDraft || chat.activeAgentId);
-
     setActiveChatSession(normalizedSession);
     setActiveChatAgent(normalizedAgent);
-
     const nextSessions = [normalizedSession, ...sessionHistory.filter((item) => item !== normalizedSession)];
     const nextAgents = [normalizedAgent, ...agentHistory.filter((item) => item !== normalizedAgent)];
     setSessionHistory(nextSessions);
     setAgentHistory(nextAgents);
     persistRecentList('chat_recent_sessions', nextSessions);
     persistRecentList('chat_recent_agents', nextAgents);
-  };
+  }, [sessionDraft, agentDraft, chat.activeSessionKey, chat.activeAgentId, sessionHistory, agentHistory, setActiveChatSession, setActiveChatAgent]);
+
+  // ── Effects ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!agentPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) {
+        setAgentPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [agentPickerOpen]);
+
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const composingRef = useRef(false);
+  const messageQueueRef = useRef<string[]>([]);
+  const [queueCount, setQueueCount] = useState(0);
+  const handleSendRef = useRef<(msgOverride?: string) => Promise<void>>(undefined as unknown as (msgOverride?: string) => Promise<void>);
+
+  const activeMessages = useMemo(
+    () => chat.messages.filter((item) => item.sessionKey === chat.activeSessionKey && item.agentId === chat.activeAgentId),
+    [chat.messages, chat.activeSessionKey, chat.activeAgentId]
+  );
+
+  const chatActiveSessionKeyRef = useRef(chat.activeSessionKey);
+  const chatActiveAgentIdRef = useRef(chat.activeAgentId);
+  const chatIsOpenRef = useRef(chat.isOpen);
+  chatActiveSessionKeyRef.current = chat.activeSessionKey;
+  chatActiveAgentIdRef.current = chat.activeAgentId;
+  chatIsOpenRef.current = chat.isOpen;
+
+  useEffect(() => {
+    if (!window.electronAPI?.onChatChunk) return;
+    const off = window.electronAPI.onChatChunk((chunk) => {
+      const messageId = requestMapRef.current[chunk.requestId] || chunk.messageId;
+      if (!messageId) return;
+      if (chunk.mode) setChatRuntimeMode(chunk.mode, chunk.reason || '');
+      if (chunk.error) {
+        markChatMessageError(messageId, chunk.error);
+        delete requestMapRef.current[chunk.requestId];
+        return;
+      }
+      if (chunk.delta) {
+        appendChatChunk(messageId, chunk.delta, chatActiveSessionKeyRef.current, chatActiveAgentIdRef.current);
+      }
+      const isDone = chunk.done || (chunk.state && chunk.state !== 'delta');
+      if (isDone) {
+        completeChatMessage(messageId);
+        delete requestMapRef.current[chunk.requestId];
+        if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
+          const preview = (chunk.delta || '').slice(0, 100).trim();
+          if (preview) {
+            const n = new Notification('OpenClaw Core', { body: preview, silent: false });
+            n.onclick = () => { window.focus(); };
+          }
+        }
+      }
+    });
+    return () => off();
+  }, [appendChatChunk, completeChatMessage, markChatMessageError, setChatRuntimeMode]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onGatewayStatus) return;
+    const off = window.electronAPI.onGatewayStatus((status) => {
+      setGatewayWsConnected(status.connected);
+    });
+    return () => off();
+  }, [setGatewayWsConnected]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.ensureGatewayWs) return;
+    let cancelled = false;
+    const tryConnect = async () => {
+      if (cancelled || chat.gatewayWsConnected) return;
+      const result = await window.electronAPI.ensureGatewayWs();
+      if (!result.connected && !cancelled) {
+        setTimeout(() => { void tryConnect(); }, 5000);
+      }
+    };
+    void tryConnect();
+    return () => { cancelled = true; };
+  }, [chat.gatewayWsConnected]);
+
+  useEffect(() => {
+    if (chat.isOpen) clearChatUnread();
+  }, [chat.isOpen, clearChatUnread]);
+
+  useEffect(() => {
+    if (chat.gatewayWsConnected) setGatewayWsReconnectError('');
+  }, [chat.gatewayWsConnected]);
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      void Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    textareaRef.current.style.height = 'auto';
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+  }, [inputValue]);
+
+  useEffect(() => {
+    if (!listRef.current) return;
+    listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [activeMessages]);
+
+  useEffect(() => {
+    if (sessionPanelOpen) void fetchSessions();
+  }, [sessionPanelOpen, fetchSessions]);
+
+  const prevIsStreaming = useRef(false);
+  useEffect(() => {
+    if (prevIsStreaming.current && !chat.isStreaming) {
+      if (sessionPanelOpen) void fetchSessions();
+      if (messageQueueRef.current.length > 0) {
+        const next = messageQueueRef.current.shift()!;
+        setQueueCount(messageQueueRef.current.length);
+        void handleSendRef.current?.(next);
+      }
+    }
+    prevIsStreaming.current = chat.isStreaming;
+  }, [chat.isStreaming, sessionPanelOpen, fetchSessions]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (sessionPanelOpen) {
-          setSessionPanelOpen(false);
-          return;
-        }
-        if (chat.isOpen) {
-          setChatOpen(false);
-        }
+        if (sessionPanelOpen) { setSessionPanelOpen(false); return; }
+        if (chat.isOpen) setChatOpen(false);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [chat.isOpen, sessionPanelOpen, setChatOpen]);
 
+  const handleAbort = useCallback(async () => {
+    if (!window.electronAPI?.abortChat) return;
+    const pendingRequestIds = Object.keys(requestMapRef.current);
+    if (pendingRequestIds.length === 0) return;
+    const latest = pendingRequestIds[pendingRequestIds.length - 1];
+    await window.electronAPI.abortChat(latest);
+  }, []);
+
   const handleSend = useCallback(async (msgOverride?: string) => {
     const message = (msgOverride ?? inputValue).trim();
     if (!message) return;
-
-    // --- Command shortcuts (WebUI parity) ---
-    if (isStopCommand(message)) {
-      setInputValue('');
-      void handleAbort();
-      return;
-    }
+    if (isStopCommand(message)) { setInputValue(''); void handleAbort(); return; }
     if (isNewSessionCommand(message)) {
       setInputValue('');
       const newKey = crypto.randomUUID();
@@ -466,8 +466,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       setSessionPanelOpen(false);
       return;
     }
-
-    if (!running) {
+    if (!running && !chat.gatewayWsConnected) {
       addChatMessage({
         id: `${nextRequestId()}-system`,
         role: 'system',
@@ -479,21 +478,16 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       });
       return;
     }
-
-    // Queue when streaming
     if (chat.isStreaming) {
       messageQueueRef.current = [...messageQueueRef.current, message];
       setQueueCount(messageQueueRef.current.length);
       if (!msgOverride) setInputValue('');
       return;
     }
-
     if (!msgOverride) setInputValue('');
     applySessionAgent();
-
     const requestId = nextRequestId();
     const assistantMessageId = `${requestId}-assistant`;
-
     addChatMessage({
       id: `${requestId}-user`,
       role: 'user',
@@ -503,7 +497,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       agentId: chat.activeAgentId,
       status: 'done',
     });
-
     addChatMessage({
       id: assistantMessageId,
       role: 'assistant',
@@ -513,15 +506,12 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       agentId: chat.activeAgentId,
       status: 'streaming',
     });
-
     requestMapRef.current[requestId] = assistantMessageId;
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-
     if (!window.electronAPI?.invokeChat) {
       markChatMessageError(assistantMessageId, t('chat.unavailable'));
       return;
     }
-
     const res = await window.electronAPI.invokeChat({
       requestId,
       sessionKey: chat.activeSessionKey,
@@ -530,405 +520,108 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       stream: true,
       deliver: false,
     });
-
     if (res.mode) setChatRuntimeMode(res.mode, res.reason || '');
-
     if (!res.success) {
       markChatMessageError(assistantMessageId, res.error || t('chat.errorGeneric'));
       return;
     }
-
     if (res.content && !chat.isStreaming) {
       appendChatChunk(assistantMessageId, res.content, chat.activeSessionKey, chat.activeAgentId);
       completeChatMessage(assistantMessageId);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running]);
+  }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running, chat.gatewayWsConnected, addChatMessage, applySessionAgent, markChatMessageError, t, setChatRuntimeMode, appendChatChunk, completeChatMessage, setActiveChatSession, resetChatMessages, handleAbort]);
 
-  // Keep ref in sync for queue flush
   useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
 
-  const handleAbort = useCallback(async () => {
-    if (!window.electronAPI?.abortChat) return;
-    const pendingRequestIds = Object.keys(requestMapRef.current);
-    if (pendingRequestIds.length === 0) return;
-    // Abort the most recently started pending request.
-    const latest = pendingRequestIds[pendingRequestIds.length - 1];
-    await window.electronAPI.abortChat(latest);
-  }, []);
-
-  const panelBase = compact
-    ? 'w-[calc(100vw-1rem)] h-[calc(100vh-6.75rem)]'
-    : 'w-[min(calc(100vw-1rem),430px)] h-[min(82vh,640px)] sm:w-[390px] md:w-[420px]';
-
+  const panelBase = compact ? 'w-[calc(100vw-1rem)] h-[calc(100vh-6.75rem)]' : 'w-[min(calc(100vw-1rem),430px)] h-[min(82vh,640px)] sm:w-[390px] md:w-[420px]';
   const panelHeight = compact ? 'h-[calc(100vh-6.75rem)]' : 'h-[min(82vh,640px)]';
 
   return (
     <div className={`fixed z-[90] flex items-end gap-2 ${compact ? 'bottom-[3.25rem] right-2 sm:bottom-[3.5rem] sm:right-3' : 'bottom-3 right-3 sm:bottom-5 sm:right-5'}`}>
-
-      {/* ── Session history drawer — slides out to the LEFT ── */}
       {chat.isOpen && (
-        <div
-          className={`${panelHeight} overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur-sm transition-all duration-300 ease-out dark:border-slate-700 dark:bg-slate-950/95 ${
-            sessionPanelOpen ? 'w-[240px] opacity-100' : 'w-0 opacity-0 pointer-events-none'
-          }`}
-        >
+        <div className={`${panelHeight} overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur-sm transition-all duration-300 ease-out dark:border-slate-700 dark:bg-slate-950/95 ${sessionPanelOpen ? 'w-[240px] opacity-100' : 'w-0 opacity-0 pointer-events-none'}`}>
           <div className="flex h-full w-[240px] flex-col">
-
-            {/* Drawer header */}
             <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-sky-50/80 via-white to-white px-3 py-2.5 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
               <div className="flex items-center gap-1.5">
-                <div className="rounded-lg bg-sky-500/10 p-1 text-sky-600 dark:text-sky-300">
-                  <MessagesSquare size={13} />
-                </div>
-                <span className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
-                  {t('chat.sessions.title')}
-                </span>
+                <div className="rounded-lg bg-sky-500/10 p-1 text-sky-600 dark:text-sky-300"><MessagesSquare size={13} /></div>
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">{t('chat.sessions.title')}</span>
               </div>
-              <div className="flex items-center gap-0.5">
-
-                <button
-                  type="button"
-                  onClick={() => void fetchSessions()}
-                  disabled={sessionLoading}
-                  className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                  title={t('chat.sessions.refresh')}
-                  aria-label={t('chat.sessions.refresh')}
-                >
-                  <RefreshCw size={12} className={sessionLoading ? 'animate-spin' : ''} />
-                </button>
-              </div>
+              <button type="button" onClick={() => void fetchSessions()} disabled={sessionLoading} className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-200" title={t('chat.sessions.refresh')} aria-label={t('chat.sessions.refresh')}>
+                <RefreshCw size={12} className={sessionLoading ? 'animate-spin' : ''} />
+              </button>
             </div>
-
-            {/* Manual input */}
-            {/* Session list */}
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-              {sessionLoading && (
-                <div className="flex items-center justify-center py-8">
-                  <RefreshCw size={16} className="animate-spin text-sky-400" />
-                  <span className="ml-2 text-[11px] text-slate-400">{t('chat.sessions.loading')}</span>
-                </div>
-              )}
-              {!sessionLoading && ocSessions.length === 0 && (
-                <div className="py-8 text-center">
-                  <div className="mx-auto mb-1.5 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                    <MessagesSquare size={16} />
-                  </div>
-                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{t('chat.sessions.empty')}</p>
-                </div>
-              )}
+              {sessionLoading && <div className="flex items-center justify-center py-8"><RefreshCw size={16} className="animate-spin text-sky-400" /><span className="ml-2 text-[11px] text-slate-400">{t('chat.sessions.loading')}</span></div>}
+              {!sessionLoading && ocSessions.length === 0 && <div className="py-8 text-center"><div className="mx-auto mb-1.5 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"><MessagesSquare size={16} /></div><p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{t('chat.sessions.empty')}</p></div>}
               {!sessionLoading && ocSessions.map((s) => {
                 const isActive = s.sessionKey === chat.activeSessionKey && s.agentId === chat.activeAgentId;
                 const agentColor = agentOptions.find(a => a.id === s.agentId)?.color ?? '#94a3b8';
                 return (
-                  <button
-                    key={`${s.agentId}/${s.sessionKey}`}
-                    type="button"
-                    onClick={() => handleSelectSession(s)}
-                    className={`mb-1 w-full rounded-xl border px-2.5 py-2 text-left transition-all ${
-                      isActive
-                        ? 'border-sky-300/70 bg-sky-50 dark:border-sky-700 dark:bg-sky-900/30'
-                        : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50 dark:bg-slate-900/60 dark:hover:border-slate-700 dark:hover:bg-slate-800/60'
-                    }`}
-                  >
+                  <button key={`${s.agentId}/${s.sessionKey}`} type="button" onClick={() => handleSelectSession(s)} className={`mb-1 w-full rounded-xl border px-2.5 py-2 text-left transition-all ${isActive ? 'border-sky-300/70 bg-sky-50 dark:border-sky-700 dark:bg-sky-900/30' : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50 dark:bg-slate-900/60 dark:hover:border-slate-700 dark:hover:bg-slate-800/60'}`}>
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: agentColor }} />
-                          <span className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                            {s.displayName || s.agentId}
-                          </span>
-                          {isActive && (
-                            <span className="inline-flex items-center rounded bg-sky-500 px-1 py-0.5 text-[8px] font-bold text-white">✓</span>
-                          )}
+                          <span className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-200">{s.displayName || s.agentId}</span>
+                          {isActive && <span className="inline-flex items-center rounded bg-sky-500 px-1 py-0.5 text-[8px] font-bold text-white">✓</span>}
                         </div>
-                        <span className="mt-0.5 inline-flex max-w-full items-center rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[8px] text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500" title={s.sessionKey}>
-                          <span className="truncate">{s.sessionKey}</span>
-                        </span>
+                        <span className="mt-0.5 inline-flex max-w-full items-center rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[8px] text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500" title={s.sessionKey}><span className="truncate">{s.sessionKey}</span></span>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-0.5">
                         <span className="text-[8px] text-slate-400">{formatRelativeTime(s.lastTimestamp, t)}</span>
                         <span className="text-[8px] text-slate-300 dark:text-slate-600">{s.messageCount >= 0 ? s.messageCount : '—'} {s.messageCount >= 0 && t('chat.messageSuffix', '則')}</span>
                       </div>
                     </div>
-                    {s.lastMessage && (
-                      <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
-                        {s.lastMessage}
-                      </p>
-                    )}
+                    {s.lastMessage && <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">{s.lastMessage}</p>}
                   </button>
                 );
               })}
-              {!sessionLoading && sessionHasMore && (
-                <button
-                  type="button"
-                  onClick={() => void fetchSessions(ocSessions.length)}
-                  disabled={sessionLoadingMore}
-                  className="mt-1 w-full rounded-xl border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:hover:border-sky-700 dark:hover:bg-sky-900/20 dark:hover:text-sky-300"
-                >
-                  {sessionLoadingMore
-                    ? <span className="flex items-center justify-center gap-1.5"><RefreshCw size={10} className="animate-spin" />{t('chat.sessions.loadingMore', '載入中...')}</span>
-                    : `${t('chat.sessions.loadMore', '載入更多')} (${sessionTotal - ocSessions.length})`
-                  }
-                </button>
-              )}
+              {!sessionLoading && sessionHasMore && <button type="button" onClick={() => void fetchSessions(ocSessions.length)} disabled={sessionLoadingMore} className="mt-1 w-full rounded-xl border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:hover:border-sky-700 dark:hover:bg-sky-900/20 dark:hover:text-sky-300">{sessionLoadingMore ? <span className="flex items-center justify-center gap-1.5"><RefreshCw size={10} className="animate-spin" />{t('chat.sessions.loadingMore', '載入中...')}</span> : `${t('chat.sessions.loadMore', '載入更多')} (${sessionTotal - ocSessions.length})`}</button>}
             </div>
           </div>
         </div>
       )}
-
-      {/* ── Main chat button / panel ── */}
       {!chat.isOpen ? (
-        <button
-          type="button"
-          onClick={() => setChatOpen(true)}
-          className="group relative inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-300/70 bg-white/95 text-sky-600 shadow-2xl shadow-sky-500/20 transition-all hover:-translate-y-0.5 hover:bg-white sm:h-14 sm:w-14 dark:border-sky-700 dark:bg-slate-900/95 dark:text-sky-300"
-          title={t('chat.open')}
-          aria-label={t('chat.open')}
-        >
+        <button type="button" onClick={() => setChatOpen(true)} className="group relative inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-300/70 bg-white/95 text-sky-600 shadow-2xl shadow-sky-500/20 transition-all hover:-translate-y-0.5 hover:bg-white sm:h-14 sm:w-14 dark:border-sky-700 dark:bg-slate-900/95 dark:text-sky-300" title={t('chat.open')} aria-label={t('chat.open')}>
           <MessageSquare size={22} />
-          {chat.unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
-              {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
-            </span>
-          )}
+          {chat.unreadCount > 0 && <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">{chat.unreadCount > 99 ? '99+' : chat.unreadCount}</span>}
         </button>
       ) : (
         <div className={`${panelBase} flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur-sm dark:border-slate-700 dark:bg-slate-950/95`}>
           <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-sky-50/80 via-white to-white px-3 py-3 sm:px-4 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setSessionPanelOpen((v) => !v)}
-                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300"
-                title={t('chat.sessions.openPanel')}
-                aria-label={t('chat.sessions.openPanel')}
-              >
-                {sessionPanelOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
-              </button>
-              <div className="rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:text-sky-300">
-                <Bot size={16} />
-              </div>
+              <button type="button" onClick={() => setSessionPanelOpen((v) => !v)} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.sessions.openPanel')} aria-label={t('chat.sessions.openPanel')}>{sessionPanelOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}</button>
+              <div className="rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:text-sky-300"><Bot size={16} /></div>
               <div>
                 <div className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">{t('chat.title')}</div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                  {chat.runtimeMode === 'local' ? t('chat.modeLocal') : t('chat.modeGateway')}
-                  {chat.modeReason ? ` · ${chat.modeReason}` : ''}
-                </div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">{chat.runtimeMode === 'local' ? t('chat.modeLocal') : t('chat.modeGateway')}{chat.modeReason ? ` · ${chat.modeReason}` : ''}</div>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const newKey = crypto.randomUUID();
-                  setActiveChatSession(newKey);
-                  resetChatMessages();
-                  setSessionPanelOpen(false);
-                }}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300"
-                title={t('chat.sessions.new')}
-                aria-label={t('chat.sessions.new')}
-              >
-                <MessageSquarePlus size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setChatOpen(false)}
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                title={t('chat.close')}
-                aria-label={t('chat.close')}
-              >
-                <X size={16} />
-              </button>
+              <button type="button" onClick={() => { const newKey = crypto.randomUUID(); setActiveChatSession(newKey); resetChatMessages(); setSessionPanelOpen(false); }} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.sessions.new')} aria-label={t('chat.sessions.new')}><MessageSquarePlus size={16} /></button>
+              <button type="button" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title={t('chat.close')} aria-label={t('chat.close')}><X size={16} /></button>
             </div>
           </div>
-
-          {/* Compact session indicator bar */}
           <div className="flex w-full items-center gap-0 border-b border-slate-200 dark:border-slate-800">
-            {/* Agent picker */}
             <div ref={agentPickerRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setAgentPickerOpen(v => !v)}
-                className={`flex items-center gap-1 pl-4 pr-2 py-1.5 transition-colors hover:bg-orange-50 dark:hover:bg-orange-900/20 ${
-                  agentPickerOpen ? 'bg-orange-50 dark:bg-orange-900/20' : ''
-                }`}
-                title={t('chat.switchAgent', '切換 Agent')}
-              >
-                <span className="inline-flex shrink-0 items-center rounded-md bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-orange-600 dark:bg-orange-900/40 dark:text-orange-300">
-                  {chat.activeAgentId}
-                </span>
-                <ChevronDown size={9} className={`text-orange-400 transition-transform duration-150 ${agentPickerOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {/* Agent dropdown */}
+              <button type="button" onClick={() => setAgentPickerOpen(v => !v)} className={`flex items-center gap-1.5 pl-4 pr-2 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/20 ${agentPickerOpen ? 'bg-slate-50 dark:bg-slate-900/20' : ''}`} title={t('chat.switchAgent', '切換 Agent')}><span className="inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ backgroundColor: `${currentAgentColor}15`, color: currentAgentColor }}>{chat.activeAgentId}</span><ChevronDown size={9} style={{ color: currentAgentColor }} className={`opacity-60 transition-transform duration-150 ${agentPickerOpen ? 'rotate-180' : ''}`} /></button>
               {agentPickerOpen && (
                 <div className="absolute top-full left-0 z-30 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                  <div className="border-b border-slate-100 px-3 py-1.5 dark:border-slate-800">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                      {t('chat.selectAgent', 'Agent')}
-                    </span>
-                  </div>
+                  <div className="border-b border-slate-100 px-3 py-1.5 dark:border-slate-800"><span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">{t('chat.selectAgent', 'Agent')}</span></div>
                   {agentOptions.map(agent => {
                     const isActive = agent.id === chat.activeAgentId;
+                    const itemColor = agent.color ?? '#94a3b8';
                     return (
-                      <button
-                        key={agent.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveChatAgent(agent.id);
-                          setAgentDraft(agent.id);
-                          setAgentPickerOpen(false);
-                        }}
-                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${
-                          isActive ? 'bg-sky-50 dark:bg-sky-900/30' : ''
-                        }`}
-                      >
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: agent.color ?? '#94a3b8' }}
-                        />
-                        <span className={`flex-1 truncate font-medium ${isActive ? 'text-sky-700 dark:text-sky-300' : 'text-slate-700 dark:text-slate-200'}`}>
-                          {agent.displayName}
-                        </span>
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${agent.snapshotState === 'active' ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
-                        {isActive && <Check size={10} className="shrink-0 text-sky-500" />}
-                      </button>
+                      <button key={agent.id} type="button" onClick={() => void handleSwitchAgent(agent.id)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] transition-colors hover:bg-slate-50 dark:hover:bg-slate-800" style={{ backgroundColor: isActive ? `${itemColor}15` : undefined }}><span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: itemColor }} /><span className="flex-1 truncate font-medium" style={{ color: isActive ? itemColor : undefined }}>{agent.displayName}</span><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${agent.snapshotState === 'active' ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`} />{isActive && <Check size={10} style={{ color: itemColor }} className="shrink-0" />}</button>
                     );
                   })}
                 </div>
               )}
             </div>
-            {/* Session trigger */}
-            <button
-              type="button"
-              onClick={() => setSessionPanelOpen((v) => !v)}
-              className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-4 text-left transition-colors ${
-                sessionPanelOpen
-                  ? 'bg-sky-50/80 dark:bg-sky-900/20'
-                  : 'bg-slate-50/60 hover:bg-sky-50/60 dark:bg-slate-900/40 dark:hover:bg-sky-900/20'
-              }`}
-            >
-              <span className="text-[9px] text-slate-300 dark:text-slate-600">›</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">
-                {chat.activeSessionKey}
-              </span>
-              <MessagesSquare size={10} className={`shrink-0 ${sessionPanelOpen ? 'text-sky-400' : 'text-slate-300 dark:text-slate-600'}`} />
-            </button>
+            <button type="button" onClick={() => setSessionPanelOpen((v) => !v)} className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-4 text-left transition-colors ${sessionPanelOpen ? 'bg-sky-50/80 dark:bg-sky-900/20' : 'bg-slate-50/60 hover:bg-sky-50/60 dark:bg-slate-900/40 dark:hover:bg-sky-900/20'}`}><span className="text-[9px] text-slate-300 dark:text-slate-600">›</span><span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">{chat.activeSessionKey}</span><MessagesSquare size={10} className={`shrink-0 ${sessionPanelOpen ? 'text-sky-400' : 'text-slate-300 dark:text-slate-600'}`} /></button>
           </div>
-
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">
-            {activeMessages.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-                <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300">
-                  <Bot size={14} />
-                </div>
-                <p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p>
-                <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p>
-              </div>
-            )}
-            <div className="space-y-2">
-              {activeMessages.map((msg) => (
-                <ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} />
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">
-            {chat.runtimeMode === 'local' && (
-              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                <WifiOff size={12} />
-                {t('chat.fallbackLocal')}
-              </div>
-            )}
-            {running && !chat.gatewayWsConnected && (
-              <div className="mb-2 space-y-1">
-                <div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
-                  <WifiOff size={12} />
-                  <span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span>
-                  <button
-                    type="button"
-                    onClick={() => void handleManualReconnectGatewayWs()}
-                    disabled={reconnectingGatewayWs}
-                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300"
-                    title={t('chat.retryWsConnect', '重試連線')}
-                    aria-label={t('chat.retryWsConnect', '重試連線')}
-                  >
-                    <RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />
-                    {t('chat.retryWsConnect', '重試連線')}
-                  </button>
-                </div>
-                {gatewayWsReconnectError && (
-                  <div className="text-[10px] text-rose-600 dark:text-rose-400">
-                    {t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}
-                  </div>
-                )}
-              </div>
-            )}
-            {!running && (
-              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-                <WifiOff size={12} />
-                {t('chat.coreRequired')}
-              </div>
-            )}
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={textareaRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder={t('chat.placeholder')}
-                rows={1}
-                onCompositionStart={() => { composingRef.current = true; }}
-                onCompositionEnd={() => { composingRef.current = false; }}
-                className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                aria-label={t('chat.placeholder')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) {
-                    e.preventDefault();
-                    void handleSend();
-                  }
-                }}
-              />
-              <div className="relative flex-none">
-                {!chat.isStreaming ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleSend()}
-                    disabled={!inputValue.trim() || !running}
-                    className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    title={!running ? t('chat.coreRequired') : t('chat.send')}
-                    aria-label={!running ? t('chat.coreRequired') : t('chat.send')}
-                  >
-                    <Send size={16} />
-                    {queueCount > 0 && (
-                      <span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">
-                        {queueCount}
-                      </span>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handleAbort()}
-                    className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500"
-                    title={t('chat.stop')}
-                    aria-label={t('chat.stop')}
-                  >
-                    <Square size={14} className="fill-current" />
-                    {queueCount > 0 && (
-                      <span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">
-                        {queueCount}
-                      </span>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
-              <span className="text-[9px] text-slate-300 dark:text-slate-700">{t('chat.commandHint', '/stop 停止 · /new 新對話')}</span>
-              <span>{t('chat.inputHint')}</span>
-            </div>
-          </div>
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">{activeMessages.length === 0 && (<div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"><div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Bot size={14} /></div><p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p><p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p></div>)}<div className="space-y-2">{activeMessages.map((msg) => (<ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} />))}</div></div>
+          <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">{chat.runtimeMode === 'local' && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><WifiOff size={12} />{t('chat.fallbackLocal')}</div>)}{running && !chat.gatewayWsConnected && (<div className="mb-2 space-y-1"><div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400"><WifiOff size={12} /><span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span><button type="button" onClick={() => void handleManualReconnectGatewayWs()} disabled={reconnectingGatewayWs} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300" title={t('chat.retryWsConnect', '重試連線')} aria-label={t('chat.retryWsConnect', '重試連線')}><RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />{t('chat.retryWsConnect', '重試連線')}</button></div>{gatewayWsReconnectError && (<div className="text-[10px] text-rose-600 dark:text-rose-400">{t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}</div>)}</div>)}{!running && !chat.gatewayWsConnected && (<div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><WifiOff size={12} />{t('chat.coreRequired')}</div>)}<div className="flex items-end gap-2"><textarea ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={t('chat.placeholder')} rows={1} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label={t('chat.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) { e.preventDefault(); void handleSend(); } }} /><div className="relative flex-none">{!chat.isStreaming ? (<button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || (!running && !chat.gatewayWsConnected)} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')} aria-label={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')}><Send size={16} />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>) : (<button type="button" onClick={() => void handleAbort()} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-rose-600 text-white transition-colors hover:bg-rose-500" title={t('chat.stop')} aria-label={t('chat.stop')}><Square size={14} className="fill-current" />{queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}</button>)}</div></div><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500"><span className="text-[9px] text-slate-300 dark:text-slate-700">{t('chat.commandHint', '/stop 停止 · /new 新對話')}</span><span>{t('chat.inputHint')}</span></div></div>
         </div>
       )}
     </div>

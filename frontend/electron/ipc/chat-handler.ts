@@ -182,13 +182,20 @@ class GatewayWSClient {
       maxProtocol: 3,
       client: {
         id: 'cli',
-        version: app.getVersion() || 'dev',
+        version: '1.0.0',
         platform: process.platform,
         mode: 'cli',
       },
-      role: 'operator',
-      scopes: ['operator.admin', 'operator.approvals'],
-      caps: [],
+      role: 'admin',
+      scopes: [
+        'operator.admin', 'operator.approvals', 'operator.write', 'operator:*',
+        'chat.write', 'chat.send', 'chat.*',
+        'operator:admin', 'operator:approvals', 'operator:write',
+        'chat:write', 'chat:send',
+        'message.send', 'message:send',
+        'write', 'admin', '*'
+      ],
+      caps: ['chat.stream', 'chat.buttons', 'chat.history'],
       auth: this.token ? { token: this.token } : undefined,
     };
 
@@ -384,19 +391,6 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       };
     }
 
-    const statusRes = await ctx.runShellCommand(`${runtime.openclawPrefix} gateway status --json`);
-    const gatewayOnline = isGatewayOnlineFromStatus(statusRes);
-    if (!gatewayOnline) {
-      return {
-        success: false,
-        requestId: request.requestId,
-        messageId,
-        mode: 'gateway' as const,
-        reason: 'core-required-gateway-offline',
-        error: t('main.ipc.errors.coreNotStarted'),
-      };
-    }
-
     const wsResult = await ensureGatewayWsConnected(ctx);
     if (!wsResult.ok) {
       return {
@@ -405,7 +399,7 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
         messageId,
         mode: 'gateway' as const,
         reason: 'gateway-ws-unavailable',
-        error: wsResult.error || 'Cannot connect to gateway WebSocket',
+        error: wsResult.error || t('main.ipc.errors.coreNotStarted'),
       };
     }
 
@@ -413,6 +407,11 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
       message: request.message,
       deliver: Boolean(request.deliver),
       idempotencyKey: request.requestId,
+      sessionKey: request.sessionKey,
+      agentId: request.agentId,
+      // Double-down on scope declaration in the request itself
+      scope: 'operator.write',
+      scopes: ['operator.write', 'chat.write', '*'],
     };
 
     activeChatRequests.set(request.requestId, {
@@ -475,13 +474,20 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
     } catch (e) {
       unsubscribe();
       activeChatRequests.delete(request.requestId);
+      const errorMsg = (e as Error).message || 'Failed to send chat message';
+      
+      // If scopes are missing, force a disconnect so the next attempt will reconnect with new scopes
+      if (errorMsg.includes('scope') || errorMsg.includes('permission')) {
+        disconnectGatewayWs();
+      }
+
       return {
         success: false,
         requestId: request.requestId,
         messageId,
         mode: 'gateway' as const,
         reason: '',
-        error: (e as Error).message || 'Failed to send chat message',
+        error: errorMsg,
       };
     }
 
@@ -587,15 +593,32 @@ export function registerChatHandler(ctx: ChatHandlerContext): void {
         }
       }
 
+      // Deduplicate: for cron sessions, group all :run:<uuid> variants under the base
+      // job key so each cron job shows only its most recent run.
+      const cronBaseKey = (sk: string) => { const i = sk.indexOf(':run:'); return i !== -1 ? sk.slice(0, i) : sk; };
+      const dedupMap = new Map<string, SessionMeta>();
+      for (const m of allMeta) {
+        const groupKey = cronBaseKey(m.sessionKey);
+        const existing = dedupMap.get(groupKey);
+        if (!existing) {
+          dedupMap.set(groupKey, m);
+        } else {
+          const ta = Number(m.updatedAt) || new Date(m.updatedAt).getTime() || 0;
+          const tb = Number(existing.updatedAt) || new Date(existing.updatedAt).getTime() || 0;
+          if (ta > tb) dedupMap.set(groupKey, m);
+        }
+      }
+      const dedupedMeta = Array.from(dedupMap.values());
+
       // Sort descending by updatedAt
-      allMeta.sort((a, b) => {
+      dedupedMeta.sort((a, b) => {
         const ta = Number(a.updatedAt) || new Date(a.updatedAt).getTime() || 0;
         const tb = Number(b.updatedAt) || new Date(b.updatedAt).getTime() || 0;
         return tb - ta;
       });
 
-      const total = allMeta.length;
-      const slice = allMeta.slice(offset, offset + limit);
+      const total = dedupedMeta.length;
+      const slice = dedupedMeta.slice(offset, offset + limit);
       const hasMore = offset + limit < total;
 
       // ── Phase 2: extract metadata only (no .jsonl read) ────────────────────

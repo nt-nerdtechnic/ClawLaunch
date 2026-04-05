@@ -75,7 +75,7 @@ export class ModelDiscoveryService {
     const tasks = profiles.map(profile => {
       return this.withTimeout(
         this.fetchProviderModels(profile),
-        3000,
+        12000,
         `Fetch ${profile.provider}`
       );
     });
@@ -114,10 +114,13 @@ export class ModelDiscoveryService {
   private async fetchProviderModels(profile: AuthProfile): Promise<RemoteModelGroup | null> {
     const provider = String(profile.provider || '').toLowerCase();
     const key = (profile.apiKey || profile.api_key || profile.token || profile.bearer || '').trim();
-    if (!key && !this.isCredentialless(provider)) return null;
-
-    // 統一 provider 別名到標準名稱（對應 OpenClaw auth profile 命名慣例）
     const normalizedProvider = this.normalizeProvider(provider);
+    console.log(`[ModelDiscovery] fetchProviderModels: provider=${provider} → normalized=${normalizedProvider}, hasKey=${!!key}, keyLen=${key.length}`);
+
+    if (!key && !this.isCredentialless(provider)) {
+      console.warn(`[ModelDiscovery] Skipping ${provider}: no API key`);
+      return null;
+    }
 
     try {
       let models: string[] = [];
@@ -151,9 +154,11 @@ export class ModelDiscoveryService {
           models = await this.fetchOllamaModels();
           break;
         default:
+          console.warn(`[ModelDiscovery] No handler for normalizedProvider=${normalizedProvider} (original=${provider})`);
           return null;
       }
 
+      console.log(`[ModelDiscovery] ${normalizedProvider}: fetched ${models.length} models`);
       if (models.length === 0) return null;
 
       return {
@@ -179,7 +184,8 @@ export class ModelDiscoveryService {
   }
 
   private isCredentialless(provider: string): boolean {
-    return ['ollama', 'vllm'].includes(provider);
+    // ollama/vllm 是本地服務不需要 key；minimax 使用靜態清單也不需要 key
+    return ['ollama', 'vllm', 'minimax'].includes(provider);
   }
 
   private getDisplayName(provider: string): string {
@@ -217,8 +223,9 @@ export class ModelDiscoveryService {
     try {
       const resp = await fetch(`${baseUrl}/models`, {
         headers: { 'Authorization': `Bearer ${key}` },
+        signal: AbortSignal.timeout(8000),
       });
-
+      console.log(`[ModelDiscovery] ${provider} HTTP ${resp.status} ${resp.statusText}`);
       if (!resp.ok) return [];
       const data = await resp.json() as { data: Array<{ id: string }> };
       const rawModels = Array.isArray(data?.data) ? data.data.map(m => m.id) : [];
@@ -247,7 +254,7 @@ export class ModelDiscoveryService {
           'anthropic-version': '2023-06-01',
         },
       });
-
+      console.log(`[ModelDiscovery] anthropic HTTP ${resp.status} ${resp.statusText}`);
       if (!resp.ok) return [];
       const data = await resp.json() as { data: Array<{ id: string }> };
       return Array.isArray(data?.data) ? data.data.map(m => m.id) : [];

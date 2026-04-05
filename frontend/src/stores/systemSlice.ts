@@ -54,9 +54,19 @@ export const createSystemSlice: StateCreator<SystemSlice> = (set) => ({
     if (!corePath?.trim()) return;
     set({ ocVersionChecking: true });
     try {
-      const res = await window.electronAPI.exec(`cat ${shellQuote(corePath + '/package.json')}`);
-      if (res.code === 0 && res.stdout?.trim()) {
-        const pkg = JSON.parse(res.stdout) as { version?: unknown };
+      // 優先使用 CLI 輸出（與 project:update 偵測版本的方式一致，反映實際安裝狀態）
+      const cliRes = await window.electronAPI.exec(
+        `zsh -ilc "cd ${shellQuote(corePath)} && pnpm openclaw --version" 2>/dev/null || cd ${shellQuote(corePath)} && pnpm openclaw --version 2>/dev/null`
+      );
+      const cliMatch = String(cliRes.stdout ?? '').match(/\d{4}\.\d+\.\d+/);
+      if (cliMatch) {
+        set({ ocVersion: cliMatch[0] });
+        return;
+      }
+      // fallback：讀 package.json（CLI 不可用時）
+      const pkgRes = await window.electronAPI.exec(`cat ${shellQuote(corePath + '/package.json')}`);
+      if (pkgRes.code === 0 && pkgRes.stdout?.trim()) {
+        const pkg = JSON.parse(pkgRes.stdout) as { version?: unknown };
         const match = String(pkg.version ?? '').match(/\d{4}\.\d+\.\d+/);
         set({ ocVersion: match ? match[0] : null });
       } else {

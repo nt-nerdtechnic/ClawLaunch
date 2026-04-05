@@ -107,10 +107,6 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     t,
   });
 
-  useEffect(() => {
-    void loadDynamicModelOptions(config.corePath, effectiveAuthorizedProviders, true);
-  }, [config.corePath, effectiveAuthorizedProviders, loadDynamicModelOptions]);
-
   const CHANNEL_OPTIONS = useMemo<ChannelOption[]>(() => [
     { id: 'telegram',   name: 'Telegram',    icon: <MessageSquare size={14} />, desc: t('runtime.providers.telegram.desc'),           placeholder: t('runtime.providers.telegram.placeholder'),              keyLabel: t('runtime.providers.keyLabels.botToken') },
     { id: 'whatsapp',   name: 'WhatsApp',    icon: <Phone size={14} />,         desc: t('runtime.providers.whatsapp.desc'),           placeholder: '',                                    keyLabel: '',                    reqKey: false },

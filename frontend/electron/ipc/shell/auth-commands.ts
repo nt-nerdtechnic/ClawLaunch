@@ -387,9 +387,19 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
 
         const profilesWithSecrets = healthyProfiles.map(p => ({
           ...p,
-          apiKey: secretsMap.get(p.profileId) || ''
+          apiKey: secretsMap.get(String(p.profileId)) || ''
         }));
 
+        console.log(`[model-options] secretsMap keys:`, Array.from(secretsMap.keys()));
+        console.log(`[model-options] all profiles (${authOverview.profiles.length}):`, authOverview.profiles.map((p: any) => ({
+          profileId: String(p.profileId), provider: p.provider,
+          agentPresent: p.agentPresent, credentialHealthy: p.credentialHealthy,
+          inSecretsMap: secretsMap.has(String(p.profileId)),
+        })));
+        console.log(`[model-options] profilesWithSecrets (${profilesWithSecrets.length}):`, profilesWithSecrets.map((p: any) => ({
+          profileId: String(p.profileId), provider: p.provider, hasApiKey: !!p.apiKey, keyPreview: p.apiKey ? p.apiKey.slice(0, 8) + '...' : '(empty)',
+        })));
+        console.log(`[model-options] effectiveFilters:`, effectiveFilters);
         console.log(`[config:model-options] Starting remote discovery for ${profilesWithSecrets.length} profiles...`);
         const [authGroups, publicGroups] = await Promise.all([
           discoveryService.fetchAllRemoteModels(profilesWithSecrets),
@@ -422,7 +432,11 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       let usedCoreCli = false;
       if (corePath) {
         const listCmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw models list --all --json`;
-        const listRes = await ctx.runShellCommand(listCmd);
+        // 限制 CLI 在 5 秒內完成，不讓它卡住整個 IPC 流程
+        const cliTimeout = new Promise<{ code: number; stdout: string; stderr: string }>((resolve) =>
+          setTimeout(() => resolve({ code: 124, stdout: '', stderr: '[Launcher] CLI timeout (5s)' }), 5000)
+        );
+        const listRes = await Promise.race([ctx.runShellCommand(listCmd), cliTimeout]);
         if ((listRes.code ?? 0) === 0 && String(listRes.stdout || '').trim()) {
           const parsedList = JSON.parse(listRes.stdout);
           const rows = Array.isArray(parsedList?.models) ? parsedList.models : [];

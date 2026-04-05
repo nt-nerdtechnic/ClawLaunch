@@ -26,6 +26,7 @@ export function useRuntimeConfig(
   const [dynamicModelSource, setDynamicModelSource] = useState('');
   const [dynamicModelLoading, setDynamicModelLoading] = useState(false);
   const isLoadingModelOptionsRef = useRef(false);
+  const loadCallSeqRef = useRef(0);
 
   const shellQuote = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
@@ -87,17 +88,18 @@ export function useRuntimeConfig(
   // Load dynamic model options
   const loadDynamicModelOptions = useCallback(
     async (corePath: string, effectiveAuthorizedProviders: string[], syncRemote = false) => {
-      if (isLoadingModelOptionsRef.current) return;
       if (!window.electronAPI || !resolvedConfigDir) {
         setDynamicModelOptions([]);
         setDynamicModelSource('');
         return;
       }
 
+      // 每次呼叫取得唯一序號；舊 call 的結果若比新 call 晚回來，直接丟棄
+      const seq = ++loadCallSeqRef.current;
       isLoadingModelOptionsRef.current = true;
       setDynamicModelLoading(true);
       try {
-        console.log('[useRuntimeConfig] Starting loadDynamicModelOptions...', { syncRemote });
+        console.log('[useRuntimeConfig] Starting loadDynamicModelOptions...', { syncRemote, seq });
         const payload = {
           corePath,
           configPath: resolvedConfigDir,
@@ -105,15 +107,18 @@ export function useRuntimeConfig(
           syncRemote,
         };
 
-        // 15 秒保值超時，避免後端卡死導致 UI 永久轉圈
+        // 30 秒保守超時，避免後端卡死導致 UI 永久轉圈
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Sync timeout')), 15000)
+          setTimeout(() => reject(new Error('Sync timeout')), 30000)
         );
 
         const res = await Promise.race([
           window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`),
           timeoutPromise,
         ]);
+
+        // 若已有更新的呼叫在進行中，丟棄此結果
+        if (seq !== loadCallSeqRef.current) return;
 
         console.log('[useRuntimeConfig] Received response from config:model-options', res);
 
@@ -135,12 +140,15 @@ export function useRuntimeConfig(
         setDynamicModelOptions(groups);
         setDynamicModelSource(String(parsed?.source || ''));
       } catch (err) {
+        if (seq !== loadCallSeqRef.current) return;
         console.error('[useRuntimeConfig] Error or timeout during model loading:', err);
         setDynamicModelOptions([]);
         setDynamicModelSource('');
       } finally {
-        setDynamicModelLoading(false);
-        isLoadingModelOptionsRef.current = false;
+        if (seq === loadCallSeqRef.current) {
+          setDynamicModelLoading(false);
+          isLoadingModelOptionsRef.current = false;
+        }
       }
     },
     [resolvedConfigDir, t]

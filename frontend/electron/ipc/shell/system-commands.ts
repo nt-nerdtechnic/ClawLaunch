@@ -409,5 +409,74 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
     }
   }
 
+  if (fullCommand.startsWith('cron:get-last-session-log ')) {
+    try {
+      const payload = JSON.parse(fullCommand.replace('cron:get-last-session-log ', '').trim() || '{}');
+      const jobId = String(payload?.jobId || '').trim();
+      const agentId = String(payload?.agentId || 'main').trim();
+      const stateDir = String(payload?.stateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(getHomeDir(), '.openclaw')).trim();
+
+      if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
+
+      const sessionsJsonPath = path.join(stateDir, 'agents', agentId, 'sessions', 'sessions.json');
+      let sessionsData: Record<string, any> = {};
+      try {
+        const raw = await fs.readFile(sessionsJsonPath, 'utf-8');
+        sessionsData = JSON.parse(raw);
+      } catch (e) {
+        return { code: 0, stdout: JSON.stringify({ log: `(無法讀取會話索引: ${(e as Error).message})` }), stderr: '', exitCode: 0 };
+      }
+
+      const sessionPrefix = `agent:${agentId}:cron:${jobId}`;
+      const sessions = Object.entries(sessionsData)
+        .filter(([_, meta]: [string, any]) => meta.sessionKey === sessionPrefix || (meta.sessionKey && meta.sessionKey.startsWith(sessionPrefix + ':')))
+        .sort((a, b) => (b[1].startedAt || 0) - (a[1].startedAt || 0));
+
+      if (sessions.length === 0) {
+        return { code: 0, stdout: JSON.stringify({ log: '未找到與此任務相關的最近會話日誌。' }), stderr: '', exitCode: 0 };
+      }
+
+      const sessionId = sessions[0][0];
+      const jsonlPath = path.join(stateDir, 'agents', agentId, 'sessions', `${sessionId}.jsonl`);
+
+      try {
+        const content = await fs.readFile(jsonlPath, 'utf-8');
+        const lines = content.split('\n').filter(Boolean);
+        const lastLines = lines.slice(-30); // 取得最後 30 行以確保包含完整上下文
+        let logText = '';
+        for (const line of lastLines) {
+          try {
+            const evt = JSON.parse(line);
+            if (evt.type === 'message') {
+              const role = evt.message?.role || 'unknown';
+              const mContent = evt.message?.content;
+              let text = '';
+              if (Array.isArray(mContent)) {
+                text = mContent.map((c: any) => {
+                  if (c.type === 'text') return c.text;
+                  if (c.type === 'toolCall') return `[呼叫工具: ${c.name}]`;
+                  if (c.type === 'toolResult') return `[工具結果: ${c.name}] ${String(c.content).slice(0, 100)}...`;
+                  return JSON.stringify(c);
+                }).join(' ');
+              } else {
+                text = typeof mContent === 'string' ? mContent : JSON.stringify(mContent);
+              }
+              logText += `【${role.toUpperCase()}】：${text}\n`;
+            } else if (evt.type === 'error') {
+              logText += `❌ [錯誤系統回報]：${evt.error?.message || JSON.stringify(evt.error)}\n`;
+            }
+          } catch {
+            // 忽略非 JSON 行
+          }
+        }
+        return { code: 0, stdout: JSON.stringify({ log: logText || '找到會話但無可顯示的日誌內容。' }), stderr: '', exitCode: 0 };
+      } catch (e) {
+        return { code: 0, stdout: JSON.stringify({ log: `(無法讀取日誌檔案: ${(e as Error).message})` }), stderr: '', exitCode: 0 };
+      }
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'Failed to get session log', exitCode: 1 };
+    }
+  }
+
   return null;
 }

@@ -102,6 +102,13 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
         const parsed = JSON.parse(res.stdout);
         if (Array.isArray(parsed) && parsed.every((v) => typeof v === 'string')) {
           setAvailableVersions(parsed);
+          // 自動選取第一個非當前版本，避免使用者誤認 'main' 就是目標版本
+          setSelectedVersion((prev) => {
+            if (prev !== 'main') return prev; // 使用者已手動選過，不覆蓋
+            const currentNorm = normalizeVersion(ocVersion ?? '');
+            const firstNonCurrent = parsed.find((v: string) => normalizeVersion(v) !== currentNorm);
+            return firstNonCurrent ?? prev;
+          });
         }
       } catch { /* keep default */ }
     }
@@ -777,7 +784,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
           <button
             type="button"
             onClick={() => void handleUpdateOpenClaw(selectedVersion)}
-            disabled={!config?.corePath?.trim() || isUpdating}
+            disabled={!config?.corePath?.trim() || isUpdating || (!!ocVersion && normalizeVersion(selectedVersion) === normalizeVersion(ocVersion))}
             className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:border-emerald-700 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:text-emerald-300"
           >
             {isUpdating ? (

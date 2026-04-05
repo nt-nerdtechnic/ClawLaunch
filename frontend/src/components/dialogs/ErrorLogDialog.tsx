@@ -1,15 +1,17 @@
 import React from 'react';
 import { DialogShell } from './DialogShell';
-import { X, FileText, Clipboard, Check } from 'lucide-react';
+import { X, FileText, Clipboard, Check, MessageSquare, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export interface ErrorLogDialogProps {
   jobName: string;
   errorLog: string;
   onClose: () => void;
+  onChatToFix?: () => void;
+  onFixAndRetry?: () => void;
 }
 
-export const ErrorLogDialog: React.FC<ErrorLogDialogProps> = ({ jobName, errorLog, onClose }) => {
+export const ErrorLogDialog: React.FC<ErrorLogDialogProps> = ({ jobName, errorLog, onClose, onChatToFix, onFixAndRetry }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
 
@@ -51,18 +53,36 @@ export const ErrorLogDialog: React.FC<ErrorLogDialogProps> = ({ jobName, errorLo
         </div>
 
         {/* Footer */}
-        <div className="px-8 pb-8 pt-4 flex items-center justify-between gap-3">
+        <div className="px-8 pb-8 pt-4 flex flex-wrap items-center justify-between gap-4">
           <p className="text-[11px] text-slate-400 italic">
             診斷提示：此日誌由系統自動擷取。
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+             {onChatToFix && (
+               <button
+                 onClick={() => { onChatToFix(); onClose(); }}
+                 className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[12px] font-bold bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 border border-violet-100 dark:border-violet-800/50 hover:bg-violet-100 transition-all active:scale-95"
+               >
+                 <MessageSquare size={14} />
+                 諮詢 Agent 診斷
+               </button>
+             )}
+             {onFixAndRetry && (
+               <button
+                 onClick={() => { onFixAndRetry(); onClose(); }}
+                 className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[12px] font-bold bg-rose-600 text-white shadow-lg shadow-rose-200/50 dark:shadow-none hover:bg-rose-700 transition-all active:scale-95"
+               >
+                 <Wrench size={14} />
+                 清除並立刻重試
+               </button>
+             )}
              <button
-              onClick={copyToClipboard}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[12px] font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95"
-            >
-              {copied ? <Check size={14} className="text-emerald-500" /> : <Clipboard size={14} />}
-              {copied ? '已複製' : '複製日誌'}
-            </button>
+               onClick={copyToClipboard}
+               className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[12px] font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95"
+             >
+               {copied ? <Check size={14} className="text-emerald-500" /> : <Clipboard size={14} />}
+               {copied ? '已複製' : '複製日誌'}
+             </button>
             <button
               onClick={onClose}
               className="px-6 py-2.5 rounded-2xl text-[12px] font-black bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-lg shadow-slate-200/50 dark:shadow-none hover:bg-slate-900 dark:hover:bg-white transition-all active:scale-95"

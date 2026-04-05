@@ -249,6 +249,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ name: string; agentId: string; model: string; intervalMin: number; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
   const [logErrorJob, setLogErrorJob] = useState<CronJob | null>(null);
+  const [fetchedLog, setFetchedLog] = useState<string | null>(null);
+  const [isFetchingLog, setIsFetchingLog] = useState(false);
 
   // Chat actions
   const setChatOpen = useStore(s => s.setChatOpen);
@@ -536,6 +538,25 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     } finally {
       setFixingJobIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
       setTriggeringJobIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
+    }
+  };
+
+  const openErrorLog = async (job: CronJob) => {
+    setLogErrorJob(job);
+    setFetchedLog(null);
+    if (!job.state?.lastError) {
+      setIsFetchingLog(true);
+      try {
+        const res = await window.electronAPI.exec(`cron:get-last-session-log ${JSON.stringify({ jobId: job.id, agentId: job.agentId || 'main', stateDir })}`);
+        if (res.code === 0) {
+          const data = JSON.parse(res.stdout || '{}');
+          setFetchedLog(data.log || null);
+        }
+      } catch (e) {
+        console.error('Failed to fetch session log:', e);
+      } finally {
+        setIsFetchingLog(false);
+      }
     }
   };
 
@@ -1056,32 +1077,15 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                                 <AlertTriangle size={8} />
                                 <span>{t('controlCenter.cronJobs.lastFail')} {job.state?.consecutiveErrors ? `(${job.state.consecutiveErrors})` : ''}</span>
                               </div>
-                              {/* 查看 Log 按鈕 */}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setLogErrorJob(job); }}
-                                title="查看詳細錯誤日誌"
-                                className="px-1 py-0.5 border-y border-l bg-rose-50 dark:bg-rose-950/30 text-rose-500 border-rose-200 dark:border-rose-800/20 hover:bg-rose-100 dark:hover:bg-white/10 transition-colors"
-                              >
-                                <FileText size={8} />
-                              </button>
-                              {/* 對話修復按鈕 */}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); openChatToFix(job); }}
-                                title="開啟 Agent 對話進行故障診斷"
-                                className="px-1 py-0.5 border-y border-l bg-rose-50 dark:bg-rose-950/30 text-sky-500 border-rose-200 dark:border-rose-800/20 hover:bg-rose-100 dark:hover:bg-white/10 transition-colors"
-                              >
-                                <MessageSquare size={8} />
-                              </button>
-                              {/* 快速修復按鈕 */}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); void fixAndRetry(job.id); }}
-                                disabled={fixingJobIds.has(job.id)}
-                                title={t('controlCenter.cronJobs.fixAndRetry')}
-                                className="flex items-center gap-1 px-1.5 py-0.5 rounded-r-md border bg-rose-500 text-white border-rose-500 group-hover:bg-rose-600 transition-colors shadow-sm text-[9px] font-bold disabled:opacity-50"
-                              >
-                                <Wrench size={8} className={fixingJobIds.has(job.id) ? 'animate-spin' : ''} />
-                                <span>{fixingJobIds.has(job.id) ? t('controlCenter.cronJobs.fixing') : t('controlCenter.cronJobs.fix')}</span>
-                              </button>
+                                {/* 整合修復入口 */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); void openErrorLog(job); }}
+                                  disabled={fixingJobIds.has(job.id)}
+                                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-r-md border bg-rose-500 text-white border-rose-500 hover:bg-rose-600 transition-all shadow-sm text-[9px] font-bold disabled:opacity-50 active:scale-95"
+                                >
+                                  <Wrench size={8} className={fixingJobIds.has(job.id) ? 'animate-spin' : ''} />
+                                  <span>{fixingJobIds.has(job.id) ? t('controlCenter.cronJobs.fixing') : t('controlCenter.cronJobs.fix')}</span>
+                                </button>
                             </div>
                           ) : job.state?.lastStatus === 'ok' ? (
                             <span className="shrink-0 flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40">
@@ -1694,8 +1698,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       {logErrorJob && (
         <ErrorLogDialog
           jobName={logErrorJob.name}
-          errorLog={logErrorJob.state?.lastError || ''}
-          onClose={() => setLogErrorJob(null)}
+          errorLog={fetchedLog || logErrorJob.state?.lastError || (isFetchingLog ? '正在從會話日誌追蹤詳細內容...' : '')}
+          onClose={() => { setLogErrorJob(null); setFetchedLog(null); }}
+          onChatToFix={() => openChatToFix(logErrorJob)}
+          onFixAndRetry={() => void fixAndRetry(logErrorJob.id)}
         />
       )}
     </div>
