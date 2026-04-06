@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, ChevronDown, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, WifiOff, X, Settings2, Search, Paperclip } from 'lucide-react';
+import { Bot, Check, ChevronDown, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, X, Settings2, Search, Paperclip } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { marked } from 'marked';
@@ -150,14 +150,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     setChatOpen,
     clearChatUnread,
     addChatMessage,
-    appendChatChunk,
-    completeChatMessage,
     markChatMessageError,
-    setChatRuntimeMode,
     setActiveChatSession,
     setActiveChatAgent,
     resetChatMessages,
-    setGatewayWsConnected,
   } = useStore();
 
   const [inputValue, setInputValue] = useState('');
@@ -165,15 +161,14 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [agentDraft, setAgentDraft] = useState(chat.activeAgentId);
   const [sessionHistory, setSessionHistory] = useState<string[]>(() => loadRecentList('chat_recent_sessions', [chat.activeSessionKey]));
   const [agentHistory, setAgentHistory] = useState<string[]>(() => loadRecentList('chat_recent_agents', [chat.activeAgentId]));
-  const requestMapRef = useRef<Record<string, string>>({});
+  const gatewayInfoRef = useRef<{ baseUrl: string; token: string } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
   const [ocSessions, setOcSessions] = useState<OpenClawSessionEntry[]>([]);
   const [sessionTotal, setSessionTotal] = useState(0);
   const [sessionHasMore, setSessionHasMore] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionLoadingMore, setSessionLoadingMore] = useState(false);
-  const [reconnectingGatewayWs, setReconnectingGatewayWs] = useState(false);
-  const [gatewayWsReconnectError, setGatewayWsReconnectError] = useState('');
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const agentPickerRef = useRef<HTMLDivElement>(null);
   const { summaries: knownAgents } = usePixelOfficeAgents();
@@ -261,23 +256,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     setSessionDraft(newKey);
     resetChatMessages();
   }, [setActiveChatAgent, setActiveChatSession, resetChatMessages, loadSessionHistory]);
-
-  const handleManualReconnectGatewayWs = useCallback(async () => {
-    if (!window.electronAPI?.getGatewayInfo) {
-      setGatewayWsReconnectError(t('chat.unavailable'));
-      return;
-    }
-    setReconnectingGatewayWs(true);
-    setGatewayWsReconnectError('');
-    try {
-      const result = await window.electronAPI.getGatewayInfo();
-      setGatewayWsConnected(Boolean(result.baseUrl));
-    } catch (e) {
-      setGatewayWsReconnectError(e instanceof Error ? e.message : t('chat.errorGeneric'));
-    } finally {
-      setReconnectingGatewayWs(false);
-    }
-  }, [setGatewayWsConnected, t]);
 
   const handleSelectSession = useCallback((session: OpenClawSessionEntry) => {
     const key = session.sessionKey.trim();
@@ -374,22 +352,9 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     prevIsStreaming.current = chat.isStreaming;
   }, [chat.isStreaming, sessionPanelOpen, fetchSessions]);
 
-  const handleAbort = useCallback(async () => {
-    if (!window.electronAPI?.abortChat) return;
-    const pendingRequestIds = Object.keys(requestMapRef.current);
-    if (pendingRequestIds.length === 0) return;
-    const latest = pendingRequestIds[pendingRequestIds.length - 1];
-    await window.electronAPI.abortChat(latest);
-  }, []);
-
   const handleAbortLocal = useCallback(() => {
-    const controller = (window as any)._activeChatAbort;
-    if (controller) {
-      controller.abort();
-    } else {
-      void handleAbort(); // Fallback to backend abort
-    }
-  }, [handleAbort]);
+    abortControllerRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -435,12 +400,11 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     }
     if (!msgOverride) setInputValue('');
     applySessionAgent();
-    
-    const requestId = nextRequestId();
-    const assistantMessageId = `${requestId}-assistant`;
-    
+
+    const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
     addChatMessage({
-      id: `${requestId}-user`,
+      id: `${assistantMessageId}-user`,
       role: 'user',
       content: message,
       createdAt: Date.now(),
@@ -448,7 +412,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       agentId: chat.activeAgentId,
       status: 'done',
     });
-    
+
     addChatMessage({
       id: assistantMessageId,
       role: 'assistant',
@@ -456,105 +420,92 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       createdAt: Date.now(),
       sessionKey: chat.activeSessionKey,
       agentId: chat.activeAgentId,
-      status: 'thinking',
+      status: 'streaming',
     });
 
-    requestMapRef.current[requestId] = assistantMessageId;
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    try {
-      const { baseUrl, token } = await window.electronAPI.getGatewayInfo();
-      const abortController = new AbortController();
-      (window as any)._activeChatAbort = abortController;
+    // Cache gateway info (only IPC once per session)
+    if (!gatewayInfoRef.current) {
+      try {
+        gatewayInfoRef.current = await window.electronAPI.getGatewayInfo();
+      } catch {
+        markChatMessageError(assistantMessageId, t('chat.errorGeneric'));
+        return;
+      }
+    }
 
-      const response = await fetch(`${baseUrl}/chat/send`, {
+    const { baseUrl, token } = gatewayInfoRef.current;
+    const sessionKey = chat.activeSessionKey;
+    const agentId = chat.activeAgentId;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : '',
+          'x-openclaw-agent-id': agentId,
+          'x-openclaw-session-key': sessionKey,
         },
         body: JSON.stringify({
-          message,
+          model: `openclaw/${agentId}`,
+          messages: [{ role: 'user', content: message }],
           stream: true,
-          sessionKey: chat.activeSessionKey,
-          agentId: chat.activeAgentId,
-          idempotencyKey: requestId,
         }),
-        signal: abortController.signal,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errText = await response.text().catch(() => '');
+        markChatMessageError(assistantMessageId, errText || `HTTP ${response.status}`);
+        return;
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('Response body is null');
-
+      const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
 
-      const { patchChatMessage, appendChatChunk, updateToolCall, completeChatMessage } = useStore.getState();
-
-      while (true) {
+      outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
+        buffer = lines.pop()!;
         for (const line of lines) {
-          const trimmedLine = line.trim();
-          if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
-          
-          const jsonStr = trimmedLine.slice(6);
-          if (jsonStr === '[DONE]') {
-            completeChatMessage(assistantMessageId);
-            continue;
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') {
+            useStore.getState().completeChatMessage(assistantMessageId);
+            if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
+              const preview = useStore.getState().chat.messages.find(m => m.id === assistantMessageId)?.content?.slice(0, 100).trim() ?? '';
+              if (preview) {
+                const n = new Notification('OpenClaw Core', { body: preview, silent: false });
+                n.onclick = () => { window.focus(); };
+              }
+            }
+            break outer;
           }
-
           try {
-            const chunk = JSON.parse(jsonStr);
-            const state = chunk.state || '';
-            
-            if (chunk.toolCall) {
-              const tc = chunk.toolCall;
-              updateToolCall(assistantMessageId, {
-                id: tc.id || tc.toolCallId || 'unknown',
-                name: tc.name,
-                input: tc.input || tc.arguments,
-                output: tc.output || tc.result,
-                status: tc.status || 'pending',
-              });
-            }
-
-            if (state === 'thinking' || state === 'tool_use') {
-              patchChatMessage(assistantMessageId, { status: state });
-            }
-
-            const delta = chunk.delta || (chunk.message ? (typeof chunk.message === 'string' ? chunk.message : chunk.message.content) : '');
+            const chunk = JSON.parse(data);
+            const delta = chunk.choices?.[0]?.delta?.content;
             if (delta) {
-              appendChatChunk(assistantMessageId, delta, chat.activeSessionKey, chat.activeAgentId);
+              useStore.getState().appendChatChunk(assistantMessageId, delta, sessionKey, agentId);
             }
-
-            if (chunk.done || (state && state !== 'delta' && state !== 'thinking' && state !== 'tool_use')) {
-              completeChatMessage(assistantMessageId);
-            }
-          } catch (e) {
-            console.error('Failed to parse SSE chunk', e);
-          }
+          } catch { /* skip malformed */ }
         }
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        const { patchChatMessage } = useStore.getState();
-        patchChatMessage(assistantMessageId, { status: 'done', content: (useStore.getState().chat.messages.find(m => m.id === assistantMessageId)?.content || '') + '\n\n[已停止生成]' });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        useStore.getState().completeChatMessage(assistantMessageId);
       } else {
-        markChatMessageError(assistantMessageId, err.message || t('chat.errorGeneric'));
+        markChatMessageError(assistantMessageId, (err as Error).message || t('chat.errorGeneric'));
       }
     } finally {
-      delete requestMapRef.current[requestId];
-      (window as any)._activeChatAbort = null;
+      abortControllerRef.current = null;
     }
   }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running, addChatMessage, applySessionAgent, markChatMessageError, t, setActiveChatSession, resetChatMessages, handleAbortLocal]);
 
@@ -630,7 +581,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               <div className="rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:text-sky-300"><Bot size={16} /></div>
               <div>
                 <div className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">{t('chat.title')}</div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">{chat.runtimeMode === 'local' ? t('chat.modeLocal') : t('chat.modeGateway')}{chat.modeReason ? ` · ${chat.modeReason}` : ''}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">{t('chat.modeGateway')}</div>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -660,33 +611,15 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           </div>
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">{activeMessages.length === 0 && (<div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"><div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Bot size={14} /></div><p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p><p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p></div>)}<div className="space-y-2">{activeMessages.map((msg) => (<ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} />))}</div></div>
           <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">
-            {chat.runtimeMode === 'local' && (
-              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-amber-300/70 bg-amber-100/70 px-2 py-1 text-[10px] font-bold text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><WifiOff size={12} />{t('chat.fallbackLocal')}</div>
-            )}
-            {running && !chat.gatewayWsConnected && (
-              <div className="mb-2 space-y-1">
-                <div className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-slate-100/70 px-2 py-1 text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
-                  <WifiOff size={12} />
-                  <span>{t('chat.wsDisconnected', 'WebSocket 未連線')}</span>
-                  <button type="button" onClick={() => void handleManualReconnectGatewayWs()} disabled={reconnectingGatewayWs} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300" title={t('chat.retryWsConnect', '重試連線')} aria-label={t('chat.retryWsConnect', '重試連線')}>
-                    <RefreshCw size={10} className={reconnectingGatewayWs ? 'animate-spin' : ''} />
-                    {t('chat.retryWsConnect', '重試連線')}
-                  </button>
-                </div>
-                {gatewayWsReconnectError && (
-                  <div className="text-[10px] text-rose-600 dark:text-rose-400">{t('chat.wsReconnectFailed', { msg: gatewayWsReconnectError })}</div>
-                )}
-              </div>
-            )}
-            {!running && !chat.gatewayWsConnected && (
-              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><WifiOff size={12} />{t('chat.coreRequired')}</div>
+            {!running && (
+              <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300">{t('chat.coreRequired')}</div>
             )}
             <div className="flex items-end gap-2">
               <button type="button" className="shrink-0 rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 mb-0.5" title={t('chat.attach', '上傳檔案')} aria-label={t('chat.attach')}><Paperclip size={18} /></button>
               <textarea ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={t('chat.placeholder')} rows={1} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label={t('chat.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) { e.preventDefault(); void handleSend(); } }} />
               <div className="relative flex-none">
                 {!chat.isStreaming ? (
-                  <button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || (!running && !chat.gatewayWsConnected)} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')} aria-label={(!running && !chat.gatewayWsConnected) ? t('chat.coreRequired') : t('chat.send')}>
+                  <button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || !running} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={!running ? t('chat.coreRequired') : t('chat.send')} aria-label={!running ? t('chat.coreRequired') : t('chat.send')}>
                     <Send size={16} />
                     {queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}
                   </button>

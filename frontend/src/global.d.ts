@@ -11,37 +11,6 @@ declare global {
     messageCount: number;
   }
 
-  interface OpenClawChatRequest {
-    requestId: string;
-    sessionKey: string;
-    agentId: string;
-    message: string;
-    stream?: boolean;
-    deliver?: boolean;
-    forceLocal?: boolean;
-  }
-
-  interface OpenClawChatResult {
-    success: boolean;
-    requestId: string;
-    messageId?: string;
-    content?: string;
-    mode?: 'gateway' | 'local';
-    reason?: string;
-    error?: string;
-  }
-
-  interface OpenClawChatChunk {
-    requestId: string;
-    messageId: string;
-    delta: string;
-    done?: boolean;
-    state?: 'delta' | 'final' | 'aborted' | 'error';
-    error?: string;
-    mode?: 'gateway' | 'local';
-    reason?: string;
-  }
-
   interface Window {
     electronAPI: {
       exec: (command: string, args?: string[]) => Promise<{ code: number; stdout: string; stderr: string; exitCode?: number }>;
@@ -80,12 +49,9 @@ declare global {
         workspacePath?: string;
         corePath?: string;
       }) => Promise<{ success: boolean; runtimeDir?: string; acks?: Record<string, { ackedAt: string; expiresAt: string }>; error?: string }>;
-      invokeChat: (request: OpenClawChatRequest) => Promise<OpenClawChatResult>;
-      abortChat: (requestId: string) => Promise<{ success: boolean; error?: string }>;
-      ensureGatewayWs: () => Promise<{ connected: boolean; error?: string }>;
       getGatewayInfo: () => Promise<{ baseUrl: string; token: string }>;
-      listChatSessions: (payload?: { limit?: number; offset?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;      loadChatSession: (payload: { sessionKey: string; agentId: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
-      onChatChunk: (callback: (chunk: OpenClawChatChunk) => void) => () => void;
+      listChatSessions: (payload?: { limit?: number; offset?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;
+      loadChatSession: (payload: { sessionKey: string; agentId: string }) => Promise<{ code: number; stdout: string; stderr: string }>;
       onGatewayStatus: (callback: (status: { connected: boolean }) => void) => () => void;
       scanActiveSessions: (payload?: { activeMinutes?: number }) => Promise<{ code: number; stdout: string; stderr: string }>;
       abortSession: (payload?: { sessionKey: string; agentId?: string }) => Promise<{ success: boolean; error?: string }>;

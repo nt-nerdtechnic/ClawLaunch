@@ -27,7 +27,7 @@ import {
   scanCronJobs,
   readLauncherConfigPaths,
 } from './services/activity-watcher.js';
-import { registerChatHandler, disconnectGatewayWs } from './ipc/chat-handler.js';
+import { registerChatHandler } from './ipc/chat-handler.js';
 import { registerWindowHandler } from './ipc/window-handler.js';
 import { registerEventsHandler } from './ipc/events-handler.js';
 import { registerUsageHandler } from './ipc/usage-handler.js';
@@ -188,7 +188,6 @@ function killAllSubprocesses() {
   console.error(`[launcher-trace] killAllSubprocesses ${detail}`);
   stopGatewayWatchdog('kill-all-subprocesses');
   stopGatewayHttpWatchdog('kill-all-subprocesses');
-  disconnectGatewayWs();
   for (const proc of activeProcesses) {
     try {
       if (!proc.killed) {
@@ -257,6 +256,7 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false, // Allow renderer to directly fetch localhost gateway (HTTP/SSE)
     },
   });
 
@@ -335,7 +335,6 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   console.error(`[launcher-trace] ts=${new Date().toISOString()} action=before-quit`);
-  disconnectGatewayWs();
   killAllSubprocesses();
   const lockPath = getActiveLockFilePath();
   if (lockPath) {

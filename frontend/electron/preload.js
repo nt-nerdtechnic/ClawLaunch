@@ -20,8 +20,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ackEvent: (payload) => ipcRenderer.invoke('events:ack', payload),
   getEventState: (payload) => ipcRenderer.invoke('events:state', payload),
   scanSessions: (payload) => ipcRenderer.invoke('usage:scan-sessions', payload),
-  invokeChat: (request) => ipcRenderer.invoke('openclaw:chat.invoke', request),
-  abortChat: (requestId) => ipcRenderer.invoke('openclaw:chat.abort', requestId),
   getGatewayInfo: () => ipcRenderer.invoke('openclaw:gateway.info'),
   listChatSessions: (payload) => ipcRenderer.invoke('openclaw:sessions.list', payload ? JSON.stringify(payload) : undefined),
   loadChatSession: (payload) => ipcRenderer.invoke('openclaw:session.load', payload),
@@ -34,13 +32,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readFileEncoded: (filePath, encoding) => ipcRenderer.invoke('fs:read-file-encoded', filePath, encoding),
   detectEncoding: (filePath) => ipcRenderer.invoke('fs:detect-encoding', filePath),
   readFileBase64: (filePath) => ipcRenderer.invoke('fs:read-file-base64', filePath),
-  onChatChunk: (callback) => {
-    const listener = (_event, value) => callback(value);
-    ipcRenderer.on('openclaw:chat.chunk', listener);
-    return () => {
-      ipcRenderer.removeListener('openclaw:chat.chunk', listener);
-    };
-  },
   onGatewayStatus: (callback) => {
     const listener = (_event, value) => callback(value);
     ipcRenderer.on('openclaw:gateway.status', listener);
