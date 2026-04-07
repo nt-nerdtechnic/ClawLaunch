@@ -326,9 +326,15 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         const existing = (await loadJsonFile(authProfilesPath)) || {};
         const existingProfiles = (existing.profiles as Record<string, unknown>) || {};
         await saveJsonFile(authProfilesPath, { ...existing, profiles: { ...existingProfiles, ...toClone } });
-        // 建立獨立 auth.json（若不存在），供 OpenClaw 寫入此 agent 的實際憑證
+        // 從 main agent 複製 auth.json（含實際憑證）；若 main 沒有則建立空物件
+        const mainAuthJsonPath = path.join(configDir, 'agents', 'main', 'agent', 'auth.json');
         const authJsonPath = path.join(agentDir, 'auth.json');
-        try { await fs.access(authJsonPath); } catch { await saveJsonFile(authJsonPath, {}); }
+        try {
+          const mainAuthContent = await fs.readFile(mainAuthJsonPath, 'utf-8');
+          try { await fs.access(authJsonPath); } catch { await fs.writeFile(authJsonPath, mainAuthContent, 'utf-8'); }
+        } catch {
+          try { await fs.access(authJsonPath); } catch { await saveJsonFile(authJsonPath, {}); }
+        }
         await registerAgentInConfig();
         return { code: 0, stdout: JSON.stringify({ agentId, cloned: Object.keys(toClone) }), stderr: '', exitCode: 0 };
       }
