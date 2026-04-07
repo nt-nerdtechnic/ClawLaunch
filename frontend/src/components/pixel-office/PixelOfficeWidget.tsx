@@ -38,11 +38,12 @@ interface RenameState {
 
 interface PixelOfficeWidgetProps {
   compact?: boolean;
+  restartGateway?: () => void;
 }
 
 const SESSION_REUSE_WINDOW_MS = 5 * 60 * 1000;
 
-export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidgetProps) {
+export default function PixelOfficeWidget({ compact = false, restartGateway }: PixelOfficeWidgetProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -306,6 +307,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
                 onCreated={() => {
                   refreshAgents();
                   setShowAddAgent(false);
+                  void restartGateway();
                 }}
               />
             )}

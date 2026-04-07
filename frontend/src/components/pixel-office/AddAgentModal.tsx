@@ -149,7 +149,6 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
         return;
       }
       setSuccess(true);
-      setTimeout(() => { onCreated(agentId.trim()); onClose(); }, 1200);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -322,23 +321,34 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
             </div>
           )}
           {success && (
-            <div className="flex items-center gap-2 rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2 text-[10px] text-green-600 dark:text-green-400">
-              <CheckCircle2 size={12} />
-              {t('pixelOffice.addAgent.success', 'Agent 建立成功！')}
+            <div className="rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2 space-y-2">
+              <div className="flex items-center gap-2 text-[10px] text-green-600 dark:text-green-400">
+                <CheckCircle2 size={12} />
+                {t('pixelOffice.addAgent.success', 'Agent 建立成功！Gateway 將自動重啟。')}
+              </div>
+              <button
+                type="button"
+                onClick={() => { onCreated(agentId.trim()); onClose(); }}
+                className="w-full rounded-lg bg-green-600 hover:bg-green-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors"
+              >
+                {t('pixelOffice.addAgent.done', '完成')}
+              </button>
             </div>
           )}
 
           {/* Submit */}
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-[11px] font-black uppercase tracking-wider text-white transition-colors flex items-center justify-center gap-2"
-          >
-            {loading && <Loader2 size={12} className="animate-spin" />}
-            {loading
-              ? t('pixelOffice.addAgent.creating', 'Creating…')
-              : t('pixelOffice.addAgent.create', 'Create Agent')}
-          </button>
+          {!success && (
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-[11px] font-black uppercase tracking-wider text-white transition-colors flex items-center justify-center gap-2"
+            >
+              {loading && <Loader2 size={12} className="animate-spin" />}
+              {loading
+                ? t('pixelOffice.addAgent.creating', 'Creating…')
+                : t('pixelOffice.addAgent.create', 'Create Agent')}
+            </button>
+          )}
         </form>
       </div>
     </div>

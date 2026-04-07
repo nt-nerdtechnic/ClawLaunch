@@ -79,7 +79,7 @@ function App() {
           onExpand={toggleViewMode}
           onExpandTo={(tab) => { toggleViewMode(); setActiveTab(tab); }}
         />
-        <PixelOfficeWidget compact />
+        <PixelOfficeWidget compact restartGateway={restartGateway} />
         <ChatWidget compact />
       </>
     );
@@ -203,7 +203,7 @@ function App() {
           )}
         />
       </main>
-      <PixelOfficeWidget />
+      <PixelOfficeWidget restartGateway={restartGateway} />
       <ChatWidget />
     </div>
   );
