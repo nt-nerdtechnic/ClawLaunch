@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MessageSquare, StopCircle, Settings, CalendarClock, Key } from 'lucide-react';
+import { MessageSquare, StopCircle, Settings, CalendarClock, Key, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface AgentContextMenuProps {
@@ -11,11 +11,12 @@ interface AgentContextMenuProps {
   onChat: () => void;
   onStopAll: () => void;
   onSettings: (tab: 'info' | 'cron' | 'auth') => void;
+  onDelete: () => void;
   onClose: () => void;
 }
 
 const MENU_W = 168;
-const MENU_H = 180;
+const MENU_H = 212;
 const CANVAS_AREA_H = 400;
 
 export default function AgentContextMenu({
@@ -27,6 +28,7 @@ export default function AgentContextMenu({
   onChat,
   onStopAll,
   onSettings,
+  onDelete,
   onClose,
 }: AgentContextMenuProps) {
   const { t } = useTranslation();
@@ -94,6 +96,13 @@ export default function AgentContextMenu({
       <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('auth')}>
         <Key size={12} className="text-green-500 shrink-0" />
         {t('pixelOffice.contextMenu.auth', 'Auth')}
+      </button>
+
+      <div className="my-0.5 h-px bg-slate-100 dark:bg-slate-800 mx-1" />
+
+      <button type="button" className={`${itemCls} text-rose-600 dark:text-rose-400`} onClick={onDelete}>
+        <Trash2 size={12} className="text-rose-500 shrink-0" />
+        {t('pixelOffice.contextMenu.delete', 'Delete Agent')}
       </button>
     </div>
   );

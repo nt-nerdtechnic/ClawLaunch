@@ -9,6 +9,7 @@ import AddAgentModal from './AddAgentModal';
 import ScenePicker from './ScenePicker';
 import { usePixelOfficeAgents } from './hooks/usePixelOfficeAgents';
 import { useStore } from '../../store';
+import { DeleteConfirmDialog } from '../dialogs/DeleteConfirmDialog';
 
 type DrawerTab = 'info' | 'cron' | 'auth';
 
@@ -24,6 +25,11 @@ interface DrawerState {
   initialTab: DrawerTab;
 }
 
+interface DeleteConfirmState {
+  agentId: string;
+  agentName: string;
+}
+
 interface PixelOfficeWidgetProps {
   compact?: boolean;
 }
@@ -36,6 +42,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [drawerState, setDrawerState] = useState<DrawerState | null>(null);
   const [showAddAgent, setShowAddAgent] = useState(false);
+  const [deleteConfirmState, setDeleteConfirmState] = useState<DeleteConfirmState | null>(null);
 
   const { summaries, refreshAgents } = usePixelOfficeAgents();
   const activeCount = summaries.filter(s => s.snapshotState === 'active').length;
@@ -45,6 +52,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
   const snapshotHistory = useStore(s => s.snapshotHistory);
   const snapshot = useStore(s => s.snapshot);
   const configAgentList = useStore(s => s.detectedConfig?.agentList);
+  const configPath = useStore(s => s.config?.configPath);
 
   const todayCost = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -58,6 +66,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (showAddAgent) { setShowAddAgent(false); return; }
+        if (deleteConfirmState) { setDeleteConfirmState(null); return; }
         if (contextMenu) { setContextMenu(null); return; }
         if (drawerState) { setDrawerState(null); return; }
         if (isOpen) setIsOpen(false);
@@ -65,7 +74,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, contextMenu, drawerState, showAddAgent]);
+  }, [isOpen, contextMenu, drawerState, showAddAgent, deleteConfirmState]);
 
   const toggle = useCallback(() => setIsOpen(prev => !prev), []);
 
@@ -145,6 +154,25 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
     }
   }, [contextMenu, snapshot]);
 
+  const handleContextMenuDelete = useCallback(() => {
+    if (!contextMenu) return;
+    setDeleteConfirmState({ agentId: contextMenu.agentId, agentName: contextMenu.agentName });
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteConfirmState || !configPath) return;
+    setDeleteConfirmState(null);
+    try {
+      await window.electronAPI?.exec('agent:delete', [
+        JSON.stringify({ agentId: deleteConfirmState.agentId, configPath }),
+      ]);
+      refreshAgents();
+    } catch (e) {
+      console.error('[agent:delete] failed', e);
+    }
+  }, [deleteConfirmState, configPath, refreshAgents]);
+
   return (
     <div
       className={`fixed z-[88] flex flex-col items-end gap-2 ${
@@ -214,6 +242,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
                 onChat={() => { void handleContextMenuChat(); }}
                 onStopAll={() => void handleContextMenuStopAll()}
                 onSettings={handleContextMenuSettings}
+                onDelete={handleContextMenuDelete}
                 onClose={() => setContextMenu(null)}
               />
             )}
@@ -246,6 +275,14 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
               onClose={() => setDrawerState(null)}
             />
           )}
+
+          <DeleteConfirmDialog
+            open={deleteConfirmState !== null}
+            itemName={deleteConfirmState?.agentName ?? ''}
+            onClose={() => setDeleteConfirmState(null)}
+            onConfirm={() => { void handleDeleteConfirm(); }}
+            t={t}
+          />
         </div>
       )}
 

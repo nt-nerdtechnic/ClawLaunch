@@ -371,6 +371,47 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
     }
   }
 
+  if (fullCommand.startsWith('agent:delete')) {
+    try {
+      const payloadStr = fullCommand.replace('agent:delete', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const agentId = String(payload?.agentId || '').trim();
+      const configDir = normalizeConfigDir(String(payload?.configPath || ''));
+      if (!agentId) return { code: 1, stdout: '', stderr: 'Missing agentId', exitCode: 1 };
+      if (!configDir) return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
+      if (agentId === 'main') return { code: 1, stdout: '', stderr: 'Cannot delete the main agent', exitCode: 1 };
+      if (!/^[A-Za-z0-9._-]+$/.test(agentId)) return { code: 1, stdout: '', stderr: 'Invalid agentId', exitCode: 1 };
+
+      const configFilePath = path.join(configDir, 'openclaw.json');
+      const configJson = (await loadJsonFile(configFilePath)) as Record<string, unknown> || {};
+
+      // Find agentDir from config
+      const agentsList = Array.isArray((configJson as any)?.agents?.list) ? (configJson as any).agents.list as Array<Record<string, unknown>> : [];
+      const agentEntry = agentsList.find((a) => String(a?.id || '') === agentId);
+      const agentDir = String(agentEntry?.agentDir || '').trim() || path.join(configDir, 'agents', agentId);
+
+      // Remove agent directory
+      try {
+        await fs.rm(agentDir, { recursive: true, force: true });
+      } catch (e) {
+        // non-fatal, dir may already be gone
+        console.warn(`[agent:delete] rm agentDir failed: ${(e as Error)?.message}`);
+      }
+
+      // Remove from agents.list
+      const newList = agentsList.filter((a) => String(a?.id || '') !== agentId);
+      if (!(configJson as any).agents) (configJson as any).agents = {};
+      (configJson as any).agents.list = newList;
+
+      try { await fs.copyFile(configFilePath, `${configFilePath}.bak`); } catch { /* ignore */ }
+      await saveJsonFile(configFilePath, configJson);
+
+      return { code: 0, stdout: JSON.stringify({ deleted: agentId }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'agent:delete failed', exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('config:model-options')) {
     try {
       const payloadStr = fullCommand.replace('config:model-options', '').trim();
