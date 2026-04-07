@@ -33,6 +33,7 @@ interface DeleteConfirmState {
 interface RenameState {
   agentId: string;
   currentName: string;
+  inputValue: string;
 }
 
 interface PixelOfficeWidgetProps {
@@ -49,16 +50,15 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
   const [showAddAgent, setShowAddAgent] = useState(false);
   const [deleteConfirmState, setDeleteConfirmState] = useState<DeleteConfirmState | null>(null);
   const [renameState, setRenameState] = useState<RenameState | null>(null);
-  const [renameInputValue, setRenameInputValue] = useState('');
 
   const { summaries, refreshAgents } = usePixelOfficeAgents();
   const activeCount = summaries.filter(s => s.snapshotState === 'active').length;
 
-  const { setChatOpen, setActiveChatAgent, setActiveChatSession } = useStore();
+  const { setChatOpen, setActiveChatAgent, setActiveChatSession, setDetectedConfig, setSnapshot } = useStore();
   const running = useStore(s => s.running);
   const snapshotHistory = useStore(s => s.snapshotHistory);
   const snapshot = useStore(s => s.snapshot);
-  const configAgentList = useStore(s => s.detectedConfig?.agentList);
+  const detectedConfig = useStore(s => s.detectedConfig);
   const configPath = useStore(s => s.config?.configPath);
   const corePath = useStore(s => s.config?.corePath);
 
@@ -165,26 +165,29 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
 
   const handleContextMenuRename = useCallback(() => {
     if (!contextMenu) return;
-    setRenameState({ agentId: contextMenu.agentId, currentName: contextMenu.agentName });
-    setRenameInputValue(contextMenu.agentName);
+    setRenameState({ agentId: contextMenu.agentId, currentName: contextMenu.agentName, inputValue: contextMenu.agentName });
     setContextMenu(null);
   }, [contextMenu]);
 
   const handleRenameConfirm = useCallback(async () => {
-    if (!renameState || !configPath || !corePath || !renameInputValue.trim()) return;
-    setRenameState(null);
+    if (!renameState || !configPath || !corePath || !renameState.inputValue.trim()) return;
     try {
-      await window.electronAPI?.exec(`agent:set-name ${JSON.stringify({
+      const res = await window.electronAPI?.exec(`agent:set-name ${JSON.stringify({
         agentId: renameState.agentId,
-        name: renameInputValue.trim(),
+        name: renameState.inputValue.trim(),
         configPath,
         corePath,
       })}`);
+      if (!res || (res.exitCode !== 0 && res.code !== 0)) {
+        console.error('[agent:set-name] failed', res?.stderr);
+        return;
+      }
+      setRenameState(null);
       refreshAgents();
     } catch (e) {
       console.error('[agent:set-name] failed', e);
     }
-  }, [renameState, renameInputValue, configPath, corePath, refreshAgents]);
+  }, [renameState, configPath, corePath, refreshAgents]);
 
   const handleContextMenuDelete = useCallback(() => {
     if (!contextMenu) return;
@@ -194,16 +197,33 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteConfirmState || !configPath) return;
+    const { agentId } = deleteConfirmState;
     setDeleteConfirmState(null);
     try {
       await window.electronAPI?.exec('agent:delete', [
-        JSON.stringify({ agentId: deleteConfirmState.agentId, configPath }),
+        JSON.stringify({ agentId, configPath }),
       ]);
+      // Sync store so the deleted agent immediately disappears from the UI
+      if (detectedConfig) {
+        setDetectedConfig({
+          ...detectedConfig,
+          agentList: (detectedConfig.agentList ?? []).filter(a => a.id !== agentId),
+        });
+      }
+      if (snapshot) {
+        setSnapshot({
+          ...snapshot,
+          sessions: snapshot.sessions.filter(s => s.agentId !== agentId),
+          statuses: snapshot.statuses?.filter(s =>
+            !snapshot.sessions.some(sess => sess.agentId === agentId && sess.sessionKey === s.sessionKey)
+          ) ?? [],
+        });
+      }
       refreshAgents();
     } catch (e) {
       console.error('[agent:delete] failed', e);
     }
-  }, [deleteConfirmState, configPath, refreshAgents]);
+  }, [deleteConfirmState, configPath, detectedConfig, setDetectedConfig, snapshot, setSnapshot, refreshAgents]);
 
   return (
     <div
@@ -297,11 +317,11 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
               agentId={drawerState.agentId}
               summary={summaries.find(s => s.id === drawerState.agentId)}
               agentWorkspace={
-                configAgentList?.find(a => a.id === drawerState.agentId)?.workspace
+                detectedConfig?.agentList?.find(a => a.id === drawerState.agentId)?.workspace
                 || summaries.find(s => s.id === drawerState.agentId)?.workspace
               }
               agentDir={
-                configAgentList?.find(a => a.id === drawerState.agentId)?.agentDir
+                detectedConfig?.agentList?.find(a => a.id === drawerState.agentId)?.agentDir
                 || summaries.find(s => s.id === drawerState.agentId)?.agentDir
               }
               initialTab={drawerState.initialTab}
@@ -325,8 +345,8 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
                 <input
                   type="text"
                   autoFocus
-                  value={renameInputValue}
-                  onChange={e => setRenameInputValue(e.target.value)}
+                  value={renameState.inputValue}
+                  onChange={e => setRenameState(prev => prev ? { ...prev, inputValue: e.target.value } : null)}
                   onKeyDown={e => { if (e.key === 'Enter') void handleRenameConfirm(); if (e.key === 'Escape') setRenameState(null); }}
                   placeholder={renameState.currentName}
                   maxLength={40}
@@ -334,7 +354,7 @@ export default function PixelOfficeWidget({ compact = false }: PixelOfficeWidget
                 />
                 <div className="flex gap-2 justify-end">
                   <button type="button" onClick={() => setRenameState(null)} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">{t('common.cancel', '取消')}</button>
-                  <button type="button" onClick={() => void handleRenameConfirm()} disabled={!renameInputValue.trim()} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40 transition-colors">{t('common.confirm', '確認')}</button>
+                  <button type="button" onClick={() => void handleRenameConfirm()} disabled={!renameState.inputValue.trim()} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40 transition-colors">{t('common.confirm', '確認')}</button>
                 </div>
               </div>
             </div>

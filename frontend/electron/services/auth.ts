@@ -60,10 +60,13 @@ export const OAUTH_AUTH_CHOICES = new Set([
 export const providerAliasSets: Record<string, string[]> = {
   google: ['google', 'gemini'],
   gemini: ['gemini', 'google'],
+  'google-gemini-cli': ['google-gemini-cli', 'google-gemini', 'gemini', 'google'],
+  'google-gemini': ['google-gemini', 'google-gemini-cli', 'gemini', 'google'],
   anthropic: ['anthropic'],
   openai: ['openai', 'openai-codex'],
   'openai-codex': ['openai-codex', 'openai'],
-  minimax: ['minimax'],
+  minimax: ['minimax', 'minimax-portal'],
+  'minimax-portal': ['minimax-portal', 'minimax'],
   moonshot: ['moonshot'],
   openrouter: ['openrouter'],
   xai: ['xai'],
@@ -311,12 +314,27 @@ export async function getAgentAuthProfilePaths(configDir: string): Promise<strin
 }
 
 export async function collectAuthProfiles(configDir: string) {
+  interface MergedProfileEntry {
+    profileId: string;
+    provider: string;
+    mode: string;
+    globalPresent: boolean;
+    agentPresent: boolean;
+    agentCount: number;
+    credentialHealthy: boolean;
+    diagnostics: string[];
+    authChoice?: string;
+    synthetic?: boolean;
+    severity?: string;
+    repairGuides?: string[];
+  }
+
   const configFilePath = path.join(configDir, 'openclaw.json');
   const configJson = (await loadJsonFile(configFilePath)) || {};
   const globalProfiles = ((configJson.auth as Record<string, unknown>)?.profiles as Record<string, unknown>) || {};
   const agentFiles = await getAgentAuthProfilePaths(configDir);
 
-  const merged = new Map<string, Record<string, unknown>>();
+  const merged = new Map<string, MergedProfileEntry>();
 
   const normalizeProfileMeta = (profileId: string, profile: unknown) => {
     const p = profile as Record<string, unknown>;
@@ -372,6 +390,7 @@ export async function collectAuthProfiles(configDir: string) {
         agentCount: 0,
         credentialHealthy: true,
         diagnostics: [],
+        synthetic: true,  // not in auth.profiles — skip dual-layer diagnostics
       });
     }
   }
@@ -394,10 +413,12 @@ export async function collectAuthProfiles(configDir: string) {
         diagnostics: [],
       };
       entry.agentPresent = true;
-      entry.agentCount = ((entry.agentCount as number) || 0) + 1;
-      entry.credentialHealthy = hasCredential(profile);
+      entry.agentCount += 1;
+      const resolvedProvider = String(entry.provider || meta.provider || '').toLowerCase();
+      const isCredentialless = CREDENTIALLESS_AUTH_CHOICES.has(resolvedProvider);
+      entry.credentialHealthy = isCredentialless || hasCredential(profile);
       if (!entry.credentialHealthy) {
-        (entry.diagnostics as string[]).push('agent_credential_missing_or_invalid');
+        entry.diagnostics.push('agent_credential_missing_or_invalid');
       }
       if (!entry.mode) entry.mode = meta.mode;
       if (!entry.provider) entry.provider = meta.provider;
@@ -406,9 +427,9 @@ export async function collectAuthProfiles(configDir: string) {
   }
 
   const profiles = Array.from(merged.values()).map((entry) => {
-    const diagnostics = entry.diagnostics as string[];
-    if (entry.globalPresent && !entry.agentPresent) diagnostics.push('global_only');
-    if (!entry.globalPresent && entry.agentPresent) diagnostics.push('agent_only');
+    const { diagnostics } = entry;
+    if (!entry.synthetic && entry.globalPresent && !entry.agentPresent) diagnostics.push('global_only');
+    if (!entry.synthetic && !entry.globalPresent && entry.agentPresent) diagnostics.push('agent_only');
 
     const severity = diagnostics.includes('agent_credential_missing_or_invalid')
       ? 'critical'

@@ -15,6 +15,27 @@ import { ModelDiscoveryService } from '../../services/ModelDiscoveryService.js';
 import type { CommandResult } from './types.js';
 import type { ShellExecContext } from '../shell-exec-handler.js';
 
+function buildSetIdentityCmd(corePath: string, configFilePath: string, agentId: string, name: string) {
+  return `cd ${shellQuote(corePath)} && OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw agents set-identity --agent ${shellQuote(agentId)} --name ${shellQuote(name)} --non-interactive --json`;
+}
+
+// Returns true if models.providers['minimax-portal'] was found and modified.
+// Always attempts to remove credentials/minimax.key regardless.
+async function cleanupMinimaxPortalEntry(configJson: Record<string, unknown>, configDir: string): Promise<boolean> {
+  const configModels = configJson.models as Record<string, unknown> | undefined;
+  const configProviders = configModels?.providers as Record<string, unknown> | undefined;
+  let modifiedConfig = false;
+  if (configProviders && typeof configProviders['minimax-portal'] === 'object' && configProviders['minimax-portal']) {
+    const portal = configProviders['minimax-portal'] as Record<string, unknown>;
+    delete portal.apiKey;
+    const remainingKeys = Object.keys(portal).filter(k => k !== 'baseUrl' && k !== 'models');
+    if (remainingKeys.length === 0) delete configProviders['minimax-portal'];
+    modifiedConfig = true;
+  }
+  try { await fs.unlink(path.join(configDir, 'credentials', 'minimax.key')); } catch { /* ignore if absent */ }
+  return modifiedConfig;
+}
+
 export async function handleAuthCommands(fullCommand: string, ctx: ShellExecContext): Promise<CommandResult | null> {
   if (fullCommand.startsWith('auth:list-profiles')) {
     try {
@@ -47,24 +68,18 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       const configAuth = configJson.auth as Record<string, unknown> | undefined;
       const configProfiles = configAuth?.profiles as Record<string, unknown> | undefined;
       if (configProfiles && Object.prototype.hasOwnProperty.call(configProfiles, profileId)) {
-        // Fix 2: if the removed profile is a minimax-portal type, also clean
-        // models.providers['minimax-portal'].apiKey and credentials/minimax.key
         const removedProfileData = configProfiles[profileId] as Record<string, unknown> | undefined;
         const removedProvider = String(removedProfileData?.provider || profileId.split(':')[0]).toLowerCase();
         if (removedProvider === 'minimax-portal' || profileId.startsWith('minimax-portal:')) {
-          const configModels = configJson.models as Record<string, unknown> | undefined;
-          const configProviders = configModels?.providers as Record<string, unknown> | undefined;
-          if (configProviders && typeof configProviders['minimax-portal'] === 'object' && configProviders['minimax-portal']) {
-            const portal = configProviders['minimax-portal'] as Record<string, unknown>;
-            delete portal.apiKey;
-            // remove the whole entry if nothing meaningful remains (only baseUrl left)
-            const remainingKeys = Object.keys(portal).filter(k => k !== 'baseUrl' && k !== 'api');
-            if (remainingKeys.length === 0) delete configProviders['minimax-portal'];
-          }
-          try { await fs.unlink(path.join(configDir, 'credentials', 'minimax.key')); } catch { /* ignore if absent */ }
+          await cleanupMinimaxPortalEntry(configJson, configDir);
         }
         delete configProfiles[profileId];
         removedGlobal = true;
+      }
+      // Synthetic minimax-portal profile is stored in models.providers, not auth.profiles —
+      // handle cleanup even when the profileId doesn't exist in configProfiles.
+      if (!removedGlobal && profileId.startsWith('minimax-portal:')) {
+        if (await cleanupMinimaxPortalEntry(configJson, configDir)) removedGlobal = true;
       }
       if (removedGlobal) await saveJsonFile(configFilePath, configJson);
 
@@ -337,13 +352,11 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         } catch {
           try { await fs.access(authJsonPath); } catch { await saveJsonFile(authJsonPath, {}); }
         }
-        await registerAgentInConfig(undefined, String(payload?.name || '').trim() || agentId);
-        // 使用 OpenClaw 原生命令設定 agent 顯示名稱
         const agentName = String(payload?.name || '').trim() || agentId;
+        await registerAgentInConfig(undefined, agentName);
         const fastCorePath = String(payload?.corePath || '').trim();
-        if (fastCorePath && agentName) {
-          const setIdentityCmd = `cd ${shellQuote(fastCorePath)} && OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw agents set-identity --agent ${shellQuote(agentId)} --name ${shellQuote(agentName)} --non-interactive --json`;
-          await ctx.runShellCommand(setIdentityCmd); // best-effort，失敗不影響建立結果
+        if (fastCorePath) {
+          void ctx.runShellCommand(buildSetIdentityCmd(fastCorePath, configFilePath, agentId, agentName)).catch(() => {/* best-effort */});
         }
         return { code: 0, stdout: JSON.stringify({ agentId, cloned: Object.keys(toClone) }), stderr: '', exitCode: 0 };
       }
@@ -363,7 +376,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       if (!CREDENTIALLESS_AUTH_CHOICES.has(authChoice) && !secret) {
         return { code: 1, stdout: '', stderr: 'Credential is required for this authChoice', exitCode: 1 };
       }
-      const envPrefix = `OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_AGENT_DIR=${shellQuote(agentDir)} `;
+      const envPrefix = `cross-env OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_AGENT_DIR=${shellQuote(agentDir)} `;
       const workspaceFlag = String(payload?.workspacePath || '').trim() ? ` --workspace ${shellQuote(String(payload.workspacePath).trim())}` : '';
       let authFlags = '';
       if (authChoice === 'token') {
@@ -379,12 +392,10 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
       }
       await restoreMainDefaultAgentDir();
-      await registerAgentInConfig(String(payload?.workspacePath || '').trim() || undefined, String(payload?.name || '').trim() || agentId);
-      // 使用 OpenClaw 原生命令設定 agent 顯示名稱
-      const slowName = String(payload?.name || '').trim();
-      if (slowName) {
-        const setIdentityCmd = `cd ${shellQuote(corePath)} && OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw agents set-identity --agent ${shellQuote(agentId)} --name ${shellQuote(slowName)} --non-interactive --json`;
-        await ctx.runShellCommand(setIdentityCmd); // best-effort，失敗不影響建立結果
+      const agentDisplayName = String(payload?.name || '').trim();
+      await registerAgentInConfig(String(payload?.workspacePath || '').trim() || undefined, agentDisplayName || agentId);
+      if (agentDisplayName) {
+        void ctx.runShellCommand(buildSetIdentityCmd(corePath, configFilePath, agentId, agentDisplayName)).catch(() => {/* best-effort */});
       }
       return { code: 0, stdout: JSON.stringify({ agentId, authChoice }), stderr: '', exitCode: 0 };
     } catch (e) {
@@ -448,8 +459,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       if (!configDir) return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
 
       const configFilePath = path.join(configDir, 'openclaw.json');
-      const cmd = `cd ${shellQuote(corePath)} && OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw agents set-identity --agent ${shellQuote(agentId)} --name ${shellQuote(name)} --non-interactive --json`;
-      const res = await ctx.runShellCommand(cmd);
+      const res = await ctx.runShellCommand(buildSetIdentityCmd(corePath, configFilePath, agentId, name));
       if ((res.code ?? 0) !== 0) {
         return { code: res.code ?? 1, stdout: res.stdout || '', stderr: res.stderr || 'set-identity failed', exitCode: res.code ?? 1 };
       }
@@ -477,7 +487,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       const globalProfilesForFilter = ((authOverview.configJson as any)?.auth?.profiles) || {};
       for (const [pid, p] of Object.entries(globalProfilesForFilter)) {
         const profile = p as any;
-        const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
+        const secret = profile?.apiKey || profile?.api_key || profile?.token || profile?.access || '';
         if (secret) globalProfileSecrets.set(pid, secret);
       }
       // MiniMax Coding Plan token is stored outside auth.profiles — inject manually.
@@ -504,7 +514,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         const globalProfiles = (authOverview.configJson as any)?.auth?.profiles || {};
         for (const [pid, p] of Object.entries(globalProfiles)) {
           const profile = p as any;
-          const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
+          const secret = profile?.apiKey || profile?.api_key || profile?.token || profile?.access || '';
           if (secret) secretsMap.set(pid, secret);
         }
 
@@ -515,7 +525,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
           for (const [pid, p] of Object.entries(agentProfiles)) {
             if (secretsMap.has(pid)) continue;
             const profile = p as any;
-            const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
+            const secret = profile?.apiKey || profile?.api_key || profile?.token || profile?.access || '';
             if (secret) secretsMap.set(pid, secret);
           }
         }

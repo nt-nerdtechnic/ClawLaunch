@@ -46,9 +46,8 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
   const { t } = useTranslation();
   const config = useStore(s => s.config);
 
-  // Agent ID & display name
+  // Agent ID
   const [agentId, setAgentId] = useState('');
-  const [displayName, setDisplayName] = useState('');
 
   // Mode: clone existing vs new credential
   const [mode, setMode] = useState<Mode>('clone');
@@ -127,7 +126,7 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
       if (mode === 'clone') {
         payload = {
           agentId: agentId.trim(),
-          name: displayName.trim() || agentId.trim(),
+          name: agentId.trim(),
           configPath: config.configPath,
           corePath: config.corePath,
           cloneFromGlobal: true,
@@ -136,7 +135,7 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
       } else {
         payload = {
           agentId: agentId.trim(),
-          name: displayName.trim() || agentId.trim(),
+          name: agentId.trim(),
           authChoice,
           secret: secret.trim(),
           corePath: config.corePath,
@@ -194,20 +193,6 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
               ? <p className="mt-0.5 text-[9px] text-red-500">{agentIdError}</p>
               : agentId && <p className="mt-0.5 text-[9px] text-slate-400">agents/{agentId}/</p>
             }
-          </div>
-
-          {/* Display Name */}
-          <div>
-            <label className={labelCls}>{t('pixelOffice.addAgent.displayName', '顯示名稱')}</label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
-              placeholder={agentId || 'e.g. Apple Bot'}
-              maxLength={40}
-              disabled={loading || success}
-              className={fieldCls}
-            />
           </div>
 
           {/* Mode tabs */}

@@ -233,7 +233,7 @@ export const MonitorPage: React.FC<MonitorPageProps> = ({
                 ? t('monitor.starting')
                 : t('monitor.startService')}
           </button>
-          {onRestartGateway && (
+          {onRestartGateway && running && (
             <button
               type="button"
               onClick={async () => {

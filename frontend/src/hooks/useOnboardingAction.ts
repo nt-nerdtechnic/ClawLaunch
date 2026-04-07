@@ -84,9 +84,13 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
 
   const hasAgentCredential = (profile: Record<string, unknown>) => {
     const token = String(profile?.token || '').trim();
+    const key = String(profile?.key || profile?.apiKey || profile?.api_key || '').trim();
     const access = String(profile?.access || '').trim();
     if (token) {
       return { ok: !/\s/.test(token), reason: /\s/.test(token) ? 'token_whitespace' : 'token' };
+    }
+    if (key) {
+      return { ok: !/\s/.test(key), reason: /\s/.test(key) ? 'token_whitespace' : 'key' };
     }
     if (access) {
       return { ok: true, reason: 'oauth_access' };
@@ -593,13 +597,6 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
       const legacyAgentDirEnv = isolatedAgentDir ? `PI_CODING_AGENT_DIR=${shellQuote(isolatedAgentDir)} ` : '';
       const envPrefix = `${stateDirEnv}${configPathEnv}${agentDirEnv}${legacyAgentDirEnv}`;
       const cdCorePath = `cd ${shellQuote(corePath)}`;
-      const oauthAuthChoices = new Set([
-        'openai-codex',
-        'google-gemini-cli',
-        'chutes',
-        'qwen-portal'
-      ]);
-
       if (configPath) {
         const migratePayload = {
           configPath,
@@ -619,12 +616,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           case 'model': {
             addLocalLog(t('onboarding.logs.verifyingExistingAuth'), 'system');
             if (!configPath) throw new Error(t('onboarding.errors.configPathMissing'));
-            // Bug 4: validate authChoice for existing users (previously skipped)
             if (!SUPPORTED_AUTH_CHOICES.has(selectedAuthChoice)) {
               throw new Error(t('onboarding.errors.unsupportedAuthType', { type: selectedAuthChoice || 'unknown' }));
             }
             if (CREDENTIALLESS_AUTH_CHOICES.has(selectedAuthChoice)) {
-              // Bug 5: run auth:add-profile to ensure agent directory structure is set up
+              // Initialize agent directory structure for local-inference providers
               const credlessPayload = { corePath, configPath, workspacePath, authChoice: selectedAuthChoice, secret: '' };
               const credlessRes = await window.electronAPI.exec(`auth:add-profile ${JSON.stringify(credlessPayload)}`);
               if (!isCommandSuccess(credlessRes)) {
@@ -651,7 +647,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               await verifyMiniMaxPortalTokenConfig({ authChoice: selectedAuthChoice, configPath, addLocalLog });
               break;
             }
-            // Bug 1: if user entered a new credential and not OAuth, save it before verifying
+            // Persist updated credential if user entered one (OAuth handles its own token lifecycle)
             if (config.apiKey && !OAUTH_AUTH_CHOICES.has(selectedAuthChoice)) {
               const sanitizedSecret = sanitizeSecret(config.apiKey);
               const addProfilePayload = {
@@ -666,7 +662,6 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
                 throw new Error(addProfileRes.stderr || t('onboarding.errors.coreAuthFailed'));
               }
             }
-            // Bug 2: use authChoice-specific verification instead of any-profile check
             await verifyDualLayerAuthPersistence({ authChoice: selectedAuthChoice, configPath, addLocalLog });
             break;
           }
@@ -739,7 +734,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
         case 'model': {
           addLocalLog(t('onboarding.logs.aligningSoul', { choice: selectedAuthChoice }), 'system');
 
-          if (oauthAuthChoices.has(selectedAuthChoice)) {
+          if (OAUTH_AUTH_CHOICES.has(selectedAuthChoice)) {
             addLocalLog(t('onboarding.logs.oauthInteractiveNeeded'), 'system');
             const oauthProviderMap: Record<string, { provider: string; method?: string }> = {
               'openai-codex': { provider: 'openai-codex', method: 'oauth' },

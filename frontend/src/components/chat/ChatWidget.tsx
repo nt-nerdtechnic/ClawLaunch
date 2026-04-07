@@ -235,6 +235,9 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     setAgentDraft(agentId);
     setAgentPickerOpen(false);
 
+    // 清除緩存的 gateway info，確保新 agent 獲取正確的配置
+    gatewayInfoRef.current = null;
+
     if (window.electronAPI?.listChatSessions) {
       try {
         const res = await window.electronAPI.listChatSessions({ limit: 20, offset: 0 });
@@ -488,6 +491,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       let buffer = '';
       let chunkCount = 0;
       let messageHandled = false;
+      let lastNonDeltaChunk: string = '';
 
       outer: while (true) {
         const { done, value } = await reader.read();
@@ -505,7 +509,16 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             console.log('[chat] [DONE], total chunks:', chunkCount);
             messageHandled = true;
             if (chunkCount === 0) {
-              markChatMessageError(assistantMessageId, `Agent "${agentId}" 未回應，請確認 API 金鑰是否已設定`);
+              // 嘗試從最後一個非 delta chunk 提取錯誤信息
+              let errDetail = '';
+              if (lastNonDeltaChunk) {
+                try {
+                  const lastChunk = JSON.parse(lastNonDeltaChunk);
+                  const maybeMsg = lastChunk?.message || lastChunk?.choices?.[0]?.message?.content || lastChunk?.choices?.[0]?.finish_reason;
+                  if (maybeMsg && typeof maybeMsg === 'string') errDetail = `（${maybeMsg}）`;
+                } catch { /* ignore */ }
+              }
+              markChatMessageError(assistantMessageId, `Agent "${agentId}" 未回應，請確認 API 金鑰是否已設定${errDetail}`);
             } else {
               useStore.getState().completeChatMessage(assistantMessageId);
               if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
@@ -533,6 +546,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               chunkCount++;
               useStore.getState().appendChatChunk(assistantMessageId, delta, sessionKey, agentId);
             } else {
+              lastNonDeltaChunk = data;
               console.log('[chat] non-delta chunk:', JSON.stringify(chunk).slice(0, 200));
             }
           } catch (e) {
@@ -543,6 +557,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       // 安全保底：若 stream 結束但未收到 [DONE]，仍完成訊息（不覆蓋已標記的 error）
       if (!messageHandled) {
         useStore.getState().completeChatMessage(assistantMessageId);
+      }
+      // 清除 gateway info 緩存，以便下次切換 agent 時重新獲取
+      if (chunkCount === 0) {
+        gatewayInfoRef.current = null;
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {

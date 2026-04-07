@@ -17,6 +17,7 @@ interface AuthProfile {
   api_key?: string;
   token?: string;
   bearer?: string;
+  access?: string;  // OAuth access token (chutes, qwen-portal, openai-codex, google-gemini-cli)
 }
 
 export class ModelDiscoveryService {
@@ -113,7 +114,7 @@ export class ModelDiscoveryService {
 
   private async fetchProviderModels(profile: AuthProfile): Promise<RemoteModelGroup | null> {
     const provider = String(profile.provider || '').toLowerCase();
-    const key = (profile.apiKey || profile.api_key || profile.token || profile.bearer || '').trim();
+    const key = (profile.apiKey || profile.api_key || profile.token || profile.bearer || profile.access || '').trim();
     const normalizedProvider = this.normalizeProvider(provider);
     console.log(`[ModelDiscovery] fetchProviderModels: provider=${provider} → normalized=${normalizedProvider}, hasKey=${!!key}, keyLen=${key.length}`);
 
@@ -153,6 +154,15 @@ export class ModelDiscoveryService {
         case 'ollama':
           models = await this.fetchOllamaModels();
           break;
+        case 'vllm':
+          models = await this.fetchVllmModels();
+          break;
+        case 'qwen':
+          models = this.getQwenStaticModels();
+          break;
+        case 'chutes':
+          models = await this.fetchChutesModels(key);
+          break;
         default:
           console.warn(`[ModelDiscovery] No handler for normalizedProvider=${normalizedProvider} (original=${provider})`);
           return null;
@@ -184,8 +194,8 @@ export class ModelDiscoveryService {
   }
 
   private isCredentialless(provider: string): boolean {
-    // ollama/vllm 是本地服務不需要 key；minimax 使用靜態清單也不需要 key
-    return ['ollama', 'vllm', 'minimax'].includes(provider);
+    // ollama/vllm 是本地服務不需要 key；minimax/qwen 使用靜態清單不需要 key
+    return ['ollama', 'vllm', 'minimax', 'qwen'].includes(provider);
   }
 
   private getDisplayName(provider: string): string {
@@ -203,6 +213,10 @@ export class ModelDiscoveryService {
       minimax: 'MiniMax',
       moonshot: 'Moonshot (Kimi)',
       ollama: 'Ollama (Local)',
+      vllm: 'vLLM (Local)',
+      qwen: 'Qwen (Alibaba)',
+      'qwen-portal': 'Qwen (Alibaba)',
+      chutes: 'Chutes AI',
     };
     return map[provider] || provider.toUpperCase();
   }
@@ -336,6 +350,46 @@ export class ModelDiscoveryService {
       if (!resp.ok) return [];
       const data = await resp.json() as { models: Array<{ name: string }> };
       return Array.isArray(data?.models) ? data.models.map(m => m.name) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * vLLM 本地接口（OpenAI 相容，預設 localhost:8000）
+   */
+  private async fetchVllmModels(): Promise<string[]> {
+    try {
+      const resp = await fetch('http://localhost:8000/v1/models', {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!resp.ok) return [];
+      const data = await resp.json() as { data: Array<{ id: string }> };
+      return Array.isArray(data?.data) ? data.data.map(m => m.id) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Qwen Portal 靜態清單（openclaw core 使用固定 catalog）
+   */
+  private getQwenStaticModels(): string[] {
+    return ['qwen-coder', 'qwen-vision'];
+  }
+
+  /**
+   * Chutes AI 接口（OpenAI 相容）
+   */
+  private async fetchChutesModels(key: string): Promise<string[]> {
+    try {
+      const resp = await fetch('https://api.chutes.ai/v1/models', {
+        headers: key ? { 'Authorization': `Bearer ${key}` } : {},
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) return [];
+      const data = await resp.json() as { data: Array<{ id: string }> };
+      return Array.isArray(data?.data) ? data.data.map(m => m.id) : [];
     } catch {
       return [];
     }
