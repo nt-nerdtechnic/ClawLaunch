@@ -483,6 +483,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       const decoder = new TextDecoder();
       let buffer = '';
       let chunkCount = 0;
+      let messageHandled = false;
 
       outer: while (true) {
         const { done, value } = await reader.read();
@@ -498,6 +499,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
             console.log('[chat] [DONE], total chunks:', chunkCount);
+            messageHandled = true;
             if (chunkCount === 0) {
               markChatMessageError(assistantMessageId, `Agent "${agentId}" 未回應，請確認 API 金鑰是否已設定`);
             } else {
@@ -518,6 +520,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             const streamError = chunk.error?.message ?? chunk.error;
             if (streamError) {
               console.error('[chat] stream error chunk:', streamError);
+              messageHandled = true;
               markChatMessageError(assistantMessageId, String(streamError));
               break outer;
             }
@@ -533,8 +536,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           }
         }
       }
-      // 安全保底：若 stream 結束但未收到 [DONE]，仍完成訊息
-      useStore.getState().completeChatMessage(assistantMessageId);
+      // 安全保底：若 stream 結束但未收到 [DONE]，仍完成訊息（不覆蓋已標記的 error）
+      if (!messageHandled) {
+        useStore.getState().completeChatMessage(assistantMessageId);
+      }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
         console.log('[chat] aborted');
