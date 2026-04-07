@@ -326,6 +326,9 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         const existing = (await loadJsonFile(authProfilesPath)) || {};
         const existingProfiles = (existing.profiles as Record<string, unknown>) || {};
         await saveJsonFile(authProfilesPath, { ...existing, profiles: { ...existingProfiles, ...toClone } });
+        // 建立獨立 auth.json（若不存在），供 OpenClaw 寫入此 agent 的實際憑證
+        const authJsonPath = path.join(agentDir, 'auth.json');
+        try { await fs.access(authJsonPath); } catch { await saveJsonFile(authJsonPath, {}); }
         await registerAgentInConfig();
         return { code: 0, stdout: JSON.stringify({ agentId, cloned: Object.keys(toClone) }), stderr: '', exitCode: 0 };
       }

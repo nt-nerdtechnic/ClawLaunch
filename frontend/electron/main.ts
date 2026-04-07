@@ -47,7 +47,6 @@ const PERSISTENT_CONFIG_DIR = path.join(
   app.getName().replace(/ /g, '-'),
 );
 mkdirSync(PERSISTENT_CONFIG_DIR, { recursive: true });
-const CONFIG_DIR = PERSISTENT_CONFIG_DIR;
 const getClawlaunchFile = () => path.join(app.getPath('home'), '.clawlaunch', 'clawlaunch.json');
 // ───────────────────────────────────────────────────────────────────────────
 

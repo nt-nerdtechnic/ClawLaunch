@@ -6,7 +6,6 @@ import {
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
   Pencil, Save, X, Zap, Bell, BellOff, Wrench,
-  FileText, MessageSquare,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';

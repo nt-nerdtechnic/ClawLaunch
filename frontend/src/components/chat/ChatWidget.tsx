@@ -376,6 +376,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       setInputValue('');
       const newKey = crypto.randomUUID();
       setActiveChatSession(newKey);
+      setSessionDraft(newKey);
       resetChatMessages();
       setSessionPanelOpen(false);
       return;
@@ -401,6 +402,9 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     if (!msgOverride) setInputValue('');
     applySessionAgent();
 
+    // 讀取 applySessionAgent 更新後的 store 值，避免 stale closure 導致 sessionKey 不符
+    const { activeSessionKey: sessionKey, activeAgentId: agentId } = useStore.getState().chat;
+
     const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     addChatMessage({
@@ -408,8 +412,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       role: 'user',
       content: message,
       createdAt: Date.now(),
-      sessionKey: chat.activeSessionKey,
-      agentId: chat.activeAgentId,
+      sessionKey,
+      agentId,
       status: 'done',
     });
 
@@ -418,8 +422,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       role: 'assistant',
       content: '',
       createdAt: Date.now(),
-      sessionKey: chat.activeSessionKey,
-      agentId: chat.activeAgentId,
+      sessionKey,
+      agentId,
       status: 'streaming',
     });
 
@@ -436,14 +440,15 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     }
 
     const { baseUrl, token } = gatewayInfoRef.current;
-    const sessionKey = chat.activeSessionKey;
-    const agentId = chat.activeAgentId;
+    const url = `${baseUrl}/v1/chat/completions`;
+
+    console.log('[chat] send →', { url, agentId, sessionKey, message: message.slice(0, 80) });
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -459,19 +464,32 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
         signal: controller.signal,
       });
 
+      console.log('[chat] response:', response.status, response.statusText);
+
       if (!response.ok) {
         const errText = await response.text().catch(() => '');
+        console.error('[chat] HTTP error body:', errText);
         markChatMessageError(assistantMessageId, errText || `HTTP ${response.status}`);
         return;
       }
 
-      const reader = response.body!.getReader();
+      if (!response.body) {
+        console.error('[chat] response.body is null');
+        markChatMessageError(assistantMessageId, 'No response body');
+        return;
+      }
+
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let chunkCount = 0;
 
       outer: while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('[chat] stream done, chunks:', chunkCount);
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop()!;
@@ -479,29 +497,50 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           if (!line.startsWith('data: ')) continue;
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
-            useStore.getState().completeChatMessage(assistantMessageId);
-            if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
-              const preview = useStore.getState().chat.messages.find(m => m.id === assistantMessageId)?.content?.slice(0, 100).trim() ?? '';
-              if (preview) {
-                const n = new Notification('OpenClaw Core', { body: preview, silent: false });
-                n.onclick = () => { window.focus(); };
+            console.log('[chat] [DONE], total chunks:', chunkCount);
+            if (chunkCount === 0) {
+              markChatMessageError(assistantMessageId, `Agent "${agentId}" 未回應，請確認 API 金鑰是否已設定`);
+            } else {
+              useStore.getState().completeChatMessage(assistantMessageId);
+              if ((document.hidden || !chatIsOpenRef.current) && 'Notification' in window && Notification.permission === 'granted') {
+                const preview = useStore.getState().chat.messages.find(m => m.id === assistantMessageId)?.content?.slice(0, 100).trim() ?? '';
+                if (preview) {
+                  const n = new Notification('OpenClaw Core', { body: preview, silent: false });
+                  n.onclick = () => { window.focus(); };
+                }
               }
             }
             break outer;
           }
           try {
             const chunk = JSON.parse(data);
+            // 檢查 SSE stream 內的錯誤欄位
+            const streamError = chunk.error?.message ?? chunk.error;
+            if (streamError) {
+              console.error('[chat] stream error chunk:', streamError);
+              markChatMessageError(assistantMessageId, String(streamError));
+              break outer;
+            }
             const delta = chunk.choices?.[0]?.delta?.content;
             if (delta) {
+              chunkCount++;
               useStore.getState().appendChatChunk(assistantMessageId, delta, sessionKey, agentId);
+            } else {
+              console.log('[chat] non-delta chunk:', JSON.stringify(chunk).slice(0, 200));
             }
-          } catch { /* skip malformed */ }
+          } catch (e) {
+            console.warn('[chat] SSE parse error:', data.slice(0, 200), e);
+          }
         }
       }
+      // 安全保底：若 stream 結束但未收到 [DONE]，仍完成訊息
+      useStore.getState().completeChatMessage(assistantMessageId);
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
+        console.log('[chat] aborted');
         useStore.getState().completeChatMessage(assistantMessageId);
       } else {
+        console.error('[chat] fetch error:', err);
         markChatMessageError(assistantMessageId, (err as Error).message || t('chat.errorGeneric'));
       }
     } finally {
@@ -587,7 +626,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             <div className="flex items-center gap-1">
               <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.search', '搜尋會話')} aria-label={t('chat.search')}><Search size={14} /></button>
               <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.config', '覆寫設定')} aria-label={t('chat.config')}><Settings2 size={14} /></button>
-              <button type="button" onClick={() => { const newKey = crypto.randomUUID(); setActiveChatSession(newKey); resetChatMessages(); setSessionPanelOpen(false); }} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.sessions.new')} aria-label={t('chat.sessions.new')}><MessageSquarePlus size={16} /></button>
+              <button type="button" onClick={() => { const newKey = crypto.randomUUID(); setActiveChatSession(newKey); setSessionDraft(newKey); resetChatMessages(); setSessionPanelOpen(false); }} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.sessions.new')} aria-label={t('chat.sessions.new')}><MessageSquarePlus size={16} /></button>
               <button type="button" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title={t('chat.close')} aria-label={t('chat.close')}><X size={16} /></button>
             </div>
           </div>
