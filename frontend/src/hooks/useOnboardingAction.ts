@@ -624,6 +624,20 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               break;
             }
             if (DIRECT_MINIMAX_TOKEN_CHOICES.has(selectedAuthChoice)) {
+              if (config.apiKey) {
+                const sanitizedSecret = sanitizeSecret(config.apiKey);
+                const addProfilePayload = {
+                  corePath,
+                  configPath,
+                  workspacePath,
+                  authChoice: selectedAuthChoice,
+                  secret: sanitizedSecret,
+                };
+                const addProfileRes = await window.electronAPI.exec(`auth:add-profile ${JSON.stringify(addProfilePayload)}`);
+                if (!isCommandSuccess(addProfileRes)) {
+                  throw new Error(addProfileRes.stderr || t('onboarding.errors.coreAuthFailed'));
+                }
+              }
               await verifyMiniMaxPortalTokenConfig({ authChoice: selectedAuthChoice, configPath, addLocalLog });
               break;
             }

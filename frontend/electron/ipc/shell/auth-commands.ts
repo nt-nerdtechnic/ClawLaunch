@@ -244,7 +244,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         value.startsWith(homeDir) ? value.replace(homeDir, '~') : value;
 
       // ── Helper: register agent in agents.list[] of openclaw.json ──────────
-      const registerAgentInConfig = async (workspacePath?: string) => {
+      const registerAgentInConfig = async (workspacePath?: string, name?: string) => {
         try {
           const configJson = (await loadJsonFile(configFilePath)) || {} as Record<string, unknown>;
           if (!configJson.agents || typeof configJson.agents !== 'object') {
@@ -279,6 +279,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
           nextListMap.set(agentId, {
             ...existing,
             id: agentId,
+            name: name || String(existing.name || agentId),
             workspace: workspacePath || String(existing.workspace || `~/.openclaw/workspace-${agentId}`).trim(),
             agentDir: toTildePath(agentDir),
           });
@@ -335,7 +336,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         } catch {
           try { await fs.access(authJsonPath); } catch { await saveJsonFile(authJsonPath, {}); }
         }
-        await registerAgentInConfig();
+        await registerAgentInConfig(undefined, String(payload?.name || '').trim() || agentId);
         return { code: 0, stdout: JSON.stringify({ agentId, cloned: Object.keys(toClone) }), stderr: '', exitCode: 0 };
       }
 
@@ -370,7 +371,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         return { code: onboardRes.code ?? 1, stdout: onboardRes.stdout || '', stderr: onboardRes.stderr || 'onboard failed', exitCode: onboardRes.code ?? 1 };
       }
       await restoreMainDefaultAgentDir();
-      await registerAgentInConfig(String(payload?.workspacePath || '').trim() || undefined);
+      await registerAgentInConfig(String(payload?.workspacePath || '').trim() || undefined, String(payload?.name || '').trim() || agentId);
       return { code: 0, stdout: JSON.stringify({ agentId, authChoice }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'auth create-agent failed', exitCode: 1 };
