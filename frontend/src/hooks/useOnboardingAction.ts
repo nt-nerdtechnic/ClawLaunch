@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { execInTerminal } from '../utils/terminal';
-import { AUTH_CHOICE_PROVIDER_ALIASES } from '../constants/providers';
+import { AUTH_CHOICE_PROVIDER_ALIASES, OAUTH_AUTH_CHOICES } from '../constants/providers';
 import { shellQuote } from '../utils/shell';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -619,7 +619,17 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
           case 'model': {
             addLocalLog(t('onboarding.logs.verifyingExistingAuth'), 'system');
             if (!configPath) throw new Error(t('onboarding.errors.configPathMissing'));
+            // Bug 4: validate authChoice for existing users (previously skipped)
+            if (!SUPPORTED_AUTH_CHOICES.has(selectedAuthChoice)) {
+              throw new Error(t('onboarding.errors.unsupportedAuthType', { type: selectedAuthChoice || 'unknown' }));
+            }
             if (CREDENTIALLESS_AUTH_CHOICES.has(selectedAuthChoice)) {
+              // Bug 5: run auth:add-profile to ensure agent directory structure is set up
+              const credlessPayload = { corePath, configPath, workspacePath, authChoice: selectedAuthChoice, secret: '' };
+              const credlessRes = await window.electronAPI.exec(`auth:add-profile ${JSON.stringify(credlessPayload)}`);
+              if (!isCommandSuccess(credlessRes)) {
+                throw new Error(credlessRes.stderr || t('onboarding.errors.coreAuthFailed'));
+              }
               addLocalLog(t('onboarding.logs.credentiallessSkip'), 'system');
               break;
             }
@@ -641,7 +651,23 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
               await verifyMiniMaxPortalTokenConfig({ authChoice: selectedAuthChoice, configPath, addLocalLog });
               break;
             }
-            await verifyAnyDualLayerAuthPersistence({ configPath, addLocalLog });
+            // Bug 1: if user entered a new credential and not OAuth, save it before verifying
+            if (config.apiKey && !OAUTH_AUTH_CHOICES.has(selectedAuthChoice)) {
+              const sanitizedSecret = sanitizeSecret(config.apiKey);
+              const addProfilePayload = {
+                corePath,
+                configPath,
+                workspacePath,
+                authChoice: selectedAuthChoice,
+                secret: sanitizedSecret,
+              };
+              const addProfileRes = await window.electronAPI.exec(`auth:add-profile ${JSON.stringify(addProfilePayload)}`);
+              if (!isCommandSuccess(addProfileRes)) {
+                throw new Error(addProfileRes.stderr || t('onboarding.errors.coreAuthFailed'));
+              }
+            }
+            // Bug 2: use authChoice-specific verification instead of any-profile check
+            await verifyDualLayerAuthPersistence({ authChoice: selectedAuthChoice, configPath, addLocalLog });
             break;
           }
           case 'messaging': {

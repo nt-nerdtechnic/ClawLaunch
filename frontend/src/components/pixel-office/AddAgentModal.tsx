@@ -129,6 +129,7 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
           agentId: agentId.trim(),
           name: displayName.trim() || agentId.trim(),
           configPath: config.configPath,
+          corePath: config.corePath,
           cloneFromGlobal: true,
           profileIds: Array.from(selectedProfileIds),
         };

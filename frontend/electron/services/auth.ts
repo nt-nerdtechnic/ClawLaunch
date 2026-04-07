@@ -6,6 +6,19 @@ import { t } from '../utils/i18n.js';
 
 // ── Provider / Auth 常數 ───────────────────────────────────────────────────
 
+// Choices that use a CLI flag to pass a credential to `openclaw onboard`.
+// Add new API-key-based auth choices here AND in AUTH_CHOICE_PROVIDER_ALIASES.
+// The `satisfies` constraint ensures every entry in this type has a flag mapped —
+// adding to ApiKeyAuthChoice without a mapping entry is a compile error.
+type ApiKeyAuthChoice =
+  | 'apiKey'
+  | 'openai-api-key'
+  | 'gemini-api-key'
+  | 'minimax-api'
+  | 'moonshot-api-key'
+  | 'openrouter-api-key'
+  | 'xai-api-key';
+
 export const AUTH_CHOICE_FLAG_MAPPING: Record<string, string> = {
   apiKey: '--anthropic-api-key',
   'openai-api-key': '--openai-api-key',
@@ -14,7 +27,7 @@ export const AUTH_CHOICE_FLAG_MAPPING: Record<string, string> = {
   'moonshot-api-key': '--moonshot-api-key',
   'openrouter-api-key': '--openrouter-api-key',
   'xai-api-key': '--xai-api-key',
-};
+} satisfies Record<ApiKeyAuthChoice, string>;
 
 export const AUTH_CHOICE_PROVIDER_ALIASES: Record<string, string[]> = {
   apiKey: ['anthropic'],
@@ -244,7 +257,7 @@ export function parseOpenClawConfig(content: string) {
           const id = String(a.id ?? '').trim();
           return {
             id,
-            name: String(a.name ?? a.id ?? '').trim(),
+            name: String((a.identity as Record<string, unknown>)?.name ?? a.name ?? a.id ?? '').trim(),
             workspace: String(a.workspace ?? parsed.agents?.defaults?.workspace ?? '').trim(),
             agentDir: String(a.agentDir ?? `~/.openclaw/agents/${id}/agent`).trim(),
             model: String(a.model ?? '').trim(),
@@ -337,6 +350,30 @@ export async function collectAuthProfiles(configDir: string) {
       credentialHealthy: false,
       diagnostics: [],
     });
+  }
+
+  // MiniMax Coding Plan token is stored in models.providers['minimax-portal'].apiKey,
+  // not under auth.profiles — inject a synthetic profile so it shows up in the count.
+  const minimaxPortal = ((configJson.models as Record<string, unknown>)?.providers as Record<string, unknown>)?.['minimax-portal'] as Record<string, unknown> | undefined;
+  if (minimaxPortal?.apiKey && typeof minimaxPortal.apiKey === 'string' && minimaxPortal.apiKey.length > 5) {
+    const syntheticId = 'minimax-portal:token';
+    if (!merged.has(syntheticId)) {
+      const portalBaseUrl = String(minimaxPortal.baseUrl || '');
+      const authChoice = portalBaseUrl.includes('minimaxi.com')
+        ? 'minimax-coding-plan-cn-token'
+        : 'minimax-coding-plan-global-token';
+      merged.set(syntheticId, {
+        profileId: syntheticId,
+        provider: 'minimax-portal',
+        mode: 'token',
+        authChoice,
+        globalPresent: true,
+        agentPresent: false,
+        agentCount: 0,
+        credentialHealthy: true,
+        diagnostics: [],
+      });
+    }
   }
 
   for (const authPath of agentFiles) {

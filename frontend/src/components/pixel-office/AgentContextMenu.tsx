@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MessageSquare, StopCircle, Settings, CalendarClock, Key, Trash2 } from 'lucide-react';
+import { MessageSquare, StopCircle, Settings, CalendarClock, Key, Trash2, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface AgentContextMenuProps {
@@ -11,12 +11,13 @@ interface AgentContextMenuProps {
   onChat: () => void;
   onStopAll: () => void;
   onSettings: (tab: 'info' | 'cron' | 'auth') => void;
+  onRename: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
 const MENU_W = 168;
-const MENU_H = 212;
+const MENU_H = 238;
 const CANVAS_AREA_H = 400;
 
 export default function AgentContextMenu({
@@ -28,6 +29,7 @@ export default function AgentContextMenu({
   onChat,
   onStopAll,
   onSettings,
+  onRename,
   onDelete,
   onClose,
 }: AgentContextMenuProps) {
@@ -82,6 +84,11 @@ export default function AgentContextMenu({
       </button>
 
       <div className="my-0.5 h-px bg-slate-100 dark:bg-slate-800 mx-1" />
+
+      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={onRename}>
+        <Pencil size={12} className="text-sky-500 shrink-0" />
+        {t('pixelOffice.contextMenu.rename', 'Rename')}
+      </button>
 
       <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('info')}>
         <Settings size={12} className="text-slate-400 shrink-0" />

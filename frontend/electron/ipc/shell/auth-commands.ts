@@ -185,6 +185,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
           },
         };
         await saveJsonFile(configFilePath, nextJson);
+        await ensureMainAgentListEntry(String(payload?.workspacePath || '').trim() || undefined);
         return { code: 0, stdout: JSON.stringify({ authChoice, provider: 'minimax-portal', mode: 'token', baseUrl }), stderr: '', exitCode: 0 };
       }
       const mainAgentDir = path.join(configDir, 'agents', 'main', 'agent');
@@ -337,6 +338,13 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
           try { await fs.access(authJsonPath); } catch { await saveJsonFile(authJsonPath, {}); }
         }
         await registerAgentInConfig(undefined, String(payload?.name || '').trim() || agentId);
+        // 使用 OpenClaw 原生命令設定 agent 顯示名稱
+        const agentName = String(payload?.name || '').trim() || agentId;
+        const fastCorePath = String(payload?.corePath || '').trim();
+        if (fastCorePath && agentName) {
+          const setIdentityCmd = `cd ${shellQuote(fastCorePath)} && OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw agents set-identity --agent ${shellQuote(agentId)} --name ${shellQuote(agentName)} --non-interactive --json`;
+          await ctx.runShellCommand(setIdentityCmd); // best-effort，失敗不影響建立結果
+        }
         return { code: 0, stdout: JSON.stringify({ agentId, cloned: Object.keys(toClone) }), stderr: '', exitCode: 0 };
       }
 
@@ -372,6 +380,12 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       }
       await restoreMainDefaultAgentDir();
       await registerAgentInConfig(String(payload?.workspacePath || '').trim() || undefined, String(payload?.name || '').trim() || agentId);
+      // 使用 OpenClaw 原生命令設定 agent 顯示名稱
+      const slowName = String(payload?.name || '').trim();
+      if (slowName) {
+        const setIdentityCmd = `cd ${shellQuote(corePath)} && OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw agents set-identity --agent ${shellQuote(agentId)} --name ${shellQuote(slowName)} --non-interactive --json`;
+        await ctx.runShellCommand(setIdentityCmd); // best-effort，失敗不影響建立結果
+      }
       return { code: 0, stdout: JSON.stringify({ agentId, authChoice }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'auth create-agent failed', exitCode: 1 };
@@ -419,6 +433,32 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
     }
   }
 
+  if (fullCommand.startsWith('agent:set-name')) {
+    try {
+      const payloadStr = fullCommand.replace('agent:set-name', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const agentId = String(payload?.agentId || '').trim();
+      const name = String(payload?.name || '').trim();
+      const corePath = String(payload?.corePath || '').trim();
+      const configDir = normalizeConfigDir(String(payload?.configPath || ''));
+
+      if (!agentId) return { code: 1, stdout: '', stderr: 'Missing agentId', exitCode: 1 };
+      if (!name) return { code: 1, stdout: '', stderr: 'Missing name', exitCode: 1 };
+      if (!corePath) return { code: 1, stdout: '', stderr: 'Missing corePath', exitCode: 1 };
+      if (!configDir) return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
+
+      const configFilePath = path.join(configDir, 'openclaw.json');
+      const cmd = `cd ${shellQuote(corePath)} && OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw agents set-identity --agent ${shellQuote(agentId)} --name ${shellQuote(name)} --non-interactive --json`;
+      const res = await ctx.runShellCommand(cmd);
+      if ((res.code ?? 0) !== 0) {
+        return { code: res.code ?? 1, stdout: res.stdout || '', stderr: res.stderr || 'set-identity failed', exitCode: res.code ?? 1 };
+      }
+      return { code: 0, stdout: JSON.stringify({ agentId, name }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'agent:set-name failed', exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('config:model-options')) {
     try {
       const payloadStr = fullCommand.replace('config:model-options', '').trim();
@@ -439,6 +479,11 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         const profile = p as any;
         const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
         if (secret) globalProfileSecrets.set(pid, secret);
+      }
+      // MiniMax Coding Plan token is stored outside auth.profiles — inject manually.
+      const minimaxPortalForFilter = (authOverview.configJson as any)?.models?.providers?.['minimax-portal'];
+      if (minimaxPortalForFilter?.apiKey && typeof minimaxPortalForFilter.apiKey === 'string' && minimaxPortalForFilter.apiKey.length > 5) {
+        globalProfileSecrets.set('minimax-portal:token', String(minimaxPortalForFilter.apiKey));
       }
 
       // 同時接受：agent 健康的 profile 或有全域 secret 的 profile
@@ -472,6 +517,14 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
             const profile = p as any;
             const secret = profile?.apiKey || profile?.api_key || profile?.token || '';
             if (secret) secretsMap.set(pid, secret);
+          }
+        }
+
+        // 3. MiniMax Coding Plan token is stored outside auth.profiles — inject manually.
+        const minimaxPortalForSecrets = (authOverview.configJson as any)?.models?.providers?.['minimax-portal'];
+        if (minimaxPortalForSecrets?.apiKey && typeof minimaxPortalForSecrets.apiKey === 'string' && minimaxPortalForSecrets.apiKey.length > 5) {
+          if (!secretsMap.has('minimax-portal:token')) {
+            secretsMap.set('minimax-portal:token', String(minimaxPortalForSecrets.apiKey));
           }
         }
 
