@@ -288,6 +288,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   }, [sessionDraft, agentDraft, chat.activeSessionKey, chat.activeAgentId, sessionHistory, agentHistory, setActiveChatSession, setActiveChatAgent]);
 
   // ── Effects ────────────────────────────────────────────────────────────────
+  // 同步外部 store 更改（例如從 Agent Office 選取 agent）到 drafts
+  useEffect(() => { setAgentDraft(chat.activeAgentId); }, [chat.activeAgentId]);
+  useEffect(() => { setSessionDraft(chat.activeSessionKey); }, [chat.activeSessionKey]);
+
   useEffect(() => {
     if (!agentPickerOpen) return;
     const handler = (e: MouseEvent) => {
