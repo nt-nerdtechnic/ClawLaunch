@@ -307,8 +307,8 @@ export default function PixelOfficeWidget({ compact = false, restartGateway }: P
                 onCreated={() => {
                   refreshAgents();
                   setShowAddAgent(false);
-                  void restartGateway();
                 }}
+                restartGateway={restartGateway}
               />
             )}
           </div>

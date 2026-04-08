@@ -101,7 +101,7 @@ export function useGatewayActions({
     }
   };
 
-  const stopGateway = async (options?: { killTerminalAndPortHolders?: boolean }) => {
+  const stopGateway = async (options?: { killTerminalAndPortHolders?: boolean; forceBackground?: boolean }) => {
     if (!window.electronAPI) {
       addLog(t('logs.commFailed', { msg: 'Electron API not available' }), 'stderr');
       return;
@@ -148,7 +148,7 @@ export function useGatewayActions({
       const skipGatewayStop = options?.killTerminalAndPortHolders && !config.installDaemon;
       if (!skipGatewayStop) {
         const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
-        const resRaw = shouldUseExternalTerminal()
+        const resRaw = !options?.forceBackground && shouldUseExternalTerminal()
           ? await execInTerminal(cmd, {
               title: 'Stopping OpenClaw Gateway',
               holdOpen: false,
@@ -362,19 +362,29 @@ export function useGatewayActions({
 
     try {
       // Stop gateway (without killing terminal or port holders for hot restart)
-      await stopGateway({ killTerminalAndPortHolders: false });
+      await stopGateway({ killTerminalAndPortHolders: false, forceBackground: true });
 
-      // Wait a moment for clean shutdown
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Re-invoke toggleGateway to start
+      const envPrefix = buildOpenClawEnvPrefix();
+      const port = getGatewayPort();
+
+      // Wait for port to be released; force-kill if still occupied after stop
+      if (port) {
+        const isOccupied = async () =>
+          !!String((await window.electronAPI.exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN`)).stdout || '').trim();
+
+        if (await isOccupied()) {
+          await window.electronAPI.killPortHolder(port).catch(() => {});
+          while (await isOccupied()) {
+            await new Promise((r) => setTimeout(r, 300));
+          }
+        }
+      }
 
       // Start gateway again
       if (running) {
         setRunning(false);
       }
-
-      // Re-invoke toggleGateway to start
-      const envPrefix = buildOpenClawEnvPrefix();
-      const port = getGatewayPort();
 
       // Re-check for port conflicts after stopping
       if (port) {

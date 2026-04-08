@@ -38,11 +38,12 @@ const NEW_CRED_CHOICES: AuthChoiceOption[] = [
 interface AddAgentModalProps {
   onClose: () => void;
   onCreated: (agentId: string) => void;
+  restartGateway?: () => Promise<void>;
 }
 
 type Mode = 'clone' | 'new';
 
-export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps) {
+export default function AddAgentModal({ onClose, onCreated, restartGateway }: AddAgentModalProps) {
   const { t } = useTranslation();
   const config = useStore(s => s.config);
 
@@ -65,6 +66,7 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
   // Submission state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [restarting, setRestarting] = useState(false);
   const [success, setSuccess] = useState(false);
 
   // Load existing global profiles on mount
@@ -102,7 +104,7 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
   const selectedChoice = NEW_CRED_CHOICES.find(c => c.id === authChoice) ?? NEW_CRED_CHOICES[0];
 
   const canSubmit =
-    !loading && !success && !!agentId && !agentIdError && (
+    !loading && !restarting && !success && !!agentId && !agentIdError && (
       mode === 'clone'
         ? selectedProfileIds.size > 0
         : selectedChoice.credentialless || !!secret.trim()
@@ -147,6 +149,12 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
       if (res.code !== 0) {
         setError(res.stderr || 'Failed to create agent');
         return;
+      }
+      // Restart gateway so new agent is recognised, then show success
+      if (restartGateway) {
+        setRestarting(true);
+        try { await restartGateway(); } catch { /* best-effort */ }
+        setRestarting(false);
       }
       setSuccess(true);
     } catch (e) {
@@ -313,7 +321,13 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
             </>
           )}
 
-          {/* Error / Success */}
+          {/* Restarting / Error / Success */}
+          {restarting && (
+            <div className="flex items-center gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-[10px] text-blue-600 dark:text-blue-400">
+              <Loader2 size={12} className="animate-spin shrink-0" />
+              {t('pixelOffice.addAgent.restarting', 'Gateway 重啟中，請稍候…')}
+            </div>
+          )}
           {error && (
             <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 px-3 py-2 text-[10px] text-red-600 dark:text-red-400">
               <AlertCircle size={12} className="mt-0.5 shrink-0" />
@@ -324,7 +338,7 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
             <div className="rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2 space-y-2">
               <div className="flex items-center gap-2 text-[10px] text-green-600 dark:text-green-400">
                 <CheckCircle2 size={12} />
-                {t('pixelOffice.addAgent.success', 'Agent 建立成功！Gateway 將自動重啟。')}
+                {t('pixelOffice.addAgent.success', 'Agent 建立成功！Gateway 已重啟，可以立即使用。')}
               </div>
               <button
                 type="button"
@@ -337,7 +351,7 @@ export default function AddAgentModal({ onClose, onCreated }: AddAgentModalProps
           )}
 
           {/* Submit */}
-          {!success && (
+          {!success && !restarting && (
             <button
               type="submit"
               disabled={!canSubmit}
