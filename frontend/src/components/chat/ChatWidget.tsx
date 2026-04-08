@@ -647,7 +647,15 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               <div className="rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:text-sky-300"><Bot size={16} /></div>
               <div>
                 <div className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">{t('chat.title')}</div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">{t('chat.modeGateway')}</div>
+                <div className="flex items-center gap-1">
+                  <span className="relative flex h-1.5 w-1.5 shrink-0">
+                    {running && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
+                    <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${running ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  </span>
+                  <span className={`text-[10px] ${running ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                    {running ? t('chat.connected', '已連線') : t('chat.disconnected', '未連線')}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-1">
