@@ -329,12 +329,18 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       if (payload?.cloneFromGlobal === true) {
         const configJson = (await loadJsonFile(configFilePath)) || {};
         const globalProfiles = ((configJson?.auth as Record<string, unknown>)?.profiles as Record<string, unknown>) || {};
+        // 優先從 main agent 的 auth-profiles.json 取完整資料（含 key 欄位）
+        const mainAuthProfilesPath = path.join(configDir, 'agents', 'main', 'agent', 'auth-profiles.json');
+        const mainAuthProfilesJson = (await loadJsonFile(mainAuthProfilesPath)) || {};
+        const mainProfiles = (mainAuthProfilesJson.profiles as Record<string, unknown>) || {};
+        // 合併：global 提供元資料，main 提供完整憑證（main 優先）
+        const mergedSourceProfiles: Record<string, unknown> = { ...globalProfiles, ...mainProfiles };
         const selectedIds: string[] = Array.isArray(payload?.profileIds)
           ? (payload.profileIds as unknown[]).map(String)
-          : Object.keys(globalProfiles);
+          : Object.keys(mergedSourceProfiles);
         const toClone: Record<string, unknown> = {};
         for (const id of selectedIds) {
-          if (globalProfiles[id]) toClone[id] = globalProfiles[id];
+          if (mergedSourceProfiles[id]) toClone[id] = mergedSourceProfiles[id];
         }
         if (Object.keys(toClone).length === 0) {
           return { code: 1, stdout: '', stderr: 'No matching profiles found in openclaw.json to clone', exitCode: 1 };
@@ -342,7 +348,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         const authProfilesPath = path.join(agentDir, 'auth-profiles.json');
         const existing = (await loadJsonFile(authProfilesPath)) || {};
         const existingProfiles = (existing.profiles as Record<string, unknown>) || {};
-        await saveJsonFile(authProfilesPath, { ...existing, profiles: { ...existingProfiles, ...toClone } });
+        await saveJsonFile(authProfilesPath, { version: 1, ...existing, profiles: { ...existingProfiles, ...toClone } });
         // 從 main agent 複製 auth.json（含實際憑證）；若 main 沒有則建立空物件
         const mainAuthJsonPath = path.join(configDir, 'agents', 'main', 'agent', 'auth.json');
         const authJsonPath = path.join(agentDir, 'auth.json');

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, ChevronDown, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, X, Settings2, Search, Paperclip } from 'lucide-react';
+import { Bot, Check, ChevronDown, Copy, MessageSquare, MessageSquarePlus, MessagesSquare, PanelLeftClose, PanelLeftOpen, RefreshCw, Send, Square, X, Search, Paperclip } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { marked } from 'marked';
@@ -170,7 +170,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     setActiveChatAgent,
     setActiveChatAgentAndSave,
     resetChatMessages,
-    updateConfigOverrides,
     setSearchQuery,
   } = useStore();
 
@@ -190,10 +189,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const agentPickerRef = useRef<HTMLDivElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const configRef = useRef<HTMLDivElement>(null);
   const { summaries: knownAgents } = usePixelOfficeAgents();
 
   const agentOptions = useMemo(() => {
@@ -364,16 +361,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [agentPickerOpen]);
 
-  useEffect(() => {
-    if (!configOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (configRef.current && !configRef.current.contains(e.target as Node)) {
-        setConfigOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [configOpen]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -442,7 +429,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (searchOpen) { setSearchOpen(false); setSearchQuery(''); return; }
-        if (configOpen) { setConfigOpen(false); return; }
         if (sessionPanelOpen) { setSessionPanelOpen(false); return; }
         if (chat.isStreaming) { handleAbortLocal(); return; }
         if (chat.isOpen) setChatOpen(false);
@@ -450,7 +436,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [chat.isOpen, sessionPanelOpen, chat.isStreaming, setChatOpen, handleAbortLocal, searchOpen, configOpen, setSearchQuery]);
+  }, [chat.isOpen, sessionPanelOpen, chat.isStreaming, setChatOpen, handleAbortLocal, searchOpen, setSearchQuery]);
 
   const handleSend = useCallback(async (msgOverride?: string) => {
     const message = (msgOverride ?? inputValue).trim();
@@ -562,20 +548,13 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           'x-openclaw-agent-id': agentId,
           'x-openclaw-session-key': sessionKey,
         },
-        body: JSON.stringify((() => {
-          const ov = useStore.getState().chat.configOverrides;
-          return {
-            model: ov.model || `openclaw/${agentId}`,
+        body: JSON.stringify({
+            model: `openclaw/${agentId}`,
             stream: true,
-            ...(ov.temperature != null && { temperature: ov.temperature }),
-            ...(ov.topP != null && { top_p: ov.topP }),
-            ...(ov.maxTokens != null && { max_tokens: ov.maxTokens }),
             messages: [
-              ...(ov.systemPrompt ? [{ role: 'system', content: ov.systemPrompt }] : []),
               { role: 'user', content: contentForApi },
             ],
-          };
-        })()),
+          }),
         signal: controller.signal,
       });
 
@@ -768,44 +747,6 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             </div>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => { setSearchOpen(v => !v); if (searchOpen) setSearchQuery(''); }} className={`rounded-lg p-2 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300 ${searchOpen ? 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300' : 'text-slate-400'}`} title={t('chat.search', '搜尋會話')} aria-label={t('chat.search')}><Search size={14} /></button>
-              <div ref={configRef} className="relative">
-                {(() => {
-                  const ov = chat.configOverrides;
-                  const hasOverride = !!(ov.temperature != null || ov.topP != null || ov.maxTokens != null || ov.systemPrompt || ov.model);
-                  return (
-                    <button type="button" onClick={() => setConfigOpen(v => !v)} className={`relative rounded-lg p-2 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300 ${configOpen ? 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300' : 'text-slate-400'}`} title={t('chat.config', '覆寫設定')} aria-label={t('chat.config')}>
-                      <Settings2 size={14} />
-                      {hasOverride && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-sky-500" />}
-                    </button>
-                  );
-                })()}
-                {configOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                    <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">覆寫設定</span>
-                      <button type="button" onClick={() => updateConfigOverrides({ temperature: undefined, topP: undefined, maxTokens: undefined, systemPrompt: undefined, model: undefined })} className="text-[9px] font-semibold text-rose-500 hover:text-rose-600">清除全部</button>
-                    </div>
-                    <div className="space-y-3 p-3">
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">Temperature</label>
-                        <input type="number" min={0} max={2} step={0.1} placeholder="預設" value={chat.configOverrides.temperature ?? ''} onChange={e => updateConfigOverrides({ temperature: e.target.value === '' ? undefined : parseFloat(e.target.value) })} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">Max Tokens</label>
-                        <input type="number" min={1} step={1} placeholder="預設" value={chat.configOverrides.maxTokens ?? ''} onChange={e => updateConfigOverrides({ maxTokens: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">Model 覆寫</label>
-                        <input type="text" placeholder={`openclaw/${chat.activeAgentId}（預設）`} value={chat.configOverrides.model ?? ''} onChange={e => updateConfigOverrides({ model: e.target.value || undefined })} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">System Prompt 覆寫</label>
-                        <textarea rows={3} placeholder="留空使用 Agent 預設" value={chat.configOverrides.systemPrompt ?? ''} onChange={e => updateConfigOverrides({ systemPrompt: e.target.value || undefined })} className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
               <button type="button" onClick={() => { const newKey = crypto.randomUUID(); setActiveChatSession(newKey); setSessionDraft(newKey); resetChatMessages(); setSessionPanelOpen(false); }} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.sessions.new')} aria-label={t('chat.sessions.new')}><MessageSquarePlus size={16} /></button>
               <button type="button" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title={t('chat.close')} aria-label={t('chat.close')}><X size={16} /></button>
             </div>

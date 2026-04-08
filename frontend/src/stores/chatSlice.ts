@@ -28,13 +28,6 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
 }
 
-export interface ChatConfigOverrides {
-  temperature?: number;
-  topP?: number;
-  maxTokens?: number;
-  systemPrompt?: string;
-  model?: string;
-}
 
 interface ChatState {
   isOpen: boolean;
@@ -46,7 +39,6 @@ interface ChatState {
   activeAgentId: string;
   messages: ChatMessage[];
   gatewayWsConnected: boolean;
-  configOverrides: ChatConfigOverrides;
   searchQuery: string;
 }
 
@@ -66,7 +58,6 @@ export interface ChatSlice {
   markChatMessageError: (id: string, error: string) => void;
   updateToolCall: (messageId: string, toolCall: Partial<ToolCall> & { id: string }) => void;
   resetChatMessages: () => void;
-  updateConfigOverrides: (overrides: Partial<ChatConfigOverrides>) => void;
   setSearchQuery: (query: string) => void;
 }
 
@@ -81,7 +72,6 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
     activeAgentId: 'main',
     messages: [],
     gatewayWsConnected: false,
-    configOverrides: {},
     searchQuery: '',
   },
   setChatOpen: (open) =>
@@ -223,13 +213,6 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
   resetChatMessages: () =>
     set((state) => ({
       chat: { ...state.chat, messages: [], isStreaming: false, unreadCount: 0 },
-    })),
-  updateConfigOverrides: (overrides) =>
-    set((state) => ({
-      chat: {
-        ...state.chat,
-        configOverrides: { ...state.chat.configOverrides, ...overrides },
-      },
     })),
   setSearchQuery: (query) =>
     set((state) => ({ chat: { ...state.chat, searchQuery: query } })),
