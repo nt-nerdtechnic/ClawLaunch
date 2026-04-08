@@ -20,6 +20,7 @@ export interface Config {
   appVersion?: string;
   chromeDebugPort?: number;
   browserDriver?: 'existing-session' | 'raw-cdp';
+  activeAgentId?: string;
 }
 
 export interface AgentListEntry {

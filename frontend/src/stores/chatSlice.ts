@@ -57,6 +57,7 @@ export interface ChatSlice {
   setChatRuntimeMode: (mode: 'gateway' | 'local', reason?: string) => void;
   setActiveChatSession: (sessionKey: string) => void;
   setActiveChatAgent: (agentId: string) => void;
+  setActiveChatAgentAndSave: (agentId: string) => void;
   setGatewayWsConnected: (connected: boolean) => void;
   addChatMessage: (message: ChatMessage) => void;
   appendChatChunk: (id: string, chunk: string, sessionKey: string, agentId: string) => void;
@@ -69,7 +70,7 @@ export interface ChatSlice {
   setSearchQuery: (query: string) => void;
 }
 
-export const createChatSlice: StateCreator<ChatSlice> = (set) => ({
+export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
   chat: {
     isOpen: false,
     unreadCount: 0,
@@ -110,6 +111,23 @@ export const createChatSlice: StateCreator<ChatSlice> = (set) => ({
         activeAgentId: agentId || state.chat.activeAgentId,
       },
     })),
+  setActiveChatAgentAndSave: (agentId) => {
+    set((state) => ({
+      chat: {
+        ...state.chat,
+        activeAgentId: agentId || state.chat.activeAgentId,
+      },
+    }));
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      const state = get() as any;
+      if (state.setConfig) {
+        state.setConfig({ activeAgentId: agentId });
+        const currentConfig = state.config;
+        const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = currentConfig;
+        window.electronAPI.exec(`config:write ${JSON.stringify({ ...launcherPayload, activeAgentId: agentId })}`).catch(() => {});
+      }
+    }
+  },
   setGatewayWsConnected: (connected) =>
     set((state) => ({ chat: { ...state.chat, gatewayWsConnected: connected } })),
   addChatMessage: (message) =>

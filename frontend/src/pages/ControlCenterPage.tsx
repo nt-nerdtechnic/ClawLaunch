@@ -5,7 +5,7 @@ import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
-  Pencil, Save, X, Zap, Bell, BellOff, Wrench, MessageSquare,
+  Pencil, Save, X, Zap, Bell, BellOff, Wrench, MessageSquare, Maximize2,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
@@ -15,6 +15,8 @@ import { useStore } from '../store';
 import { ConfigService } from '../services/configService';
 import { PROVIDER_MODEL_CATALOGUE } from '../constants/providers';
 import { usePixelOfficeAgents } from '../components/pixel-office/hooks/usePixelOfficeAgents';
+import { CronEditModal } from '../components/cron/CronEditModal';
+import type { CronEditDraft } from '../components/cron/CronEditModal';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -249,6 +251,8 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
   const [cjFilter, setCjFilter]       = useState<'all' | 'enabled' | 'disabled'>('enabled');
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ name: string; agentId: string; model: string; scheduleKind: 'every' | 'cron'; intervalMin: number; cronFreq: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'; cronMinute: number; cronHour: number; cronDow: number; cronDom: number; cronExpr: string; timeoutMin: number | ''; deliveryMode: string; deliveryChannel: string; deliveryTo: string; payloadMessage: string } | null>(null);
+  const [editModalJob, setEditModalJob] = useState<CronJob | null>(null);
+  const [editModalDraft, setEditModalDraft] = useState<CronEditDraft | null>(null);
   const [logErrorJob, setLogErrorJob] = useState<CronJob | null>(null);
   const [fetchedLog, setFetchedLog] = useState<string | null>(null);
   const [isFetchingLog, setIsFetchingLog] = useState(false);
@@ -653,6 +657,34 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       payloadMessage: job.payload?.message || '',
     });
     setEditingJobId(job.id);
+  };
+
+  const startEditCronModal = (job: CronJob) => {
+    const scheduleKind: 'every' | 'cron' = job.schedule?.kind === 'cron' ? 'cron' : 'every';
+    const rawExpr = job.schedule?.expr || '';
+    const { freq, minute, hour, dow, dom } = parseCronExpr(rawExpr);
+    const intervalMin = job.schedule?.everyMs ? Math.round(job.schedule.everyMs / 60000) : 10;
+    const timeoutMin = job.payload?.timeoutSeconds ? Math.round(job.payload.timeoutSeconds / 60) : '';
+    const existingTo = job.delivery?.to || '';
+    setEditModalDraft({
+      name: job.name,
+      agentId: job.agentId || 'main',
+      model: job.payload?.model || '',
+      scheduleKind,
+      intervalMin,
+      cronFreq: freq,
+      cronMinute: minute,
+      cronHour: hour,
+      cronDow: dow,
+      cronDom: dom,
+      cronExpr: freq === 'custom' ? rawExpr : '',
+      timeoutMin,
+      deliveryMode: job.delivery?.mode || 'none',
+      deliveryChannel: job.delivery?.channel || '',
+      deliveryTo: existingTo,
+      payloadMessage: job.payload?.message || '',
+    });
+    setEditModalJob(job);
   };
 
   const toggleCrontab = async (raw: string) => {
@@ -1159,6 +1191,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                             title={editingJobId === job.id ? '取消編輯' : '編輯'}
                             className={`p-1 rounded-lg transition-all ${editingJobId === job.id ? 'text-violet-500' : 'text-slate-300 dark:text-slate-600 hover:text-violet-500'}`}>
                             <Pencil size={10} />
+                          </button>
+                          <button
+                            onClick={() => startEditCronModal(job)}
+                            title="在彈跳視窗中編輯"
+                            className="p-1 rounded-lg transition-all text-slate-300 dark:text-slate-600 hover:text-violet-500">
+                            <Maximize2 size={10} />
                           </button>
                           <button onClick={() => void toggleCron(job.id)} title={job.enabled ? t('controlCenter.cronJobs.pause') : t('controlCenter.cronJobs.start')}
                             className={`p-1 rounded-lg transition-all ${job.enabled ? 'text-slate-400 hover:text-amber-600' : 'text-slate-400 hover:text-violet-600'}`}>
@@ -1857,6 +1895,37 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
           onClose={() => { setLogErrorJob(null); setFetchedLog(null); }}
           onChatToFix={() => openChatToFix(logErrorJob)}
           onFixAndRetry={() => void fixAndRetry(logErrorJob.id)}
+        />
+      )}
+
+      {editModalJob && editModalDraft && (
+        <CronEditModal
+          draft={editModalDraft}
+          onChange={d => setEditModalDraft(d)}
+          allAgents={allAgents}
+          configuredBotChannels={configuredBotChannels}
+          authorizedRecipients={authorizedRecipients}
+          buildCronExpr={buildCronExpr}
+          onSave={() => {
+            void updateCron(editModalJob.id, {
+              name: editModalDraft.name,
+              agentId: editModalDraft.agentId,
+              ...(editModalDraft.model ? { model: editModalDraft.model } : { model: '' }),
+              ...(editModalDraft.scheduleKind === 'cron'
+                ? { scheduleExpr: buildCronExpr(editModalDraft) }
+                : { everyMs: editModalDraft.intervalMin * 60000 }),
+              ...(editModalDraft.timeoutMin !== '' ? { timeoutSeconds: editModalDraft.timeoutMin * 60 } : {}),
+              delivery: {
+                mode: editModalDraft.deliveryMode,
+                ...(editModalDraft.deliveryChannel ? { channel: editModalDraft.deliveryChannel } : {}),
+                ...(editModalDraft.deliveryTo ? { to: editModalDraft.deliveryTo } : {}),
+              },
+              ...(editModalDraft.payloadMessage ? { payloadMessage: editModalDraft.payloadMessage } : {}),
+            });
+            setEditModalJob(null);
+            setEditModalDraft(null);
+          }}
+          onCancel={() => { setEditModalJob(null); setEditModalDraft(null); }}
         />
       )}
     </div>

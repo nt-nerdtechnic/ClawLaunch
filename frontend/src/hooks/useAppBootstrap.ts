@@ -73,13 +73,17 @@ export function useAppBootstrap({
         } catch {
           console.error('Config JSON parse failed', res.stdout);
         }
-        const { setConfig, setTheme, setLanguage } = useStore.getState();
+        const { setConfig, setTheme, setLanguage, setActiveChatAgent } = useStore.getState();
         setConfig(savedConfig);
         if (savedConfig?.theme === 'light' || savedConfig?.theme === 'dark') {
           setTheme(savedConfig.theme);
         }
         if (savedConfig?.language) {
           setLanguage(savedConfig.language);
+        }
+        // Restore active agent if saved
+        if (savedConfig?.activeAgentId) {
+          setActiveChatAgent(savedConfig.activeAgentId);
         }
         return savedConfig;
       }

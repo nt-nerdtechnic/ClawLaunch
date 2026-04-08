@@ -5,6 +5,7 @@ import type { TFunction } from 'i18next';
 import { marked } from 'marked';
 import { useStore } from '../../store';
 import type { ChatMessage } from '../../store';
+import type { ChatAttachment } from '../../stores/chatSlice';
 import { usePixelOfficeAgents } from '../pixel-office/hooks/usePixelOfficeAgents';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -18,6 +19,11 @@ export interface OpenClawSessionEntry {
   messageCount: number;
 }
 
+// Local-only pending attachment (may include raw text content before sending)
+interface PendingAttachment extends ChatAttachment {
+  textContent?: string;
+}
+
 // Configure marked for chat rendering
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -28,6 +34,15 @@ function renderMarkdown(text: string): string {
   } catch {
     return text;
   }
+}
+
+function highlightText(text: string, query: string): string {
+  if (!query) return escHtml(text);
+  const safeQuery = escHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escHtml(text).replace(
+    new RegExp(safeQuery, 'gi'),
+    '<mark class="bg-yellow-200 dark:bg-yellow-700/50 rounded px-0.5">$&</mark>'
+  );
 }
 
 // Command shortcuts (matches OpenClaw WebUI)
@@ -153,7 +168,10 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     markChatMessageError,
     setActiveChatSession,
     setActiveChatAgent,
+    setActiveChatAgentAndSave,
     resetChatMessages,
+    updateConfigOverrides,
+    setSearchQuery,
   } = useStore();
 
   const [inputValue, setInputValue] = useState('');
@@ -171,6 +189,11 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const [sessionLoadingMore, setSessionLoadingMore] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const agentPickerRef = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const configRef = useRef<HTMLDivElement>(null);
   const { summaries: knownAgents } = usePixelOfficeAgents();
 
   const agentOptions = useMemo(() => {
@@ -231,7 +254,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   }, []);
 
   const handleSwitchAgent = useCallback(async (agentId: string) => {
-    setActiveChatAgent(agentId);
+    setActiveChatAgentAndSave(agentId);
     setAgentDraft(agentId);
     setAgentPickerOpen(false);
 
@@ -258,7 +281,31 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     setActiveChatSession(newKey);
     setSessionDraft(newKey);
     resetChatMessages();
-  }, [setActiveChatAgent, setActiveChatSession, resetChatMessages, loadSessionHistory]);
+  }, [setActiveChatAgentAndSave, setActiveChatSession, resetChatMessages, loadSessionHistory]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    e.target.value = '';
+    for (const file of files) {
+      const id = crypto.randomUUID();
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const url = ev.target?.result as string;
+          setPendingAttachments(prev => [...prev, { id, name: file.name, type: file.type, url }]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const textContent = ev.target?.result as string;
+          setPendingAttachments(prev => [...prev, { id, name: file.name, type: file.type || 'text/plain', url: '', textContent }]);
+        };
+        reader.readAsText(file);
+      }
+    }
+  }, []);
 
   const handleSelectSession = useCallback((session: OpenClawSessionEntry) => {
     const key = session.sessionKey.trim();
@@ -317,6 +364,17 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [agentPickerOpen]);
 
+  useEffect(() => {
+    if (!configOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (configRef.current && !configRef.current.contains(e.target as Node)) {
+        setConfigOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [configOpen]);
+
   const listRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
@@ -328,6 +386,12 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     () => chat.messages.filter((item) => item.sessionKey === chat.activeSessionKey && item.agentId === chat.activeAgentId),
     [chat.messages, chat.activeSessionKey, chat.activeAgentId]
   );
+
+  const displayMessages = useMemo(() => {
+    const q = chat.searchQuery.trim().toLowerCase();
+    if (!q) return activeMessages;
+    return activeMessages.filter(m => m.content.toLowerCase().includes(q));
+  }, [activeMessages, chat.searchQuery]);
 
   const chatIsOpenRef = useRef(chat.isOpen);
   chatIsOpenRef.current = chat.isOpen;
@@ -377,6 +441,8 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (searchOpen) { setSearchOpen(false); setSearchQuery(''); return; }
+        if (configOpen) { setConfigOpen(false); return; }
         if (sessionPanelOpen) { setSessionPanelOpen(false); return; }
         if (chat.isStreaming) { handleAbortLocal(); return; }
         if (chat.isOpen) setChatOpen(false);
@@ -384,11 +450,11 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [chat.isOpen, sessionPanelOpen, chat.isStreaming, setChatOpen, handleAbortLocal]);
+  }, [chat.isOpen, sessionPanelOpen, chat.isStreaming, setChatOpen, handleAbortLocal, searchOpen, configOpen, setSearchQuery]);
 
   const handleSend = useCallback(async (msgOverride?: string) => {
     const message = (msgOverride ?? inputValue).trim();
-    if (!message) return;
+    if (!message && pendingAttachments.length === 0) return;
     if (isStopCommand(message)) { setInputValue(''); handleAbortLocal(); return; }
     if (isNewSessionCommand(message)) {
       setInputValue('');
@@ -423,6 +489,25 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     // 讀取 applySessionAgent 更新後的 store 值，避免 stale closure 導致 sessionKey 不符
     const { activeSessionKey: sessionKey, activeAgentId: agentId } = useStore.getState().chat;
 
+    // ── Attachment processing ──────────────────────────────────────────────
+    const snapAttachments = pendingAttachments;
+    if (!msgOverride && snapAttachments.length > 0) setPendingAttachments([]);
+
+    const images = snapAttachments.filter(a => a.type.startsWith('image/'));
+    const textFiles = snapAttachments.filter(a => !a.type.startsWith('image/'));
+    const textPrefixes = textFiles
+      .map(a => `\`\`\`${a.name}\n${a.textContent ?? ''}\n\`\`\``)
+      .join('\n');
+    const messageWithFiles = textPrefixes ? `${textPrefixes}\n\n${message}`.trim() : message;
+    // content sent to API: plain string or OpenAI vision array
+    const contentForApi: string | Array<{ type: string; text?: string; image_url?: { url: string } }> =
+      images.length > 0
+        ? [
+            ...(messageWithFiles ? [{ type: 'text', text: messageWithFiles }] : []),
+            ...images.map(a => ({ type: 'image_url', image_url: { url: a.url } })),
+          ]
+        : messageWithFiles;
+
     const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     addChatMessage({
@@ -433,6 +518,9 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
       sessionKey,
       agentId,
       status: 'done',
+      attachments: snapAttachments.length > 0
+        ? snapAttachments.map(a => ({ id: a.id, name: a.name, type: a.type, url: a.type.startsWith('image/') ? a.url : '' }))
+        : undefined,
     });
 
     addChatMessage({
@@ -474,11 +562,20 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
           'x-openclaw-agent-id': agentId,
           'x-openclaw-session-key': sessionKey,
         },
-        body: JSON.stringify({
-          model: `openclaw/${agentId}`,
-          messages: [{ role: 'user', content: message }],
-          stream: true,
-        }),
+        body: JSON.stringify((() => {
+          const ov = useStore.getState().chat.configOverrides;
+          return {
+            model: ov.model || `openclaw/${agentId}`,
+            stream: true,
+            ...(ov.temperature != null && { temperature: ov.temperature }),
+            ...(ov.topP != null && { top_p: ov.topP }),
+            ...(ov.maxTokens != null && { max_tokens: ov.maxTokens }),
+            messages: [
+              ...(ov.systemPrompt ? [{ role: 'system', content: ov.systemPrompt }] : []),
+              { role: 'user', content: contentForApi },
+            ],
+          };
+        })()),
         signal: controller.signal,
       });
 
@@ -584,7 +681,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
     } finally {
       abortControllerRef.current = null;
     }
-  }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running, addChatMessage, applySessionAgent, markChatMessageError, t, setActiveChatSession, resetChatMessages, handleAbortLocal]);
+  }, [inputValue, chat.isStreaming, chat.activeSessionKey, chat.activeAgentId, running, addChatMessage, applySessionAgent, markChatMessageError, t, setActiveChatSession, resetChatMessages, handleAbortLocal, pendingAttachments]);
 
   useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
 
@@ -670,12 +767,57 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.search', '搜尋會話')} aria-label={t('chat.search')}><Search size={14} /></button>
-              <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.config', '覆寫設定')} aria-label={t('chat.config')}><Settings2 size={14} /></button>
+              <button type="button" onClick={() => { setSearchOpen(v => !v); if (searchOpen) setSearchQuery(''); }} className={`rounded-lg p-2 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300 ${searchOpen ? 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300' : 'text-slate-400'}`} title={t('chat.search', '搜尋會話')} aria-label={t('chat.search')}><Search size={14} /></button>
+              <div ref={configRef} className="relative">
+                {(() => {
+                  const ov = chat.configOverrides;
+                  const hasOverride = !!(ov.temperature != null || ov.topP != null || ov.maxTokens != null || ov.systemPrompt || ov.model);
+                  return (
+                    <button type="button" onClick={() => setConfigOpen(v => !v)} className={`relative rounded-lg p-2 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300 ${configOpen ? 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300' : 'text-slate-400'}`} title={t('chat.config', '覆寫設定')} aria-label={t('chat.config')}>
+                      <Settings2 size={14} />
+                      {hasOverride && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-sky-500" />}
+                    </button>
+                  );
+                })()}
+                {configOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">覆寫設定</span>
+                      <button type="button" onClick={() => updateConfigOverrides({ temperature: undefined, topP: undefined, maxTokens: undefined, systemPrompt: undefined, model: undefined })} className="text-[9px] font-semibold text-rose-500 hover:text-rose-600">清除全部</button>
+                    </div>
+                    <div className="space-y-3 p-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">Temperature</label>
+                        <input type="number" min={0} max={2} step={0.1} placeholder="預設" value={chat.configOverrides.temperature ?? ''} onChange={e => updateConfigOverrides({ temperature: e.target.value === '' ? undefined : parseFloat(e.target.value) })} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">Max Tokens</label>
+                        <input type="number" min={1} step={1} placeholder="預設" value={chat.configOverrides.maxTokens ?? ''} onChange={e => updateConfigOverrides({ maxTokens: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">Model 覆寫</label>
+                        <input type="text" placeholder={`openclaw/${chat.activeAgentId}（預設）`} value={chat.configOverrides.model ?? ''} onChange={e => updateConfigOverrides({ model: e.target.value || undefined })} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400">System Prompt 覆寫</label>
+                        <textarea rows={3} placeholder="留空使用 Agent 預設" value={chat.configOverrides.systemPrompt ?? ''} onChange={e => updateConfigOverrides({ systemPrompt: e.target.value || undefined })} className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button type="button" onClick={() => { const newKey = crypto.randomUUID(); setActiveChatSession(newKey); setSessionDraft(newKey); resetChatMessages(); setSessionPanelOpen(false); }} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30 dark:hover:text-sky-300" title={t('chat.sessions.new')} aria-label={t('chat.sessions.new')}><MessageSquarePlus size={16} /></button>
               <button type="button" onClick={() => setChatOpen(false)} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title={t('chat.close')} aria-label={t('chat.close')}><X size={16} /></button>
             </div>
           </div>
+          {searchOpen && (
+            <div className="flex items-center gap-1.5 border-b border-slate-200 bg-sky-50/60 px-3 py-1.5 dark:border-slate-800 dark:bg-sky-900/10">
+              <Search size={12} className="shrink-0 text-sky-500" />
+              <input autoFocus type="text" value={chat.searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋訊息..." className="flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200" aria-label="搜尋訊息" />
+              {chat.searchQuery && <span className="text-[10px] text-slate-400">{displayMessages.length} 則</span>}
+              <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="rounded p-0.5 text-slate-400 hover:text-slate-600"><X size={12} /></button>
+            </div>
+          )}
           <div className="flex w-full items-center gap-0 border-b border-slate-200 dark:border-slate-800">
             <div ref={agentPickerRef} className="relative shrink-0">
               <button type="button" onClick={() => setAgentPickerOpen(v => !v)} className={`flex items-center gap-1.5 pl-4 pr-2 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/20 ${agentPickerOpen ? 'bg-slate-50 dark:bg-slate-900/20' : ''}`} title={t('chat.switchAgent', '切換 Agent')}><span className="inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ backgroundColor: `${currentAgentColor}15`, color: currentAgentColor }}>{chat.activeAgentId}</span><ChevronDown size={9} style={{ color: currentAgentColor }} className={`opacity-60 transition-transform duration-150 ${agentPickerOpen ? 'rotate-180' : ''}`} /></button>
@@ -694,17 +836,33 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
             </div>
             <button type="button" onClick={() => setSessionPanelOpen((v) => !v)} className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-4 text-left transition-colors ${sessionPanelOpen ? 'bg-sky-50/80 dark:bg-sky-900/20' : 'bg-slate-50/60 hover:bg-sky-50/60 dark:bg-slate-900/40 dark:hover:bg-sky-900/20'}`}><span className="text-[9px] text-slate-300 dark:text-slate-600">›</span><span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">{chat.activeSessionKey}</span><MessagesSquare size={10} className={`shrink-0 ${sessionPanelOpen ? 'text-sky-400' : 'text-slate-300 dark:text-slate-600'}`} /></button>
           </div>
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">{activeMessages.length === 0 && (<div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"><div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Bot size={14} /></div><p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p><p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p></div>)}<div className="space-y-2">{activeMessages.map((msg) => (<ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} />))}</div></div>
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-3 py-3 sm:px-4 dark:bg-slate-950/40">{activeMessages.length === 0 && (<div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"><div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Bot size={14} /></div><p className="font-semibold text-slate-600 dark:text-slate-200">{t('chat.empty')}</p><p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('chat.inputHint')}</p></div>)}<div className="space-y-2">{displayMessages.map((msg) => (<ChatBubble key={msg.id} msg={msg} onButtonClick={(text) => void handleSend(text)} searchQuery={chat.searchQuery} />))}</div></div>
           <div className="border-t border-slate-200 bg-white/90 p-3 dark:border-slate-800 dark:bg-slate-950/85">
             {!running && (
               <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-rose-300/70 bg-rose-100/70 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300">{t('chat.coreRequired')}</div>
             )}
+            {pendingAttachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {pendingAttachments.map(a => (
+                  <div key={a.id} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100/80 px-2 py-1 text-[10px] dark:border-slate-700 dark:bg-slate-800">
+                    {a.type.startsWith('image/') ? (
+                      <img src={a.url} alt={a.name} className="h-4 w-4 rounded object-cover" />
+                    ) : (
+                      <Paperclip size={10} className="shrink-0 text-slate-400" />
+                    )}
+                    <span className="max-w-[80px] truncate text-slate-600 dark:text-slate-300">{a.name}</span>
+                    <button type="button" onClick={() => setPendingAttachments(prev => prev.filter(x => x.id !== a.id))} className="text-slate-400 hover:text-rose-500"><X size={10} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input ref={fileInputRef} type="file" accept="image/*,text/*,.md,.json,.csv,.txt,.log" multiple className="hidden" onChange={e => handleFileSelect(e)} />
             <div className="flex items-end gap-2">
-              <button type="button" className="shrink-0 rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 mb-0.5" title={t('chat.attach', '上傳檔案')} aria-label={t('chat.attach')}><Paperclip size={18} /></button>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="shrink-0 rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 mb-0.5" title={t('chat.attach', '上傳檔案')} aria-label={t('chat.attach')}><Paperclip size={18} /></button>
               <textarea ref={textareaRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={t('chat.placeholder')} rows={1} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={() => { composingRef.current = false; }} className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" aria-label={t('chat.placeholder')} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) { e.preventDefault(); void handleSend(); } }} />
               <div className="relative flex-none">
                 {!chat.isStreaming ? (
-                  <button type="button" onClick={() => void handleSend()} disabled={!inputValue.trim() || !running} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={!running ? t('chat.coreRequired') : t('chat.send')} aria-label={!running ? t('chat.coreRequired') : t('chat.send')}>
+                  <button type="button" onClick={() => void handleSend()} disabled={(!inputValue.trim() && pendingAttachments.length === 0) || !running} className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-600 text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300" title={!running ? t('chat.coreRequired') : t('chat.send')} aria-label={!running ? t('chat.coreRequired') : t('chat.send')}>
                     <Send size={16} />
                     {queueCount > 0 && (<span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white">{queueCount}</span>)}
                   </button>
@@ -792,7 +950,7 @@ function StreamingIndicator() {
   );
 }
 
-function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: (text: string) => void }) {
+function ChatBubble({ msg, onButtonClick, searchQuery = '' }: { msg: ChatMessage; onButtonClick?: (text: string) => void; searchQuery?: string }) {
   const isUser = msg.role === 'user';
   const isSystem = msg.role === 'system';
   const [copied, setCopied] = useState(false);
@@ -934,7 +1092,9 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
             )}
           </>
         ) : isUser ? (
-          <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+          searchQuery
+            ? <div className="whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: highlightText(msg.content, searchQuery) }} />
+            : <div className="whitespace-pre-wrap break-words">{msg.content}</div>
         ) : msg.status === 'streaming' && !msg.content ? (
           <TypingDots />
         ) : useTgHtml ? (
@@ -950,6 +1110,17 @@ function ChatBubble({ msg, onButtonClick }: { msg: ChatMessage; onButtonClick?: 
             className="prose-chat prose-slate dark:prose-invert max-w-none break-words"
             dangerouslySetInnerHTML={{ __html: renderedMd }}
           />
+        )}
+
+        {/* ── Attachments (user messages) ── */}
+        {isUser && msg.attachments && msg.attachments.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {msg.attachments.map(a => (
+              a.type.startsWith('image/') && a.url
+                ? <img key={a.id} src={a.url} alt={a.name} className="max-h-28 max-w-[140px] rounded-lg object-cover shadow-sm" />
+                : <span key={a.id} className="inline-flex items-center gap-1 rounded-md border border-sky-400/30 bg-sky-600/20 px-1.5 py-0.5 text-[9px] text-sky-100"><Paperclip size={9} /><span className="truncate max-w-[80px]">{a.name}</span></span>
+            ))}
+          </div>
         )}
 
         {/* ── Inline keyboard buttons ── */}
