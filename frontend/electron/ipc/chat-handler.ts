@@ -358,13 +358,16 @@ export function registerChatHandler(_ctx: ChatHandlerContext): void {
           const meta = metaRaw as Record<string, unknown>;
           const normalizedKey = String(sessionKey || '').trim();
           if (!normalizedKey) continue;
+          // Deduplicate cron :run:<uuid> variants — same logic as sessions.list
+          const runIdx = normalizedKey.indexOf(':run:');
+          const groupKey = runIdx !== -1 ? normalizedKey.slice(0, runIdx) : normalizedKey;
           const updatedAtRaw = String(meta?.updatedAt || '').trim();
           const updatedMs = updatedAtRaw ? (new Date(updatedAtRaw).getTime() || Number(updatedAtRaw) || 0) : 0;
           if (!updatedMs) continue;
           const ageMs = Math.max(0, now - updatedMs);
           if (ageMs > activeWindowMs) continue;
 
-          const existing = byKey.get(normalizedKey);
+          const existing = byKey.get(groupKey);
           // Always keep in-memory live state over indexed historical state.
           if (existing?.source === 'memory') continue;
           if (existing && existing.ageMs <= ageMs) continue;
@@ -465,8 +468,8 @@ export function registerChatHandler(_ctx: ChatHandlerContext): void {
                 ? `Telegram 私訊 ${normalizedTarget}`
                 : normalizedTarget;
               const toDisplay = `Main Session · ${targetDisplay}`;
-              byKey.set(normalizedKey, {
-                key: normalizedKey,
+              byKey.set(groupKey, {
+                key: groupKey,
                 kind: 'session',
                 updatedAt: new Date(updatedMs).toISOString(),
                 ageMs,
@@ -484,8 +487,8 @@ export function registerChatHandler(_ctx: ChatHandlerContext): void {
 
           const isRunning = isRunningFromIndex && (hasExplicitRunningState || (!hasExplicitStoppedState && isHeartbeatFresh));
 
-          byKey.set(normalizedKey, {
-            key: normalizedKey,
+          byKey.set(groupKey, {
+            key: groupKey,
             kind: 'session',
             updatedAt: new Date(updatedMs).toISOString(),
             ageMs,

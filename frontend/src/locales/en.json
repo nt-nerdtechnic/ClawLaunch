@@ -48,7 +48,8 @@
       "cancel": "Cancel",
       "collapse": "Collapse",
       "expandAll": "Expand All",
-      "syncRemote": "Sync latest from Cloud"
+      "syncRemote": "Sync latest from Cloud",
+      "readyToExec": "Ready to Run"
     },
     "punctuation": {
       "comma": ", "

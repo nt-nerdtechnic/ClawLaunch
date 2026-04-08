@@ -111,7 +111,7 @@ function relTime(ms: number | undefined, t: TFunction): string {
   return t('common.time.ago', { val: `${Math.floor(d / 86400000)}d` });
 }
 
-function formatActiveSessionTitle(session: ActiveSession): string {
+function formatActiveSessionTitle(session: ActiveSession, t: TFunction): string {
   const displayName = String(session.displayName || '').trim();
   const lastMessage = String(session.lastMessage || '').trim();
   const sessionKey = String(session.key || '').trim();
@@ -129,8 +129,10 @@ function formatActiveSessionTitle(session: ActiveSession): string {
   const parsed = parseCron(lastMessage) || parseCron(displayName) || parseCron(sessionKey);
   if (parsed) return `${parsed.name}(Cron-${parsed.shortId})`;
 
-  if (displayName && !/^cron\s+[0-9a-f]{6,}$/i.test(displayName)) return displayName;
-  return String(session.sessionId || session.key || '—');
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (displayName && !/^cron\s+[0-9a-f]{6,}$/i.test(displayName) && !UUID_RE.test(displayName)) return displayName;
+  const fallback = String(session.sessionId || session.key || '—');
+  return UUID_RE.test(fallback) ? t('common.labels.readyToExec') : fallback;
 }
 
 function nextTime(ms: number | undefined, t: TFunction): string {
@@ -930,7 +932,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="block text-[12px] font-semibold text-slate-800 dark:text-slate-100">
-                          {formatActiveSessionTitle(session)}
+                          {formatActiveSessionTitle(session, t)}
                         </span>
                         {session.lastMessage ? (
                           <span className="block text-[10px] text-slate-500 truncate">{session.lastMessage}</span>
@@ -939,9 +941,6 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                         ) : session.model ? (
                           <span className="block text-[10px] text-slate-400">{session.model}</span>
                         ) : null}
-                        {session.agentId && (
-                          <span className="block text-[10px] text-slate-400/80">{session.agentId}</span>
-                        )}
                       </div>
                       <button
                         onClick={() => openChatToSession(session)}
