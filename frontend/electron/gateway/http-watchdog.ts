@@ -89,6 +89,11 @@ export const runGatewayHttpWatchdogCheck = async (): Promise<void> => {
     const online = isGatewayOnlineFromStatus(healthRes);
     if (online) {
       gatewayHttpWatchdog.consecutiveFailures = 0;
+      // 健康時重置重啟計數，避免長期累積導致後續崩潰無法重啟
+      if (gatewayHttpWatchdog.restartAttempts > 0) {
+        gatewayHttpWatchdog.restartAttempts = 0;
+        _emit('[gateway-http-watchdog] gateway healthy, restart counter reset\n', 'stdout');
+      }
       return;
     }
 
@@ -137,11 +142,12 @@ export const runGatewayHttpWatchdogCheck = async (): Promise<void> => {
       _emit('[gateway-http-watchdog] restart command sent (background spawn)\n', 'stdout');
     } else {
       const ok = await launchGatewayViaTerminal(restartCommand);
+      // 無論成功與否都設 cooldown，避免開啟 Terminal 失敗時每 15s 快速耗盡 maxRestarts
+      gatewayHttpWatchdog.suppressChecksUntil = Date.now() + gatewayHttpWatchdog.options.restartCooldownMs;
       if (ok) {
-        gatewayHttpWatchdog.suppressChecksUntil = Date.now() + gatewayHttpWatchdog.options.restartCooldownMs;
         _emit('[gateway-http-watchdog] restart command sent to Terminal\n', 'stdout');
       } else {
-        _emit('[gateway-http-watchdog] failed to open Terminal for restart\n', 'stderr');
+        _emit('[gateway-http-watchdog] failed to open Terminal for restart (will retry after cooldown)\n', 'stderr');
       }
     }
   } catch (e) {

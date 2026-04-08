@@ -633,6 +633,7 @@
       "portOccupied": "Error: Port {{port}} is already occupied. Please use a different Gateway Port in openclaw.json configuration.",
       "corePathNotExist": "Error: Core Path directory does not exist: {{path}}",
       "watchdogFailed": "Watchdog setup failed: {{msg}}",
+      "watchdogNoPort": "Auto-restart is enabled but no Gateway Port is configured; watchdog cannot monitor (please set a Port in settings)",
       "portNotListen": "Target port did not enter LISTEN state",
       "portKillFailed": "Unable to close processes occupying Port {{port}}",
       "portKillError": "Error occurred while closing processes related to Port {{port}}"

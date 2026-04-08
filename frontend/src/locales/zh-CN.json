@@ -632,6 +632,7 @@
       "portOccupied": "错误: 启动前检查到 Port {{port}} 已被占用，请在 openclaw.json 配置页面改用其他 Gateway Port。",
       "corePathNotExist": "错误: Core Path 目录不存在：{{path}}",
       "watchdogFailed": "watchdog 设置失败：{{msg}}",
+      "watchdogNoPort": "自动重启已启用，但未设置 Gateway Port，watchdog 无法监控（请在设置中指定 Port）",
       "portNotListen": "目标埠未进入 LISTEN 状态",
       "portKillFailed": "无法关闭 Port {{port}} 的占用程序",
       "portKillError": "关闭 Port {{port}} 相关程序时发生错误"

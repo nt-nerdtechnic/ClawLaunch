@@ -274,6 +274,9 @@ export function useGatewayActions({
         addLog(t('logs.gatewayStarted'), 'system');
 
         if (!config.installDaemon) {
+          if (config.autoRestartGateway && !port) {
+            addLog(t('logs.errors.watchdogNoPort'), 'stderr');
+          }
           const healthCheckCommand = port ? `lsof -nP -iTCP:${port} -sTCP:LISTEN` : '';
           const watchdogPayload = {
             enabled: !!config.autoRestartGateway,
@@ -463,6 +466,9 @@ export function useGatewayActions({
         addLog(t('logs.gatewayRestarted'), 'system');
 
         if (!config.installDaemon) {
+          if (config.autoRestartGateway && !port) {
+            addLog(t('logs.errors.watchdogNoPort'), 'stderr');
+          }
           const healthCheckCommand = port ? `lsof -nP -iTCP:${port} -sTCP:LISTEN` : '';
           const watchdogPayload = {
             enabled: !!config.autoRestartGateway,

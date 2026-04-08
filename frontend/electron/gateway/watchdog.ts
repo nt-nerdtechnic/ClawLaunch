@@ -166,6 +166,15 @@ export const spawnWatchedGatewayProcess = (command: string): ReturnType<typeof s
 
   _emit(`[gateway-watchdog] process started (pid=${String(child.pid ?? 'unknown')})\n`, 'stdout');
 
+  // 程序穩定運行 60s 後重置重啟計數，避免長期累積導致後續崩潰無法重啟
+  const stableTimer = setTimeout(() => {
+    if (gatewayWatchdog.child === child && !gatewayWatchdog.stopRequested && gatewayWatchdog.restartAttempts > 0) {
+      gatewayWatchdog.restartAttempts = 0;
+      _emit('[gateway-watchdog] process stable for 60s, restart counter reset\n', 'stdout');
+    }
+  }, 60000);
+  child.once('exit', () => clearTimeout(stableTimer));
+
   child.stdout.on('data', (data) => {
     _emit(data.toString(), 'stdout');
   });

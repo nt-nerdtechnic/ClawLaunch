@@ -5,7 +5,7 @@ import {
   Play, Pause, Trash2, RefreshCw,
   AlertTriangle, CheckCircle,
   CalendarClock, Activity, Server, Terminal,
-  Pencil, Save, X, Zap, Bell, BellOff, Wrench,
+  Pencil, Save, X, Zap, Bell, BellOff, Wrench, MessageSquare,
 } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
 import { DeleteConfirmDialog } from '../components/dialogs/DeleteConfirmDialog';
@@ -283,6 +283,14 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       agentId: job.agentId || 'main',
       createdAt: Date.now(),
     });
+  };
+
+  const openChatToSession = (session: ActiveSession) => {
+    const agentId = session.agentId || 'main';
+    const sessionKey = String(session.key || session.sessionId || '').trim() || `agent:${agentId}`;
+    setActiveChatAgent(agentId);
+    setActiveChatSession(sessionKey);
+    setChatOpen(true);
   };
 
   // 從 runtimeProfile 偵測已綁定 bot token 的頻道
@@ -935,6 +943,13 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                           <span className="block text-[10px] text-slate-400/80">{session.agentId}</span>
                         )}
                       </div>
+                      <button
+                        onClick={() => openChatToSession(session)}
+                        title={t('controlCenter.activeSessions.openChat', '開啟對話')}
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-400 transition-all active:scale-95"
+                      >
+                        <MessageSquare size={12} />
+                      </button>
                       {canAbort ? (
                         <button
                           onClick={() => void abortSession(effectiveSessionKey, session.agentId)}

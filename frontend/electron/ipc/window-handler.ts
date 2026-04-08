@@ -148,9 +148,10 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
         .map((line) => line.trim())
         .filter(Boolean);
     }
+    const electronPid = process.pid;
     const pids = Array.from(new Set(pidLines
       .map((line) => Number(line))
-      .filter((pid) => Number.isInteger(pid) && pid > 0)));
+      .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== electronPid)));
 
     if (!pids.length) {
       return { success: true, error: undefined, port, pids: [], killed: [], forceKilled: [], failed: [] };

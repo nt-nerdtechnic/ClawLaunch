@@ -295,6 +295,17 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   useEffect(() => { setAgentDraft(chat.activeAgentId); }, [chat.activeAgentId]);
   useEffect(() => { setSessionDraft(chat.activeSessionKey); }, [chat.activeSessionKey]);
 
+  // 外部切換 session（如從營運控制中心點擊）時，自動載入該 session 的歷史訊息
+  const prevExternalSessionRef = useRef(chat.activeSessionKey);
+  useEffect(() => {
+    const key = chat.activeSessionKey;
+    const agent = chat.activeAgentId;
+    if (key && key !== prevExternalSessionRef.current) {
+      prevExternalSessionRef.current = key;
+      void loadSessionHistory(key, agent);
+    }
+  }, [chat.activeSessionKey, chat.activeAgentId, loadSessionHistory]);
+
   useEffect(() => {
     if (!agentPickerOpen) return;
     const handler = (e: MouseEvent) => {
