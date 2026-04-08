@@ -68,8 +68,9 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
 
   // Define dynamic step paths
   const steps: StepDefinition[] = [
+    { id: 'prereqs', component: SetupStepPrereqs },
     { id: 'welcome', component: SetupStepWelcome },
-    ...(userType === 'new' ? ([{ id: 'prereqs', component: SetupStepPrereqs }, { id: 'initialize', component: SetupStepInitialize }] as StepDefinition[]) : []),
+    ...(userType === 'new' ? ([{ id: 'initialize', component: SetupStepInitialize }] as StepDefinition[]) : []),
     { id: 'model', component: SetupStepModel },
     { id: 'messaging', component: SetupStepMessaging },
     { id: 'skills', component: SetupStepSkills },
@@ -115,11 +116,13 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
       <div className="w-full mb-8">
         <div className="flex justify-between items-center mb-4">
           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-            {currentStep === 0
-              ? t('wizard.steps.welcome')
-              : currentStep < totalSteps - 1
-                ? t('wizard.steps.progress', { current: setupStageCurrent + 1, total: setupStageTotal })
-                : t('wizard.steps.launch')}
+            {currentStepId === 'prereqs'
+              ? t('wizard.steps.prereqs')
+              : currentStepId === 'welcome'
+                ? t('wizard.steps.welcome')
+                : currentStep < totalSteps - 1
+                  ? t('wizard.steps.progress', { current: setupStageCurrent + 1, total: setupStageTotal })
+                  : t('wizard.steps.launch')}
           </span>
           <span className="text-xs font-bold text-blue-600">
             {Math.round(((currentStep + 1) / totalSteps) * 100)}%

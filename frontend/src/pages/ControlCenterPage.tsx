@@ -1453,22 +1453,24 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
                                       )}
                                     </select>
                                 </div>
-                                <div className="col-span-2">
-                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5">觸發訊息（Prompt）</label>
-                                  <textarea
-                                    value={editDraft.payloadMessage}
-                                    onChange={e => setEditDraft(d => d ? { ...d, payloadMessage: e.target.value } : d)}
-                                    rows={3}
-                                    placeholder="每次觸發時送給 agent 的提示，留空則使用任務預設 prompt"
-                                    className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-400 resize-none"
-                                    maxLength={2000}
-                                  />
-                                  <div className="flex justify-end mt-0.5">
-                                    <span className="text-[8px] text-slate-300 dark:text-slate-600">{editDraft.payloadMessage.length}/2000</span>
-                                  </div>
-                                </div>
                               </div>
                             )}
+                            <div className="mt-2">
+                              <label className="block text-[9px] font-bold text-slate-500 mb-0.5">觸發訊息（Prompt）</label>
+                              <textarea
+                                ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+                                value={editDraft.payloadMessage}
+                                onChange={e => setEditDraft(d => d ? { ...d, payloadMessage: e.target.value } : d)}
+                                rows={1}
+                                placeholder="每次觸發時送給 agent 的提示，留空則使用任務預設 prompt"
+                                className="w-full text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-400 resize-none overflow-hidden"
+                                style={{ minHeight: '3.5rem' }}
+                                maxLength={2000}
+                              />
+                              <div className="flex justify-end mt-0.5">
+                                <span className="text-[8px] text-slate-300 dark:text-slate-600">{editDraft.payloadMessage.length}/2000</span>
+                              </div>
+                            </div>
                           </div>
                           {/* 操作按鈕 */}
                           <div className="flex items-center gap-1 pt-0.5">

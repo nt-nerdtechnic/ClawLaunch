@@ -653,6 +653,7 @@
   },
   "wizard": {
     "steps": {
+      "prereqs": "Environment Prerequisites",
       "welcome": "Welcome",
       "progress": "Setup Progress: {{current}} / {{total}}",
       "launch": "Final Launch Phase"

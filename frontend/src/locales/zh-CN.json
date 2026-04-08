@@ -652,6 +652,7 @@
   },
   "wizard": {
     "steps": {
+      "prereqs": "环境前置依赖",
       "welcome": "欢迎启动",
       "progress": "虾窝布置进度: {{current}} / {{total}}",
       "launch": "最后启动阶段"

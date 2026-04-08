@@ -653,6 +653,7 @@
   },
   "wizard": {
     "steps": {
+      "prereqs": "環境前置依賴",
       "welcome": "歡迎啟動",
       "progress": "蝦窩佈置進度: {{current}} / {{total}}",
       "launch": "最後啟動階段"
