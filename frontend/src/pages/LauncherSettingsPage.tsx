@@ -77,6 +77,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
   const wasUpdatingRef = useRef(false);
   const updateLogStartRef = useRef<number>(-1);
   const [showUninstall, setShowUninstall] = useState(false);
+  const [dangerExpanded, setDangerExpanded] = useState(false);
 
   // Version comparison helpers
   const parseVer = (v: string) => v.split(/[.\-]/g).slice(0, 3).map(Number) as [number, number, number];
@@ -869,25 +870,39 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
       </div>
 
       {/* Danger Zone Section */}
-      <div className="p-8 bg-rose-50 dark:bg-rose-950/10 border border-rose-200 dark:border-rose-900/40 rounded-[32px] shadow-xl shadow-rose-100/50 dark:shadow-none">
-        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-500 mb-4 flex items-center gap-1.5">
-          <Trash2 size={11} />
-          {t('uninstall.dangerZone')}
-        </div>
-        <div className="rounded-2xl border border-rose-200 dark:border-rose-800/40 bg-white/80 dark:bg-rose-950/20 px-4 py-3 flex items-center justify-between gap-4">
-          <div>
-            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('uninstall.title')}</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{t('uninstall.dangerDesc')}</div>
+      <div className="bg-rose-50 dark:bg-rose-950/10 border border-rose-200 dark:border-rose-900/40 rounded-[32px] shadow-xl shadow-rose-100/50 dark:shadow-none overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setDangerExpanded(v => !v)}
+          className="w-full flex items-center justify-between px-8 py-5 hover:bg-rose-100/60 dark:hover:bg-rose-950/20 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <Trash2 size={14} className="text-rose-500" />
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-500">
+              {t('uninstall.dangerZone')}
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowUninstall(true)}
-            className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-colors"
-          >
-            <Trash2 size={13} />
-            {t('uninstall.openBtn')}
-          </button>
-        </div>
+          {dangerExpanded ? <ChevronUp size={14} className="text-rose-400" /> : <ChevronDown size={14} className="text-rose-400" />}
+        </button>
+
+        {dangerExpanded && (
+          <div className="px-8 pb-8 space-y-4 border-t border-rose-200 dark:border-rose-800/40 pt-5">
+            <div className="rounded-2xl border border-rose-200 dark:border-rose-800/40 bg-white/80 dark:bg-rose-950/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('uninstall.title')}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{t('uninstall.dangerDesc')}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUninstall(true)}
+                className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-colors"
+              >
+                <Trash2 size={13} />
+                {t('uninstall.openBtn')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Save Button */}
