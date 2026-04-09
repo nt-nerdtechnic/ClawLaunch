@@ -82,7 +82,7 @@ export const AuthManagementPanel: React.FC<AuthManagementPanelProps> = ({ onAuth
     setAuthAddError('');
     try {
       const res = await window.electronAPI.exec(
-        `auth:remove-profile ${JSON.stringify({ configPath: resolvedConfigDir, profileId })}`
+        `auth:remove-profile ${JSON.stringify({ configPath: resolvedConfigDir, profileId, corePath: config.corePath || '' })}`
       );
       if ((res.code ?? res.exitCode) !== 0) {
         throw new Error(res.stderr || t('auth.errors.removeFailed'));

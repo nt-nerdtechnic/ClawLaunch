@@ -1560,8 +1560,9 @@
     "runningTitle": "正在卸载中…",
     "runningFailed": "卸载过程发生错误，请查看上方日志。",
     "doneTitle": "卸载完成",
-    "doneDesc": "OpenClaw 已成功移除。你可以重新安装，或直接关闭应用程序。",
-    "reinstallBtn": "重新安装",
+    "doneDesc": "OpenClaw 已成功移除。ClawLaunch 本身仍在运行，你可以立即重新安装，或继续使用 ClawLaunch。",
+    "reinstallBtn": "重新安装 OpenClaw",
+    "continueBtn": "继续使用",
     "quitBtn": "关闭应用程序",
     "backBtn": "← 返回",
     "paths": {

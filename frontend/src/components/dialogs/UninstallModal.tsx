@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Trash2, X, AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw, Power } from 'lucide-react';
+import { Trash2, X, AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DialogShell } from './DialogShell';
 import { useStore } from '../../store';
@@ -46,7 +46,6 @@ export function UninstallModal({ open, onClose }: UninstallModalProps) {
     { label: t('uninstall.paths.core'), value: config.corePath },
     { label: t('uninstall.paths.config'), value: config.configPath },
     { label: t('uninstall.paths.workspace'), value: config.workspacePath },
-    { label: t('uninstall.paths.launcherConfig'), value: '~/.clawlaunch/clawlaunch.json' },
   ].filter((r) => r.value?.trim());
 
   const runUninstall = async () => {
@@ -92,9 +91,9 @@ export function UninstallModal({ open, onClose }: UninstallModalProps) {
     window.location.reload();
   };
 
-  const handleQuit = async () => {
-    await window.electronAPI.exec('app:quit').catch(() => {});
-    window.close();
+  const handleContinue = () => {
+    // Reload so Zustand picks up the cleared paths from clawlaunch.json
+    window.location.reload();
   };
 
   if (!open) return null;
@@ -265,11 +264,10 @@ export function UninstallModal({ open, onClose }: UninstallModalProps) {
                 {t('uninstall.reinstallBtn')}
               </button>
               <button
-                onClick={handleQuit}
+                onClick={handleContinue}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
               >
-                <Power size={15} />
-                {t('uninstall.quitBtn')}
+                {t('uninstall.continueBtn')}
               </button>
             </div>
           </>

@@ -1805,8 +1805,9 @@
     "runningTitle": "Uninstalling…",
     "runningFailed": "An error occurred during uninstall. Please check the log above.",
     "doneTitle": "Uninstall Complete",
-    "doneDesc": "OpenClaw has been successfully removed. You may reinstall or close the application.",
-    "reinstallBtn": "Reinstall",
+    "doneDesc": "OpenClaw has been successfully removed. ClawLaunch is still running — you can reinstall OpenClaw or continue using ClawLaunch.",
+    "reinstallBtn": "Reinstall OpenClaw",
+    "continueBtn": "Continue",
     "quitBtn": "Close Application",
     "backBtn": "← Back",
     "paths": {
