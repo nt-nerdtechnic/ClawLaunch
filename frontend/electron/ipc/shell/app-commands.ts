@@ -51,5 +51,10 @@ export async function handleAppCommands(fullCommand: string): Promise<CommandRes
     }
   }
 
+  if (fullCommand === 'app:quit') {
+    app.quit();
+    return { code: 0, stdout: '', stderr: '', exitCode: 0 };
+  }
+
   return null;
 }

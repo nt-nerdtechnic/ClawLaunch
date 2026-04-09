@@ -331,7 +331,8 @@ export async function collectAuthProfiles(configDir: string) {
 
   const configFilePath = path.join(configDir, 'openclaw.json');
   const configJson = (await loadJsonFile(configFilePath)) || {};
-  const globalProfiles = ((configJson.auth as Record<string, unknown>)?.profiles as Record<string, unknown>) || {};
+  const configAuthBlock = configJson.auth as Record<string, unknown> | undefined;
+  const globalProfiles = (configAuthBlock?.profiles as Record<string, unknown>) || {};
   const agentFiles = await getAgentAuthProfilePaths(configDir);
 
   const merged = new Map<string, MergedProfileEntry>();

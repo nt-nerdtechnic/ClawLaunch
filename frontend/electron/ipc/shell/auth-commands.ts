@@ -65,6 +65,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
 
       const configJson = (await loadJsonFile(configFilePath)) || {};
       let removedGlobal = false;
+
       const configAuth = configJson.auth as Record<string, unknown> | undefined;
       const configProfiles = configAuth?.profiles as Record<string, unknown> | undefined;
       if (configProfiles && Object.prototype.hasOwnProperty.call(configProfiles, profileId)) {
@@ -117,6 +118,17 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
 
         if (agentFileDirty) await saveJsonFile(authPath, parsed);
       }
+
+      // Notify the running gateway to immediately drop its in-memory cache for this profile.
+      // The gateway writes back OAuth tokens to auth-profiles.json on refresh; without this call
+      // a deleted OAuth profile would reappear at the next token refresh cycle.
+      // Best-effort: don't fail the delete operation if the gateway is offline.
+      const corePath = String(payload?.corePath || '').trim();
+      if (corePath) {
+        const reloadCmd = `cd ${shellQuote(corePath)} && cross-env OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} pnpm openclaw secrets reload 2>/dev/null || true`;
+        void ctx.runShellCommand(reloadCmd).catch(() => { /* best-effort */ });
+      }
+
       return { code: 0, stdout: JSON.stringify({ removedGlobal, removedAgentFiles }), stderr: '', exitCode: 0 };
     } catch (e) {
       return { code: 1, stdout: '', stderr: (e as Error)?.message || 'auth remove-profile failed', exitCode: 1 };
@@ -222,6 +234,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       }
       await ensureMainAgentListEntry(String(payload?.workspacePath || '').trim() || undefined);
       const aliases = getChoiceAliases(authChoice);
+
       const listed = await collectAuthProfiles(configDir);
       const hasMatched = listed.profiles.some((profile) => profileMatchesAliases(String(profile.profileId || ''), { provider: profile.provider }, aliases) && (CREDENTIALLESS_AUTH_CHOICES.has(authChoice) || profile.agentPresent));
       if (!hasMatched) {

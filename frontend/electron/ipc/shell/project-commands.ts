@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { app } from 'electron';
 import { shellQuote } from '../../utils/shell-utils.js';
 import { writeFileIfMissing } from '../../services/skills.js';
 import type { CommandResult } from './types.js';
@@ -626,6 +627,103 @@ export async function handleProjectCommands(fullCommand: string, ctx: ShellExecC
       return { code: 1, stderr: (e as Error)?.message || 'project update failed', exitCode: 1 };
     } finally {
       if (updateTmpPath) fs.rm(updateTmpPath, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  if (fullCommand.startsWith('project:uninstall')) {
+    try {
+      const payloadStr = fullCommand.replace('project:uninstall ', '').trim();
+      const { corePath, configPath, workspacePath } = JSON.parse(payloadStr);
+
+      const results: { step: string; ok: boolean; error?: string }[] = [];
+
+      // Safety: refuse to remove paths with fewer than 2 non-root segments
+      const isSafePath = (p: string) => {
+        if (!p?.trim()) return false;
+        const parts = p.split(path.sep).filter(Boolean);
+        return parts.length >= 2;
+      };
+
+      const safeRm = async (dirPath: string, label: string) => {
+        if (!dirPath?.trim()) {
+          results.push({ step: label, ok: false, error: 'path is empty' });
+          return;
+        }
+        if (!isSafePath(dirPath)) {
+          results.push({ step: label, ok: false, error: `refusing to remove shallow path: ${dirPath}` });
+          return;
+        }
+        try {
+          await fs.rm(dirPath, { recursive: true, force: true });
+          ctx.emitShellStdout(`>>> Removed ${dirPath}\n`, 'stdout');
+          results.push({ step: label, ok: true });
+        } catch (e) {
+          results.push({ step: label, ok: false, error: (e as Error).message });
+        }
+      };
+
+      // Step 1: kill all running processes
+      ctx.stopGatewayWatchdog('project:uninstall');
+      ctx.stopGatewayHttpWatchdog('project:uninstall');
+      ctx.killAllSubprocesses();
+      ctx.emitShellStdout('>>> Stopped all running processes\n', 'stdout');
+      results.push({ step: 'kill-processes', ok: true });
+
+      // Step 2: remove OpenClaw core
+      if (corePath) await safeRm(corePath, 'remove-core');
+
+      // Step 3: remove OpenClaw config directory
+      if (configPath) await safeRm(configPath, 'remove-config');
+
+      // Step 4: remove workspace directory
+      if (workspacePath) await safeRm(workspacePath, 'remove-workspace');
+
+      // Step 5: unload & remove LaunchAgent daemons (macOS only)
+      if (process.platform === 'darwin') {
+        const daemonLabels = ['ai.openclaw.gateway', 'ai.openclaw.watchdog'];
+        const home = app.getPath('home');
+        const launchAgentsDir = path.join(home, 'Library', 'LaunchAgents');
+        let daemonOk = true;
+        const daemonErrors: string[] = [];
+        for (const label of daemonLabels) {
+          const plistPath = path.join(launchAgentsDir, `${label}.plist`);
+          try {
+            await fs.stat(plistPath); // only proceed if plist exists
+            const uid = process.getuid?.() ?? 501;
+            await ctx.runShellCommand(`launchctl bootout gui/${uid}/${label} 2>/dev/null || true`);
+            await fs.rm(plistPath, { force: true });
+            ctx.emitShellStdout(`>>> Removed daemon ${label}\n`, 'stdout');
+          } catch (e) {
+            const msg = (e as NodeJS.ErrnoException).code === 'ENOENT' ? 'not installed' : (e as Error).message;
+            if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+              daemonOk = false;
+              daemonErrors.push(`${label}: ${msg}`);
+            }
+          }
+        }
+        results.push({ step: 'remove-daemons', ok: daemonOk, error: daemonErrors.join('; ') || undefined });
+      }
+
+      // Step 6: clear OpenClaw path fields from ClawLaunch config (do NOT delete the config file)
+      try {
+        const launcherConfigPath = path.join(app.getPath('home'), '.clawlaunch', 'clawlaunch.json');
+        let existing: Record<string, unknown> = {};
+        try {
+          const raw = await fs.readFile(launcherConfigPath, 'utf-8');
+          existing = JSON.parse(raw);
+        } catch { /* file may not exist */ }
+        const cleared = { ...existing, corePath: '', configPath: '', workspacePath: '' };
+        await fs.writeFile(launcherConfigPath, JSON.stringify(cleared, null, 2), 'utf-8');
+        ctx.emitShellStdout('>>> Cleared OpenClaw paths from launcher config\n', 'stdout');
+        results.push({ step: 'clear-launcher-paths', ok: true });
+      } catch (e) {
+        results.push({ step: 'clear-launcher-paths', ok: false, error: (e as Error).message });
+      }
+
+      ctx.emitShellStdout('>>> Uninstall complete\n', 'stdout');
+      return { code: 0, stdout: JSON.stringify({ results }), exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stderr: (e as Error)?.message || 'project uninstall failed', exitCode: 1 };
     }
   }
 
