@@ -74,6 +74,13 @@ export function useLauncherSettingsActions({
         throw new Error(res.stderr || t('runtime.errors.saveLauncherFailed'));
       }
 
+      // Sync workspacePath → openclaw.json agents.defaults.workspace
+      const configPathRaw = String(config.configPath ?? '').trim();
+      if (configPathRaw && workspacePathRaw) {
+        const migratePayload = { configPath: configPathRaw, workspacePath: workspacePathRaw };
+        await window.electronAPI.exec(`config:migrate-openclaw ${JSON.stringify(migratePayload)}`);
+      }
+
       setLauncherSaveState('saved');
       scheduleSaveStateReset();
       addLog(t('logs.configSaved'), 'system');

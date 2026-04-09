@@ -72,7 +72,19 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
         if ('corePath' in parsed) { delete parsed['corePath']; changed = true; }
         if (!parsed.agents || typeof parsed.agents !== 'object') { parsed.agents = {}; changed = true; }
         if (!parsed.agents.defaults || typeof parsed.agents.defaults !== 'object') { parsed.agents.defaults = {}; changed = true; }
-        if (workspacePath && !parsed.agents.defaults.workspace) { parsed.agents.defaults.workspace = workspacePath; changed = true; }
+        if (workspacePath && parsed.agents.defaults.workspace !== workspacePath) {
+          const oldDefault = parsed.agents.defaults.workspace as string | undefined;
+          parsed.agents.defaults.workspace = workspacePath;
+          changed = true;
+          // Also update agents.list entries that were pointing at the old default
+          if (Array.isArray(parsed.agents.list)) {
+            for (const agent of parsed.agents.list as Array<Record<string, unknown>>) {
+              if (agent.workspace === oldDefault) {
+                agent.workspace = workspacePath;
+              }
+            }
+          }
+        }
         if (parsed.models && typeof parsed.models.providers === 'object' && parsed.models.providers !== null) {
           for (const providerVal of Object.values(parsed.models.providers)) {
             if (providerVal && typeof providerVal === 'object' && !Array.isArray((providerVal as Record<string, unknown>).models)) {

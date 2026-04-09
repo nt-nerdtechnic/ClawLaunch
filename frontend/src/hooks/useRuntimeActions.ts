@@ -90,6 +90,14 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     if ((res.code ?? res.exitCode) !== 0) {
       throw new Error(res.stderr || t('runtime.errors.saveLauncherFailed'));
     }
+
+    // Sync workspacePath → openclaw.json agents.defaults.workspace
+    const configPathRaw = String(config.configPath ?? '').trim();
+    const workspacePathRaw = String(config.workspacePath ?? '').trim();
+    if (configPathRaw && workspacePathRaw) {
+      const migratePayload = { configPath: configPathRaw, workspacePath: workspacePathRaw };
+      await window.electronAPI.exec(`config:migrate-openclaw ${JSON.stringify(migratePayload)}`);
+    }
   };
 
   const handleSaveLauncherConfig = async () => {
