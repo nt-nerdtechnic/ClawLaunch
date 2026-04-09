@@ -16,6 +16,7 @@ interface UseAgentCronJobsReturn {
   toggle: (jobId: string) => Promise<void>;
   trigger: (jobId: string) => void;
   remove: (jobId: string) => Promise<void>;
+  update: (jobId: string, updates: { name?: string; everyMs?: number; timeoutSeconds?: number; delivery?: { mode: string; channel?: string; to?: string }; payloadMessage?: string }) => Promise<void>;
 }
 
 export function useAgentCronJobs({ agentId, enabled }: UseAgentCronJobsParams): UseAgentCronJobsReturn {
@@ -78,5 +79,20 @@ export function useAgentCronJobs({ agentId, enabled }: UseAgentCronJobsParams): 
     await reload();
   }, [stateDir, reload]);
 
-  return { jobs, loading, error, reload, toggle, trigger, remove };
+  const update = useCallback(async (
+    jobId: string,
+    updates: {
+      name?: string;
+      everyMs?: number;
+      timeoutSeconds?: number;
+      delivery?: { mode: string; channel?: string; to?: string };
+      payloadMessage?: string;
+    }
+  ) => {
+    if (!window.electronAPI?.exec) return;
+    await window.electronAPI.exec(`cron:update ${JSON.stringify({ jobId, stateDir, ...updates })}`);
+    await reload();
+  }, [stateDir, reload]);
+
+  return { jobs, loading, error, reload, toggle, trigger, remove, update };
 }
