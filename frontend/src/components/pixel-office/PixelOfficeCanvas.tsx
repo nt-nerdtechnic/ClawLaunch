@@ -24,10 +24,42 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
   const officeSceneId = useStore(s => s.officeSceneId);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const agentsRef = useRef<PixelAgent[]>([]);
   const prevRoomRef = useRef<RoomConfig | null>(null);
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number; y: number; agent: PixelAgentSummary } | null>(null);
+
+  // Track container CSS pixel size (without dpr — used for hit testing)
+  const [containerCSS, setContainerCSS] = useState({ w: CANVAS_W, h: CANVAS_H });
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const observer = new ResizeObserver(entries => {
+      const e = entries[0];
+      if (!e) return;
+      const { width, height } = e.contentRect;
+      if (width > 0 && height > 0) setContainerCSS({ w: width, h: height });
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
+
+  // Uniform scale: maintain game aspect ratio, letterbox center.
+  // All values derived fresh each render so no stale-closure risk.
+  const dpr = window.devicePixelRatio || 1;
+  // CSS-space uniform scale (preserves aspect ratio)
+  const cssScale = Math.min(containerCSS.w / CANVAS_W, containerCSS.h / CANVAS_H);
+  // Letterbox offsets in CSS pixels (for hit testing)
+  const cssOffsetX = (containerCSS.w - CANVAS_W * cssScale) / 2;
+  const cssOffsetY = (containerCSS.h - CANVAS_H * cssScale) / 2;
+  // Physical (buffer) scale and offset for HiDPI rendering
+  const physScale   = cssScale * dpr;
+  const physOffsetX = cssOffsetX * dpr;
+  const physOffsetY = cssOffsetY * dpr;
+  // Canvas buffer dimensions
+  const canvasW = Math.round(containerCSS.w * dpr);
+  const canvasH = Math.round(containerCSS.h * dpr);
 
   // Build room from the selected procedural scene factory
   const room = useMemo<RoomConfig>(() => {
@@ -98,6 +130,10 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     paused,
     dark,
     bgImage: null,
+    scaleX: physScale,
+    scaleY: physScale,
+    offsetX: physOffsetX,
+    offsetY: physOffsetY,
   });
 
   // Mouse hover handler
@@ -106,10 +142,11 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const scaleX = CANVAS_W / rect.width;
-    const scaleY = CANVAS_H / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top) * scaleY;
+    const s = Math.min(rect.width / CANVAS_W, rect.height / CANVAS_H);
+    const ox = (rect.width  - CANVAS_W * s) / 2;
+    const oy = (rect.height - CANVAS_H * s) / 2;
+    const cx = ((e.clientX - rect.left) - ox) / s;
+    const cy = ((e.clientY - rect.top)  - oy) / s;
 
     const hit = hitTestAgent(cx, cy, agentsRef.current, SPRITE_DRAW_W, SPRITE_DRAW_H);
     setHoveredAgentId(hit?.id ?? null);
@@ -138,10 +175,11 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = CANVAS_W / rect.width;
-    const scaleY = CANVAS_H / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top) * scaleY;
+    const s = Math.min(rect.width / CANVAS_W, rect.height / CANVAS_H);
+    const ox = (rect.width  - CANVAS_W * s) / 2;
+    const oy = (rect.height - CANVAS_H * s) / 2;
+    const cx = ((e.clientX - rect.left) - ox) / s;
+    const cy = ((e.clientY - rect.top)  - oy) / s;
     const hit = hitTestAgent(cx, cy, agentsRef.current, SPRITE_DRAW_W, SPRITE_DRAW_H);
     if (hit) {
       const summary = summaries.find(s => s.id === hit.id);
@@ -155,27 +193,28 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = CANVAS_W / rect.width;
-    const scaleY = CANVAS_H / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top) * scaleY;
+    const s = Math.min(rect.width / CANVAS_W, rect.height / CANVAS_H);
+    const ox = (rect.width  - CANVAS_W * s) / 2;
+    const oy = (rect.height - CANVAS_H * s) / 2;
+    const cx = ((e.clientX - rect.left) - ox) / s;
+    const cy = ((e.clientY - rect.top)  - oy) / s;
     const hit = hitTestAgent(cx, cy, agentsRef.current, SPRITE_DRAW_W, SPRITE_DRAW_H);
     if (hit) {
       const summary = summaries.find(s => s.id === hit.id);
       const relX = e.clientX - rect.left;
       const relY = e.clientY - rect.top;
-      onAgentContextMenu(hit.id, summary?.displayName ?? hit.id, relX, relY);
+      onAgentContextMenu(hit.id, summary?.displayName ?? hit.id, relX / rect.width, relY / rect.height);
     }
   }, [summaries, onAgentContextMenu]);
 
   return (
-    <div className="relative w-full h-full">
+    <div ref={wrapperRef} className="relative w-full h-full">
       <canvas
         ref={canvasRef}
-        width={CANVAS_W}
-        height={CANVAS_H}
+        width={canvasW}
+        height={canvasH}
         className="w-full h-full"
-        style={{ imageRendering: 'pixelated', cursor: hoveredAgentId ? 'pointer' : 'default' }}
+        style={{ cursor: hoveredAgentId ? 'pointer' : 'default' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
@@ -187,7 +226,7 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
         <div
           className="absolute pointer-events-none z-10 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/95"
           style={{
-            left: Math.min(tooltipData.x + 12, CANVAS_W - 140),
+            left: Math.min(tooltipData.x + 12, (canvasRef.current?.getBoundingClientRect().width ?? CANVAS_W) - 140),
             top: Math.max(tooltipData.y - 60, 4),
           }}
         >

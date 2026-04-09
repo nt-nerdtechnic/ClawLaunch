@@ -76,7 +76,8 @@
       "settings": "Configuration",
       "launcherSettings": "Launcher Config",
       "runtimeSettings": "OpenClaw Settings",
-      "memory": "Memory & Data"
+      "memory": "Memory & Data",
+      "agentOffice": "Agent Office"
     },
     "webPreview": {
       "title": "Web Preview Mode",
@@ -90,7 +91,8 @@
       "settings": "Global Config Matrix",
       "launcherSettings": "Launcher Configuration",
       "runtimeSettings": "openclaw.json Configuration",
-      "memory": "Memory & Data Browser"
+      "memory": "Memory & Data Browser",
+      "agentOffice": "Agent Office"
     },
     "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
     "logoutTooltip": "Logout & Reconfigure",

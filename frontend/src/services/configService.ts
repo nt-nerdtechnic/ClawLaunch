@@ -19,13 +19,22 @@ export const ConfigService = {
   },
 
   /**
-   * Build OpenClaw environment variable prefix
+   * Always returns '' — profile flag not used.
+   */
+  buildGatewayProfileArg: (_configPath?: string): string => {
+    return '';
+  },
+
+  /**
+   * Build OPENCLAW_STATE_DIR / OPENCLAW_CONFIG_PATH env prefix from configPath.
+   * Returns '' if configPath is not set.
    */
   buildOpenClawEnvPrefix: (configPath?: string, _corePath?: string): string => {
     const configDir = ConfigService.normalizeConfigDir(configPath || '');
-    const configFilePath = configDir ? `${configDir}/openclaw.json` : '';
-    const stateDirEnv = configDir ? `OPENCLAW_STATE_DIR=${ConfigService.shellQuote(configDir)} ` : '';
-    const configPathEnv = configFilePath ? `OPENCLAW_CONFIG_PATH=${ConfigService.shellQuote(configFilePath)} ` : '';
+    if (!configDir) return '';
+    const configFilePath = `${configDir}/openclaw.json`;
+    const stateDirEnv = `OPENCLAW_STATE_DIR=${ConfigService.shellQuote(configDir)} `;
+    const configPathEnv = `OPENCLAW_CONFIG_PATH=${ConfigService.shellQuote(configFilePath)} `;
     return `${stateDirEnv}${configPathEnv}`;
   },
 

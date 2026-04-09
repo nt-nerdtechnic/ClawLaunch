@@ -17,6 +17,7 @@ const getHeaderTitle = (activeTab: string, t: TFunction) => {
   if (activeTab === 'skills') return t('app.headers.skills');
   if (activeTab === 'launcherSettings') return t('app.headers.launcherSettings');
   if (activeTab === 'memory') return t('app.headers.memory');
+  if (activeTab === 'agentOffice') return t('app.headers.agentOffice');
   return t('app.headers.runtimeSettings');
 };
 

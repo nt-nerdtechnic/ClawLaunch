@@ -37,8 +37,21 @@ export function renderFrame(
   hoveredAgentId: string | null,
   dark: boolean,
   bgImage: HTMLImageElement | null = null,
+  /** Horizontal physical-pixel scale (game coords → canvas buffer coords) */
+  scaleX = 1,
+  /** Vertical physical-pixel scale (game coords → canvas buffer coords) */
+  scaleY = 1,
+  /** Physical-pixel X offset for letterbox centering */
+  offsetX = 0,
+  /** Physical-pixel Y offset for letterbox centering */
+  offsetY = 0,
 ): void {
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  // Fill with theme bg so letterbox borders blend with the surrounding UI.
+  ctx.fillStyle = dark ? '#0f172a' : '#f1f5f9';
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scaleX, scaleY);
   ctx.imageSmoothingEnabled = false;
 
   if (bgImage) {
@@ -98,6 +111,8 @@ export function renderFrame(
 
   // ─── 6. Working-status bubbles ────────────────────────────────────────────
   for (const agent of agents) drawStatusBubble(ctx, agent, dark);
+
+  ctx.restore();
 }
 
 // ─── Sprite natural heights by type (for Z-sort) ─────────────────────────────

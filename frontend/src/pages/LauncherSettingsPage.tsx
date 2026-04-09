@@ -95,6 +95,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
   const normalizeVersion = (v: string) => v.trim().replace(/^v/i, '');
   const shellQuote = ConfigService.shellQuote;
   const buildOpenClawEnvPrefix = () => ConfigService.buildOpenClawEnvPrefix(config.configPath);
+  const buildGatewayProfileArg = () => ConfigService.buildGatewayProfileArg(config.configPath);
   const effectiveRuntimeGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
 
   const fetchAvailableVersions = async () => {
@@ -158,10 +159,11 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
       addLog(t('runtime.update.success'), 'system');
       addLog(t('runtime.update.restartingGateway'), 'system');
       const envPrefix = buildOpenClawEnvPrefix();
+      const profileArg = buildGatewayProfileArg();
       const corePath = config.corePath;
 
       await window.electronAPI.exec(
-        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway stop`
+        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway stop`
       ).catch(() => {});
 
       const gatewayPort = effectiveRuntimeGatewayPort?.trim() || '18789';
@@ -177,25 +179,25 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
 
       if (config.installDaemon) {
         await window.electronAPI.exec(
-          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway start`
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway start`
         ).catch(() => {});
       } else {
         await execInTerminal(
-          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`,
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway run --verbose --force`,
           { title: 'OpenClaw Gateway', holdOpen: false, cwd: corePath }
         );
       }
 
       await new Promise<void>((r) => setTimeout(r, 3000));
       const statusRes = await window.electronAPI.exec(
-        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway status`
+        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway status`
       ).catch(() => ({ code: 1, stderr: 'status check failed' }));
 
       if ((statusRes?.code ?? 1) !== 0) {
         addLog(t('runtime.update.gatewayRetrying'), 'system');
         await new Promise<void>((r) => setTimeout(r, 4000));
         const retryRes = await window.electronAPI.exec(
-          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway status`
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway status`
         ).catch(() => ({ code: 1 }));
         if ((retryRes?.code ?? 1) !== 0) {
           addLog(t('runtime.update.gatewayWarning', { msg: 'Please manually verify Gateway startup' }), 'stderr');

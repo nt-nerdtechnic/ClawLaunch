@@ -19,6 +19,7 @@ interface UseRuntimeActionsParams {
   effectiveRuntimeCronMaxConcurrentRuns: number;
   shellQuote: (value: string) => string;
   buildOpenClawEnvPrefix: (cfg?: Partial<Config>) => string;
+  buildGatewayProfileArg: (cfg?: Partial<Config>) => string;
   isModelAuthorizedByProvider: (modelRef: string) => boolean;
   setRuntimeProfile: (profile: Record<string, unknown> | null) => void;
   addLog: (msg: string, source?: LogSource) => void;
@@ -39,6 +40,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     effectiveRuntimeCronMaxConcurrentRuns,
     shellQuote,
     buildOpenClawEnvPrefix,
+    buildGatewayProfileArg,
     isModelAuthorizedByProvider,
     setRuntimeProfile,
     addLog,
@@ -161,6 +163,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         }
 
         const envPrefix = buildOpenClawEnvPrefix();
+        const profileArg = buildGatewayProfileArg();
         const cdCorePath = `cd ${shellQuote(corePath)}`;
 
         if (modelChanged) {
@@ -171,7 +174,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
           if (!isModelAuthorizedByProvider(nextModel)) {
             throw new Error(t('runtime.errors.unauthorizedModel'));
           }
-          const setModelCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set agents.defaults.model.primary ${shellQuote(JSON.stringify(nextModel))} --json`;
+          const setModelCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw ${profileArg}config set agents.defaults.model.primary ${shellQuote(JSON.stringify(nextModel))} --json`;
           const setModelRes = await window.electronAPI.exec(setModelCmd);
           if ((setModelRes.code ?? setModelRes.exitCode) !== 0) {
             throw new Error(setModelRes.stderr || t('runtime.errors.updateModelFailed'));
@@ -179,7 +182,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         }
 
         if (tokenChanged) {
-          const setTokenCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set channels.telegram.botToken ${shellQuote(JSON.stringify(runtimeDraftBotToken))} --json`;
+          const setTokenCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw ${profileArg}config set channels.telegram.botToken ${shellQuote(JSON.stringify(runtimeDraftBotToken))} --json`;
           const setTokenRes = await window.electronAPI.exec(setTokenCmd);
           if ((setTokenRes.code ?? setTokenRes.exitCode) !== 0) {
             throw new Error(setTokenRes.stderr || t('runtime.errors.updateTokenFailed'));
@@ -188,13 +191,13 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
         if (portChanged) {
           if (portDraft) {
-            const setPortCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set gateway.port ${Number(portDraft)} --json`;
+            const setPortCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw ${profileArg}config set gateway.port ${Number(portDraft)} --json`;
             const setPortRes = await window.electronAPI.exec(setPortCmd);
             if ((setPortRes.code ?? setPortRes.exitCode) !== 0) {
               throw new Error(setPortRes.stderr || t('runtime.errors.updatePortFailed'));
             }
           } else {
-            const delPortCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config delete gateway.port --json`;
+            const delPortCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw ${profileArg}config delete gateway.port --json`;
             const delPortRes = await window.electronAPI.exec(delPortCmd);
             if ((delPortRes.code ?? delPortRes.exitCode) !== 0) {
               throw new Error(delPortRes.stderr || t('runtime.errors.updatePortFailed'));
@@ -204,7 +207,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
 
         if (cronMaxConcurrentRunsChanged) {
           const maxRuns = Math.max(1, Math.floor(runtimeDraftCronMaxConcurrentRuns));
-          const setCronCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw config set cron.maxConcurrentRuns ${maxRuns} --json`;
+          const setCronCmd = `${cdCorePath} && ${envPrefix}pnpm openclaw ${profileArg}config set cron.maxConcurrentRuns ${maxRuns} --json`;
           const setCronRes = await window.electronAPI.exec(setCronCmd);
           if ((setCronRes.code ?? setCronRes.exitCode) !== 0) {
             throw new Error(setCronRes.stderr || t('runtime.errors.updateCronMaxConcurrentRunsFailed'));
@@ -256,11 +259,12 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       // Auto-restart gateway with verification
       addLog(t('runtime.update.restartingGateway'), 'system');
       const envPrefix = buildOpenClawEnvPrefix();
+      const profileArg = buildGatewayProfileArg();
       const corePath = config.corePath;
 
       // Stop gateway
       await window.electronAPI.exec(
-        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway stop`
+        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway stop`
       ).catch(() => {});
 
       // Wait for gateway to fully stop (max 10 seconds)
@@ -278,11 +282,11 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       // Start gateway
       if (config.installDaemon) {
         await window.electronAPI.exec(
-          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway start`
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway start`
         ).catch(() => {});
       } else {
         await execInTerminal(
-          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`,
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway run --verbose --force`,
           { title: 'OpenClaw Gateway', holdOpen: false, cwd: corePath }
         );
       }
@@ -290,7 +294,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
       // Verify gateway restarted successfully
       await new Promise<void>((r) => setTimeout(r, 3000));
       const statusRes = await window.electronAPI.exec(
-        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway status`
+        `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway status`
       ).catch(() => ({ code: 1, stderr: 'status check failed' }));
 
       if ((statusRes?.code ?? 1) !== 0) {
@@ -298,7 +302,7 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
         addLog(t('runtime.update.gatewayRetrying'), 'system');
         await new Promise<void>((r) => setTimeout(r, 4000));
         const retryRes = await window.electronAPI.exec(
-          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw gateway status`
+          `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway status`
         ).catch(() => ({ code: 1 }));
         if ((retryRes?.code ?? 1) !== 0) {
           addLog(t('runtime.update.gatewayWarning', { msg: 'Please manually verify Gateway startup' }), 'stderr');
@@ -329,8 +333,9 @@ export function useRuntimeActions(params: UseRuntimeActionsParams) {
     }
     try {
       const envPrefix = buildOpenClawEnvPrefix();
+      const profileArg = buildGatewayProfileArg();
       const safeChannelId = channelId.replace(/[^a-z0-9_-]/gi, '');
-      const cmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw config set channels.${safeChannelId}.botToken ${shellQuote(JSON.stringify(token))} --json`;
+      const cmd = `cd ${shellQuote(corePath)} && ${envPrefix}pnpm openclaw ${profileArg}config set channels.${safeChannelId}.botToken ${shellQuote(JSON.stringify(token))} --json`;
       const res = await window.electronAPI.exec(cmd);
       if ((res.code ?? res.exitCode) !== 0) {
         throw new Error(res.stderr || t('runtime.errors.updateChannelTokenFailed', { channel: channelId, msg: '' }));

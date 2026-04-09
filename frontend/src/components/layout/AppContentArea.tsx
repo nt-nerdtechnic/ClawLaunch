@@ -21,6 +21,7 @@ type AppContentAreaProps = {
   monitorContent: ReactNode;
   launcherSettingsContent: ReactNode;
   runtimeSettingsContent: ReactNode;
+  agentOfficeContent: ReactNode;
 };
 
 export function AppContentArea({
@@ -42,8 +43,9 @@ export function AppContentArea({
   monitorContent,
   launcherSettingsContent,
   runtimeSettingsContent,
+  agentOfficeContent,
 }: AppContentAreaProps) {
-  const isFullBleed = activeTab === 'memory';
+  const isFullBleed = activeTab === 'memory' || activeTab === 'agentOffice';
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -61,7 +63,7 @@ export function AppContentArea({
         t={t}
       />
       {isFullBleed ? (
-        memoryContent
+        activeTab === 'agentOffice' ? agentOfficeContent : memoryContent
       ) : (
         <div className="flex-1 p-10 overflow-y-auto">
           {activeTab === 'controlCenter' && controlCenterContent}

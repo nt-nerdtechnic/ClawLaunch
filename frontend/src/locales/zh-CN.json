@@ -83,7 +83,8 @@
       "settings": "配置编辑",
       "launcherSettings": "启动器配置",
       "runtimeSettings": "龙虾配置",
-      "memory": "记忆与数据"
+      "memory": "记忆与数据",
+      "agentOffice": "Agent 办公室"
     },
     "headers": {
       "monitor": "核心进程哨兵",
@@ -93,7 +94,8 @@
       "settings": "全局配置矩阵",
       "launcherSettings": "Launcher 配置",
       "runtimeSettings": "openclaw.json 配置",
-      "memory": "记忆体与数据浏览器"
+      "memory": "记忆体与数据浏览器",
+      "agentOffice": "Agent 办公室"
     },
     "logoutConfirm": "确定要重置并返回引导流程吗？目前的配置将被保留，但您需要重新完成设定步骤。",
     "logoutTooltip": "登出并重新设定",

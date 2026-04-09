@@ -10,6 +10,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { ControlCenterPage } from './pages/ControlCenterPage';
 import { MemoryPage } from './pages/MemoryPage';
+import { AgentOfficePage } from './pages/AgentOfficePage';
 import { ViewErrorBoundary } from './components/common/ViewErrorBoundary';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
@@ -185,6 +186,7 @@ function App() {
           launcherSettingsContent={(
             <LauncherSettingsPage />
           )}
+          agentOfficeContent={<AgentOfficePage restartGateway={restartGateway} />}
           runtimeSettingsContent={(
             <RuntimeSettingsPage
               runtimeDraftModel={runtimeDraftModel}

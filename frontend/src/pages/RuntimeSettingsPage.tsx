@@ -81,6 +81,8 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const shellQuote = ConfigService.shellQuote;
   const buildOpenClawEnvPrefix = (cfg?: Partial<typeof config>) =>
     ConfigService.buildOpenClawEnvPrefix(cfg?.configPath ?? config.configPath);
+  const buildGatewayProfileArg = (cfg?: Partial<typeof config>) =>
+    ConfigService.buildGatewayProfileArg(cfg?.configPath ?? config.configPath);
   const effectiveRuntimeModel = String(runtimeProfile?.model || detectedConfig?.model || '').trim();
   const effectiveRuntimeBotToken = String(runtimeProfile?.botToken || detectedConfig?.botToken || '').trim();
   const effectiveRuntimeGatewayPort = String((runtimeProfile?.gateway as Record<string, unknown> | null | undefined)?.port ?? '').trim();
@@ -102,6 +104,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
     effectiveRuntimeCronMaxConcurrentRuns,
     shellQuote,
     buildOpenClawEnvPrefix,
+    buildGatewayProfileArg,
     isModelAuthorizedByProvider,
     setRuntimeProfile,
     addLog,

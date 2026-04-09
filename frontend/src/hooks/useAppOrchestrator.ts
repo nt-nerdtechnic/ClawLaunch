@@ -100,6 +100,8 @@ export function useAppOrchestrator() {
   useAuthProfiles(resolvedConfigDir, activeTab);
   const buildOpenClawEnvPrefix = (cfg?: Partial<Config>) =>
     ConfigService.buildOpenClawEnvPrefix(cfg?.configPath ?? config.configPath);
+  const buildGatewayProfileArg = (cfg?: Partial<Config>) =>
+    ConfigService.buildGatewayProfileArg(cfg?.configPath ?? config.configPath);
 
   const { syncSnapshot } = useSnapshotSync({
     running,
@@ -130,6 +132,7 @@ export function useAppOrchestrator() {
     setRunning,
     shellQuote,
     buildOpenClawEnvPrefix,
+    buildGatewayProfileArg,
     addLog,
     t,
     gatewayConflictModal,

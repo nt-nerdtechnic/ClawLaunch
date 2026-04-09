@@ -19,6 +19,7 @@ interface UseGatewayActionsParams {
   setRunning: (running: boolean) => void;
   shellQuote: (value: string) => string;
   buildOpenClawEnvPrefix: (cfg?: Partial<Config>) => string;
+  buildGatewayProfileArg: (cfg?: Partial<Config>) => string;
   addLog: (msg: string, source?: LogSource) => void;
   t: TFn;
   gatewayConflictModal: GatewayConflictModal | null;
@@ -35,6 +36,7 @@ export function useGatewayActions({
   setRunning,
   shellQuote,
   buildOpenClawEnvPrefix,
+  buildGatewayProfileArg,
   addLog,
   t,
   gatewayConflictModal,
@@ -121,6 +123,7 @@ export function useGatewayActions({
     try {
       await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
       const envPrefix = buildOpenClawEnvPrefix();
+      const profileArg = buildGatewayProfileArg();
       const port = getGatewayPort();
 
       if (options?.killTerminalAndPortHolders) {
@@ -147,7 +150,7 @@ export function useGatewayActions({
       // gateway stop only applies to daemon mode; skip to avoid redundant Terminal windows showing "service not loaded"
       const skipGatewayStop = options?.killTerminalAndPortHolders && !config.installDaemon;
       if (!skipGatewayStop) {
-        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway stop`;
+        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway stop`;
         const resRaw = !options?.forceBackground && shouldUseExternalTerminal()
           ? await execInTerminal(cmd, {
               title: 'Stopping OpenClaw Gateway',
@@ -195,6 +198,7 @@ export function useGatewayActions({
     addLog(t('logs.startingGateway'), 'system');
     try {
       const envPrefix = buildOpenClawEnvPrefix();
+      const profileArg = buildGatewayProfileArg();
       const port = getGatewayPort();
 
       // Port conflict check before startup (only executed if port is set in openclaw.json)
@@ -223,8 +227,8 @@ export function useGatewayActions({
       let startCmd = '';
       if (useExternalTerminal) {
         startCmd = config.installDaemon
-          ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`
-          : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
+          ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway start`
+          : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway run --verbose --force`;
 
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
 
@@ -242,7 +246,7 @@ export function useGatewayActions({
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } else if (config.installDaemon) {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
-        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`;
+        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway start`;
         const resRaw = await window.electronAPI.exec(cmd);
         const code = resRaw.code;
         if (code === 0) {
@@ -253,7 +257,7 @@ export function useGatewayActions({
         }
       } else {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
-        const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
+        const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway run --verbose --force`;
         startCmd = runCmd;
         const payload = {
           command: runCmd,
@@ -369,6 +373,7 @@ export function useGatewayActions({
 
       // Re-invoke toggleGateway to start
       const envPrefix = buildOpenClawEnvPrefix();
+      const profileArg = buildGatewayProfileArg();
       const port = getGatewayPort();
 
       // Wait for port to be released; force-kill if still occupied after stop
@@ -415,8 +420,8 @@ export function useGatewayActions({
       let startCmd = '';
       if (useExternalTerminal) {
         startCmd = config.installDaemon
-          ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`
-          : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
+          ? `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway start`
+          : `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway run --verbose --force`;
 
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
 
@@ -434,7 +439,7 @@ export function useGatewayActions({
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } else if (config.installDaemon) {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
-        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway start`;
+        const cmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway start`;
         const resRaw = await window.electronAPI.exec(cmd);
         const code = resRaw.code;
         if (code === 0) {
@@ -445,7 +450,7 @@ export function useGatewayActions({
         }
       } else {
         await window.electronAPI.exec('gateway:watchdogs-stop').catch(() => {});
-        const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw gateway run --verbose --force`;
+        const runCmd = `cd ${shellQuote(config.corePath)} && ${envPrefix}pnpm openclaw ${profileArg}gateway run --verbose --force`;
         startCmd = runCmd;
         const payload = {
           command: runCmd,

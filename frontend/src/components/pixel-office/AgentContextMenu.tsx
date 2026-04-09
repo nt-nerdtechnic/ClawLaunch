@@ -19,7 +19,6 @@ interface AgentContextMenuProps {
 
 const MENU_W = 168;
 const MENU_H = 238;
-const CANVAS_AREA_H = 400;
 
 export default function AgentContextMenu({
   agentId: _agentId,
@@ -37,8 +36,10 @@ export default function AgentContextMenu({
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const left = Math.min(x + 4, MENU_W > 0 ? 600 - MENU_W - 4 : x);
-  const top  = Math.min(y, CANVAS_AREA_H - MENU_H - 4);
+  // x/y are 0–1 fractions of the canvas container; use CSS min() to clamp
+  // so the menu never overflows regardless of the actual container size.
+  const leftStyle = `min(${(x * 100).toFixed(2)}%, calc(100% - ${MENU_W + 4}px))`;
+  const topStyle  = `min(${(y * 100).toFixed(2)}%, calc(100% - ${MENU_H + 4}px))`;
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
@@ -63,7 +64,7 @@ export default function AgentContextMenu({
     <div
       ref={menuRef}
       className="absolute z-30 rounded-xl border border-slate-200 bg-white/98 shadow-2xl p-1 dark:border-slate-700 dark:bg-slate-900/98"
-      style={{ left, top, width: MENU_W }}
+      style={{ left: leftStyle, top: topStyle, width: MENU_W }}
     >
       <div className="px-3 py-1 mb-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 truncate">
         {agentName}

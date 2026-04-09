@@ -13,6 +13,10 @@ interface UsePixelOfficeLoopParams {
   paused: boolean;
   dark: boolean;
   bgImage: HTMLImageElement | null;
+  scaleX?: number;
+  scaleY?: number;
+  offsetX?: number;
+  offsetY?: number;
 }
 
 export function usePixelOfficeLoop({
@@ -24,6 +28,10 @@ export function usePixelOfficeLoop({
   paused,
   dark,
   bgImage,
+  scaleX = 1,
+  scaleY = 1,
+  offsetX = 0,
+  offsetY = 0,
 }: UsePixelOfficeLoopParams): void {
   const rafRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
@@ -46,12 +54,12 @@ export function usePixelOfficeLoop({
     }
 
     // Render
-    renderFrame(ctx, room, agentsRef.current, cache, hoveredAgentId, dark, bgImage);
+    renderFrame(ctx, room, agentsRef.current, cache, hoveredAgentId, dark, bgImage, scaleX, scaleY, offsetX, offsetY);
 
     if (loopRef.current) {
       rafRef.current = requestAnimationFrame(loopRef.current);
     }
-  }, [canvasRef, agentsRef, room, cache, hoveredAgentId, dark, bgImage, loopRef]);
+  }, [canvasRef, agentsRef, room, cache, hoveredAgentId, dark, bgImage, loopRef, scaleX, scaleY, offsetX, offsetY]);
 
   // Store latest loop in ref to avoid circular dependency (in effect to prevent render-phase update)
   useEffect(() => {
