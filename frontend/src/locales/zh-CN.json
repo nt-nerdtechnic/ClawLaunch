@@ -1543,5 +1543,32 @@
       "saveFailed": "保存文件失败",
       "encodingFailed": "编码转换失败，显示原始内容"
     }
+  },
+  "uninstall": {
+    "dangerZone": "危险操作",
+    "title": "一键卸载 OpenClaw",
+    "dangerDesc": "移除所有 OpenClaw 文件、配置及工作区数据。此操作不可撤销。",
+    "openBtn": "卸载",
+    "warningDesc": "以下所有数据将被永久删除，执行后无法恢复。",
+    "willDelete": "将删除以下路径",
+    "cannotUndo": "此操作不可撤销。卸载前请确认已备份所有重要数据。",
+    "proceedBtn": "继续",
+    "confirmTitle": "最终确认",
+    "confirmDesc": "请勾选下方确认框后，才能执行卸载。",
+    "confirmCheck": "我了解此操作将永久删除所有 OpenClaw 数据，且不可撤销。",
+    "confirmBtn": "确认卸载",
+    "runningTitle": "正在卸载中…",
+    "runningFailed": "卸载过程发生错误，请查看上方日志。",
+    "doneTitle": "卸载完成",
+    "doneDesc": "OpenClaw 已成功移除。你可以重新安装，或直接关闭应用程序。",
+    "reinstallBtn": "重新安装",
+    "quitBtn": "关闭应用程序",
+    "backBtn": "← 返回",
+    "paths": {
+      "core": "核心",
+      "config": "配置",
+      "workspace": "工作区",
+      "launcherConfig": "启动器配置"
+    }
   }
 }

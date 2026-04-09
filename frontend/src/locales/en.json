@@ -1788,5 +1788,32 @@
       "saveFailed": "Failed to save file",
       "encodingFailed": "Encoding conversion failed, showing raw content"
     }
+  },
+  "uninstall": {
+    "dangerZone": "Danger Zone",
+    "title": "Uninstall OpenClaw",
+    "dangerDesc": "Remove all OpenClaw files, configuration, and workspace data. This cannot be undone.",
+    "openBtn": "Uninstall",
+    "warningDesc": "All data listed below will be permanently deleted and cannot be recovered.",
+    "willDelete": "Paths to be deleted",
+    "cannotUndo": "This action cannot be undone. Please back up any important data before proceeding.",
+    "proceedBtn": "Proceed",
+    "confirmTitle": "Final Confirmation",
+    "confirmDesc": "Please check the box below to confirm before uninstalling.",
+    "confirmCheck": "I understand this will permanently delete all OpenClaw data and cannot be undone.",
+    "confirmBtn": "Confirm Uninstall",
+    "runningTitle": "Uninstalling…",
+    "runningFailed": "An error occurred during uninstall. Please check the log above.",
+    "doneTitle": "Uninstall Complete",
+    "doneDesc": "OpenClaw has been successfully removed. You may reinstall or close the application.",
+    "reinstallBtn": "Reinstall",
+    "quitBtn": "Close Application",
+    "backBtn": "← Back",
+    "paths": {
+      "core": "Core",
+      "config": "Config",
+      "workspace": "Workspace",
+      "launcherConfig": "Launcher Config"
+    }
   }
 }

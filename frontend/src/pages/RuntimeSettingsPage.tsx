@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Key, Loader2, ShieldCheck, AlertCircle, ChevronDown, ChevronUp, MessageSquare, Phone, Bot, Server, Mails, Hash, Shield, MessageCircle, Waves, CheckCircle2, RefreshCw, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { ConfigService } from '../services/configService';
@@ -51,6 +51,7 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
   const { t } = useTranslation();
   // 從 Zustand 直接讀取，無須從外部傳入
   const config = useStore((s) => s.config);
+  const setConfig = useStore((s) => s.setConfig);
   const runtimeProfile = useStore((s) => s.runtimeProfile);
   const detectedConfig = useStore((s) => s.detectedConfig);
   const setRuntimeProfile = useStore((s) => s.setRuntimeProfile);
@@ -183,8 +184,38 @@ export const RuntimeSettingsPage: React.FC<RuntimeSettingsPageProps> = ({
           ? t('settings.saveConfigFailedButton')
           : t('settings.saveConfig');
 
+  const handleBrowseWorkspacePath = async () => {
+    if (!window.electronAPI?.selectDirectory) return;
+    const selectedPath = await window.electronAPI.selectDirectory();
+    if (!selectedPath) return;
+    setConfig({ workspacePath: selectedPath });
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in zoom-in-95">
+
+      {/* Workspace Path Section */}
+      <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+          {t('settings.workspacePath')}
+        </div>
+        <div className="flex items-stretch gap-2">
+          <input
+            type="text"
+            value={config.workspacePath || ''}
+            onChange={(e) => setConfig({ workspacePath: e.target.value })}
+            placeholder={t('settings.workspacePathPlaceholder')}
+            className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
+          />
+          <button
+            onClick={handleBrowseWorkspacePath}
+            title={t('settings.browseFolder', 'Browse folder')}
+            className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
+          >
+            <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
+          </button>
+        </div>
+      </div>
 
       {/* Gateway Port Section */}
       <div className="p-8 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[32px] space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">

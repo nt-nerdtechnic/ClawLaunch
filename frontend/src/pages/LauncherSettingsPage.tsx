@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download, Globe, Play, Info, Loader2, RotateCcw, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { FolderOpen, RefreshCw, CheckCircle, AlertCircle, Download, Globe, Play, Info, Loader2, RotateCcw, ChevronDown, ChevronUp, Shield, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import type { Config } from '../store';
@@ -7,6 +7,7 @@ import { useLauncherSettingsActions } from '../hooks/useLauncherSettingsActions'
 import { ConfigService } from '../services/configService';
 import { execInTerminal } from '../utils/terminal';
 import TerminalLog from '../components/common/TerminalLog';
+import { UninstallModal } from '../components/dialogs/UninstallModal';
 
 type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
 
@@ -75,6 +76,7 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
   const [isRollingBack, setIsRollingBack] = useState(false);
   const wasUpdatingRef = useRef(false);
   const updateLogStartRef = useRef<number>(-1);
+  const [showUninstall, setShowUninstall] = useState(false);
 
   // Version comparison helpers
   const parseVer = (v: string) => v.split(/[.\-]/g).slice(0, 3).map(Number) as [number, number, number];
@@ -349,29 +351,6 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
                 />
                 <button
                   onClick={() => handleBrowsePath('configPath')}
-                  title={t('settings.browseFolder', 'Browse folder')}
-                  className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
-                >
-                  <FolderOpen size={15} className="text-slate-500 dark:text-slate-400" />
-                </button>
-              </div>
-            </div>
-
-            {/* Workspace Path */}
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {t('settings.workspacePath')}
-              </label>
-              <div className="flex items-stretch gap-2">
-                <input
-                  type="text"
-                  value={config.workspacePath || ''}
-                  onChange={(e) => setConfig({ workspacePath: e.target.value })}
-                  placeholder={t('settings.workspacePathPlaceholder')}
-                  className="flex-1 bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-300 font-mono text-xs outline-none focus:border-blue-400 dark:focus:border-blue-500/50 transition-colors"
-                />
-                <button
-                  onClick={() => handleBrowsePath('workspacePath')}
                   title={t('settings.browseFolder', 'Browse folder')}
                   className="px-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center"
                 >
@@ -889,6 +868,28 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
         )}
       </div>
 
+      {/* Danger Zone Section */}
+      <div className="p-8 bg-rose-50 dark:bg-rose-950/10 border border-rose-200 dark:border-rose-900/40 rounded-[32px] shadow-xl shadow-rose-100/50 dark:shadow-none">
+        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-500 mb-4 flex items-center gap-1.5">
+          <Trash2 size={11} />
+          {t('uninstall.dangerZone')}
+        </div>
+        <div className="rounded-2xl border border-rose-200 dark:border-rose-800/40 bg-white/80 dark:bg-rose-950/20 px-4 py-3 flex items-center justify-between gap-4">
+          <div>
+            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('uninstall.title')}</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{t('uninstall.dangerDesc')}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowUninstall(true)}
+            className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-colors"
+          >
+            <Trash2 size={13} />
+            {t('uninstall.openBtn')}
+          </button>
+        </div>
+      </div>
+
       {/* Save Button */}
       <button
         onClick={handleSaveLauncherConfig}
@@ -903,6 +904,8 @@ export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
       >
         {saveButtonLabel}
       </button>
+
+      <UninstallModal open={showUninstall} onClose={() => setShowUninstall(false)} />
     </div>
   );
 };
