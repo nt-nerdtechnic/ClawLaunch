@@ -4,14 +4,12 @@ import { useTranslation } from 'react-i18next';
 import PixelOfficeCanvas from './PixelOfficeCanvas';
 import OfficeHUD from './OfficeHUD';
 import AgentContextMenu from './AgentContextMenu';
-import AgentSettingsDrawer from './AgentSettingsDrawer';
+import AgentSettingsDrawer, { type DrawerTab } from './AgentSettingsDrawer';
 import AddAgentModal from './AddAgentModal';
 import ScenePicker from './ScenePicker';
 import { usePixelOfficeAgents } from './hooks/usePixelOfficeAgents';
 import { useStore } from '../../store';
 import { DeleteConfirmDialog } from '../dialogs/DeleteConfirmDialog';
-
-type DrawerTab = 'info' | 'cron' | 'auth';
 
 interface ContextMenuState {
   agentId: string;
@@ -38,7 +36,7 @@ interface RenameState {
 
 interface PixelOfficeWidgetProps {
   compact?: boolean;
-  restartGateway?: () => void;
+  restartGateway?: () => Promise<void>;
 }
 
 const SESSION_REUSE_WINDOW_MS = 5 * 60 * 1000;

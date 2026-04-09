@@ -10,7 +10,7 @@ interface AgentMonitorTabProps {
   onRestartGateway?: () => Promise<void>;
 }
 
-export default function AgentMonitorTab({ agentId, onToggleGateway, onRestartGateway }: AgentMonitorTabProps) {
+export default function AgentMonitorTab({ agentId: _agentId, onToggleGateway, onRestartGateway }: AgentMonitorTabProps) {
   const { t } = useTranslation();
   const running = useStore(s => s.running);
   const setRunning = useStore(s => s.setRunning);

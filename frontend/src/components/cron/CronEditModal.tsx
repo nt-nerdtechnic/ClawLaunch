@@ -1,7 +1,7 @@
-import React from 'react';
+import { useRef, useEffect } from 'react';
 import { Bell, Save, X } from 'lucide-react';
 import cronstrue from 'cronstrue/i18n';
-import { PROVIDER_MODEL_CATALOGUE } from '../../constants/providers';
+import type { ModelOptionGroup } from '../../hooks/useAppComputedValues';
 import type { PixelAgentSummary } from '../pixel-office/hooks/usePixelOfficeAgents';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -37,6 +37,7 @@ interface Props {
   draft: CronEditDraft;
   onChange: (draft: CronEditDraft) => void;
   allAgents: PixelAgentSummary[];
+  modelOptionGroups: ModelOptionGroup[];
   configuredBotChannels: { id: string; name: string }[];
   authorizedRecipients: Record<string, string[]>;
   buildCronExpr: (d: CronEditDraft) => string;
@@ -51,8 +52,16 @@ const label = 'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export function CronEditModal({ draft, onChange, allAgents, configuredBotChannels, authorizedRecipients, buildCronExpr, onSave, onCancel }: Props) {
+export function CronEditModal({ draft, onChange, allAgents, modelOptionGroups, configuredBotChannels, authorizedRecipients, buildCronExpr, onSave, onCancel }: Props) {
+  const bodyRef = useRef<HTMLDivElement>(null);
   const set = (updates: Partial<CronEditDraft>) => onChange({ ...draft, ...updates });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const cronPreview = (() => {
     const expr = buildCronExpr(draft);
@@ -77,7 +86,7 @@ export function CronEditModal({ draft, onChange, allAgents, configuredBotChannel
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
           {/* 名稱 */}
           <div>
@@ -107,9 +116,9 @@ export function CronEditModal({ draft, onChange, allAgents, configuredBotChannel
               <label className={label}>強制指定模型（選填）</label>
               <select value={draft.model} onChange={e => set({ model: e.target.value })} className={input}>
                 <option value="">(套用 Agent 預設)</option>
-                {Object.entries(PROVIDER_MODEL_CATALOGUE).map(([prov, data]) => (
-                  <optgroup key={prov} label={data.label}>
-                    {data.models.map(m => (
+                {modelOptionGroups.map(({ provider, group, models }) => (
+                  <optgroup key={provider} label={group}>
+                    {models.map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </optgroup>
@@ -316,9 +325,15 @@ export function CronEditModal({ draft, onChange, allAgents, configuredBotChannel
           <div>
             <label className={label}>觸發訊息（Prompt）</label>
             <textarea
-              ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
               value={draft.payloadMessage}
-              onChange={e => set({ payloadMessage: e.target.value })}
+              onChange={e => {
+                const el = e.target;
+                const saved = bodyRef.current?.scrollTop ?? 0;
+                el.style.height = 'auto';
+                el.style.height = el.scrollHeight + 'px';
+                if (bodyRef.current) bodyRef.current.scrollTop = saved;
+                set({ payloadMessage: e.target.value });
+              }}
               rows={1}
               placeholder="每次觸發時送給 agent 的提示，留空則使用任務預設 prompt"
               className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none overflow-hidden"

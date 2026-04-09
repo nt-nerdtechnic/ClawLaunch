@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { MessageSquare, StopCircle, Settings, CalendarClock, Key, Trash2, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { DrawerTab } from './AgentSettingsDrawer';
 
 interface AgentContextMenuProps {
   agentId: string;
@@ -10,7 +11,7 @@ interface AgentContextMenuProps {
   isActive: boolean;
   onChat: () => void;
   onStopAll: () => void;
-  onSettings: (tab: 'info' | 'cron' | 'auth') => void;
+  onSettings: (tab: DrawerTab) => void;
   onRename: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -90,17 +91,17 @@ export default function AgentContextMenu({
         {t('pixelOffice.contextMenu.rename', 'Rename')}
       </button>
 
-      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('info')}>
+      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('monitor')}>
         <Settings size={12} className="text-slate-400 shrink-0" />
         {t('pixelOffice.contextMenu.settings', 'Settings')}
       </button>
 
-      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('cron')}>
+      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('control')}>
         <CalendarClock size={12} className="text-amber-500 shrink-0" />
         {t('pixelOffice.contextMenu.cronJobs', 'Cron Jobs')}
       </button>
 
-      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('auth')}>
+      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('settings')}>
         <Key size={12} className="text-green-500 shrink-0" />
         {t('pixelOffice.contextMenu.auth', 'Auth')}
       </button>

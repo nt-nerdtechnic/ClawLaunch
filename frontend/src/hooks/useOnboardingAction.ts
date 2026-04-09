@@ -171,47 +171,6 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     params.addLocalLog(t('onboarding.logs.agentProfileAvailable', { id: agentProfileId }), 'system');
   };
 
-  const verifyAnyDualLayerAuthPersistence = async (params: {
-    configPath: string;
-    addLocalLog: (text: string, source?: string) => void;
-  }) => {
-    const parsed = await readOpenClawConfig(params.configPath);
-    const globalProfiles = parsed?.auth?.profiles || {};
-    const globalEntries = Object.entries(globalProfiles) as Array<[string, Record<string, unknown>]>;
-    if (globalEntries.length === 0) {
-      throw new Error(t('onboarding.errors.globalProfilesEmpty'));
-    }
-
-    const agentAuth = await readAgentAuthProfiles(params.configPath);
-    if (!agentAuth) {
-      throw new Error(t('onboarding.errors.agentAuthNotFoundShort'));
-    }
-
-    const agentProfiles = agentAuth.parsed?.profiles || {};
-    const agentEntries = Object.entries(agentProfiles) as Array<[string, Record<string, unknown>]>;
-    const matched = globalEntries.find(([globalProfileId, globalProfile]) => {
-      const provider = String(globalProfile?.provider || '').toLowerCase();
-      const profileId = String(globalProfileId || '').toLowerCase();
-      return agentEntries.some(([agentProfileId, agentProfile]) => {
-        const agentProvider = String(agentProfile?.provider || '').toLowerCase();
-        const agentProfileKey = String(agentProfileId || '').toLowerCase();
-        const providerMatched = Boolean(
-          provider && (provider === agentProvider || agentProfileKey.includes(provider) || profileId.includes(agentProvider)),
-        );
-        if (!providerMatched) return false;
-        return hasAgentCredential(agentProfile).ok;
-      });
-    });
-
-    if (!matched) {
-      throw new Error(
-        t('onboarding.errors.dualLayerMismatch', { path: agentAuth.profilePath }),
-      );
-    }
-
-    params.addLocalLog(t('onboarding.logs.dualLayerConfirmed'), 'system');
-  };
-
   const verifyMiniMaxPortalTokenConfig = async (params: {
     authChoice: string;
     configPath: string;

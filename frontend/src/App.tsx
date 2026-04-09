@@ -157,7 +157,7 @@ function App() {
           onRelogout={() => setShowLogoutConfirm(true)}
           onDismissWorkspaceBanner={dismissWorkspaceBanner}
           t={t}
-          controlCenterContent={<ControlCenterPage onRefreshSnapshot={syncSnapshot} stateDir={resolvedConfigDir || undefined} />}
+          controlCenterContent={<ControlCenterPage onRefreshSnapshot={syncSnapshot} stateDir={resolvedConfigDir || undefined} dynamicModelOptions={dynamicModelOptions} />}
           skillsContent={<SkillsPage />}
           memoryContent={<MemoryPage config={config} />}
           analyticsContent={(
