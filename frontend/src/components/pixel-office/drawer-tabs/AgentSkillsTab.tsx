@@ -4,7 +4,7 @@ import {
   PackagePlus, Lock, LockOpen, ChevronDown, ChevronUp, FolderOpen,
   Puzzle, Info,
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { useAgentSkills, type AgentSkillEntry } from '../hooks/useAgentSkills';
 
 interface AgentSkillsTabProps {
@@ -251,7 +251,7 @@ export default function AgentSkillsTab({ agentWorkspace }: AgentSkillsTabProps) 
           <p className="text-sm text-slate-400 mt-1 font-medium ml-6">
             {activeTab === 'core'
               ? t('skillManager.guide.core', 'Core skills loaded at system level')
-              : t('skillManager.guide.workspace', 'Workspace skills from skills/ directory')}
+              : <Trans i18nKey="skillManager.guide.workspace" components={[<span key="skills-dir" className="font-mono font-semibold text-slate-600 dark:text-slate-300" />]} />}
           </p>
         </div>
         <div className="flex items-center gap-3">

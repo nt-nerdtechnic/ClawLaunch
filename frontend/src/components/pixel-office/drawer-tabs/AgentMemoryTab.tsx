@@ -628,19 +628,27 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
       {/* Left panel — file browser */}
       <div className="w-80 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
-          <div className="flex items-center gap-2">
-            <Brain size={15} className="text-purple-400" />
-            <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              {t('memory.browser', 'Memory Browser')}
-            </span>
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-1 bg-slate-50 dark:bg-slate-900/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Brain size={15} className="text-purple-400" />
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                {t('memory.browser', 'Memory Browser')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {lastScanAt && <span className="text-[10px] text-slate-400 font-mono">{lastScanAt}</span>}
+              <button type="button" onClick={() => void runScan()} disabled={totalScanning} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors disabled:opacity-50" title={t('memory.refresh', 'Refresh')}>
+                <RefreshCw size={13} className={totalScanning ? 'animate-spin' : ''} />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {lastScanAt && <span className="text-[10px] text-slate-400 font-mono">{lastScanAt}</span>}
-            <button type="button" onClick={() => void runScan()} disabled={totalScanning} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors disabled:opacity-50" title={t('memory.refresh', 'Refresh')}>
-              <RefreshCw size={13} className={totalScanning ? 'animate-spin' : ''} />
-            </button>
-          </div>
+          {agentWorkspace && (
+            <div className="flex items-center gap-1 min-w-0">
+              <FolderOpen size={10} className="shrink-0 text-slate-400" />
+              <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 truncate" title={agentWorkspace}>{agentWorkspace}</span>
+            </div>
+          )}
         </div>
 
         {/* Stats */}
