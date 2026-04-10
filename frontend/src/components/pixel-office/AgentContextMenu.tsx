@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MessageSquare, StopCircle, Settings, CalendarClock, Key, Trash2, Pencil } from 'lucide-react';
+import { MessageSquare, StopCircle, TrendingUp, CalendarClock, Brain, Boxes, Settings2, Trash2, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { DrawerTab } from './AgentSettingsDrawer';
 
@@ -18,7 +18,7 @@ interface AgentContextMenuProps {
 }
 
 const MENU_W = 168;
-const MENU_H = 238;
+const MENU_H = 300;
 
 export default function AgentContextMenu({
   agentId: _agentId,
@@ -92,19 +92,29 @@ export default function AgentContextMenu({
         {t('pixelOffice.contextMenu.rename', 'Rename')}
       </button>
 
-      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('monitor')}>
-        <Settings size={12} className="text-slate-400 shrink-0" />
-        {t('pixelOffice.contextMenu.settings', 'Settings')}
+      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('analytics')}>
+        <TrendingUp size={12} className="text-blue-500 shrink-0" />
+        {t('app.tabs.analytics', 'Stats')}
       </button>
 
       <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('control')}>
         <CalendarClock size={12} className="text-amber-500 shrink-0" />
-        {t('pixelOffice.contextMenu.cronJobs', 'Cron Jobs')}
+        {t('app.tabs.controlCenter', 'Tasks')}
+      </button>
+
+      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('memory')}>
+        <Brain size={12} className="text-purple-500 shrink-0" />
+        {t('app.tabs.memory', 'Memory')}
+      </button>
+
+      <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('skills')}>
+        <Boxes size={12} className="text-indigo-500 shrink-0" />
+        {t('app.tabs.skills', 'Skills')}
       </button>
 
       <button type="button" className={`${itemCls} text-slate-700 dark:text-slate-200`} onClick={() => onSettings('settings')}>
-        <Key size={12} className="text-green-500 shrink-0" />
-        {t('pixelOffice.contextMenu.auth', 'Auth')}
+        <Settings2 size={12} className="text-slate-400 shrink-0" />
+        {t('app.tabs.runtimeSettings', 'Config')}
       </button>
 
       <div className="my-0.5 h-px bg-slate-100 dark:bg-slate-800 mx-1" />

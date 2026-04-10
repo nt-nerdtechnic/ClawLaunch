@@ -14,10 +14,11 @@ import { useTranslation } from 'react-i18next';
 interface PixelOfficeCanvasProps {
   paused: boolean;
   onAgentClick?: (agentId: string, displayName: string) => void;
+  onAgentDoubleClick?: (agentId: string, displayName: string) => void;
   onAgentContextMenu?: (agentId: string, displayName: string, relX: number, relY: number) => void;
 }
 
-export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContextMenu }: PixelOfficeCanvasProps) {
+export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentDoubleClick, onAgentContextMenu }: PixelOfficeCanvasProps) {
   const { t } = useTranslation();
   const theme = useStore(s => s.theme);
   const dark = theme === 'dark';
@@ -27,6 +28,8 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
   const wrapperRef = useRef<HTMLDivElement>(null);
   const agentsRef = useRef<PixelAgent[]>([]);
   const prevRoomRef = useRef<RoomConfig | null>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingClickRef = useRef<{ agentId: string; displayName: string } | null>(null);
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [tooltipData, setTooltipData] = useState<{ x: number; y: number; agent: PixelAgentSummary } | null>(null);
 
@@ -170,8 +173,10 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     setTooltipData(null);
   }, []);
 
+  // Cleanup click timer on unmount
+  useEffect(() => () => { if (clickTimerRef.current) clearTimeout(clickTimerRef.current); }, []);
+
   const handleClick = useCallback((e: ReactMouseEvent<HTMLCanvasElement>) => {
-    if (!onAgentClick) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -181,11 +186,26 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentContext
     const cx = ((e.clientX - rect.left) - ox) / s;
     const cy = ((e.clientY - rect.top)  - oy) / s;
     const hit = hitTestAgent(cx, cy, agentsRef.current, SPRITE_DRAW_W, SPRITE_DRAW_H);
-    if (hit) {
-      const summary = summaries.find(s => s.id === hit.id);
-      onAgentClick(hit.id, summary?.displayName ?? hit.id);
+    if (!hit) return;
+    const summary = summaries.find(s => s.id === hit.id);
+    const info = { agentId: hit.id, displayName: summary?.displayName ?? hit.id };
+    if (clickTimerRef.current) {
+      // Second click within 250ms → treat as double-click
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      pendingClickRef.current = null;
+      onAgentDoubleClick?.(info.agentId, info.displayName);
+    } else {
+      // First click → wait to see if double-click follows
+      pendingClickRef.current = info;
+      clickTimerRef.current = setTimeout(() => {
+        clickTimerRef.current = null;
+        const pending = pendingClickRef.current;
+        pendingClickRef.current = null;
+        if (pending) onAgentClick?.(pending.agentId, pending.displayName);
+      }, 250);
     }
-  }, [summaries, onAgentClick]);
+  }, [summaries, onAgentClick, onAgentDoubleClick]);
 
   const handleContextMenu = useCallback((e: ReactMouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();

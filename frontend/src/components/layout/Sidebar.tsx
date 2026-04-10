@@ -43,9 +43,10 @@ export function Sidebar({ activeTab, onChangeTab, onToggleViewMode, appVersion, 
         <NavItem icon={<Activity size={18} />} label={t('app.tabs.monitor')} active={activeTab === 'monitor'} onClick={() => onChangeTab('monitor')} />
         <NavItem icon={<BarChart3 size={18} />} label={t('app.tabs.analytics')} active={activeTab === 'analytics'} onClick={() => onChangeTab('analytics')} />
         <NavItem icon={<Radar size={18} />} label={t('app.tabs.controlCenter')} active={activeTab === 'controlCenter'} onClick={() => onChangeTab('controlCenter')} />
-        <NavItem icon={<Brain size={18} />} label={t('app.tabs.memory')} active={activeTab === 'memory'} onClick={() => onChangeTab('memory')} />
-        <NavItem icon={<Boxes size={18} />} label={t('app.tabs.skills')} active={activeTab === 'skills'} onClick={() => onChangeTab('skills')} />
-        <NavItem icon={<Database size={18} />} label={t('app.tabs.runtimeSettings')} active={activeTab === 'runtimeSettings'} onClick={() => onChangeTab('runtimeSettings')} />
+        {/* 已移至 agentOffice 統一管理 */}
+        {/* <NavItem icon={<Brain size={18} />} label={t('app.tabs.memory')} active={activeTab === 'memory'} onClick={() => onChangeTab('memory')} /> */}
+        {/* <NavItem icon={<Boxes size={18} />} label={t('app.tabs.skills')} active={activeTab === 'skills'} onClick={() => onChangeTab('skills')} /> */}
+        {/* <NavItem icon={<Database size={18} />} label={t('app.tabs.runtimeSettings')} active={activeTab === 'runtimeSettings'} onClick={() => onChangeTab('runtimeSettings')} /> */}
         <NavItem icon={<Building2 size={18} />} label={t('app.tabs.agentOffice')} active={activeTab === 'agentOffice'} onClick={() => onChangeTab('agentOffice')} />
       </nav>
 

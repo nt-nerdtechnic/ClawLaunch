@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
-  Activity, TrendingUp, CalendarClock, Brain, Boxes, Settings2,
+  TrendingUp, CalendarClock, Brain, Boxes, Settings2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PixelAgentSummary } from './hooks/usePixelOfficeAgents';
-import AgentMonitorTab from './drawer-tabs/AgentMonitorTab';
 import AgentAnalyticsTab from './drawer-tabs/AgentAnalyticsTab';
 import AgentControlTab from './drawer-tabs/AgentControlTab';
 import AgentMemoryTab from './drawer-tabs/AgentMemoryTab';
 import AgentSkillsTab from './drawer-tabs/AgentSkillsTab';
 import AgentSettingsTab from './drawer-tabs/AgentSettingsTab';
 
-export type DrawerTab = 'monitor' | 'analytics' | 'control' | 'memory' | 'skills' | 'settings';
+export type DrawerTab = 'analytics' | 'control' | 'memory' | 'skills' | 'settings';
 
 interface AgentSettingsDrawerProps {
   agentId: string;
@@ -21,12 +20,9 @@ interface AgentSettingsDrawerProps {
   agentDir?: string;
   initialTab?: DrawerTab;
   onClose: () => void;
-  onToggleGateway?: () => Promise<void>;
-  onRestartGateway?: () => Promise<void>;
 }
 
 const TABS: { key: DrawerTab; icon: React.ReactNode; labelKey: string; fallback: string }[] = [
-  { key: 'monitor',   icon: <Activity size={10} />,      labelKey: 'app.tabs.monitor',        fallback: 'Monitor'   },
   { key: 'analytics', icon: <TrendingUp size={10} />,    labelKey: 'app.tabs.analytics',      fallback: 'Stats'     },
   { key: 'control',   icon: <CalendarClock size={10} />, labelKey: 'app.tabs.controlCenter',  fallback: 'Tasks'     },
   { key: 'memory',    icon: <Brain size={10} />,         labelKey: 'app.tabs.memory',         fallback: 'Memory'    },
@@ -39,10 +35,8 @@ export default function AgentSettingsDrawer({
   summary,
   agentWorkspace,
   agentDir,
-  initialTab = 'monitor',
+  initialTab = 'analytics',
   onClose,
-  onToggleGateway,
-  onRestartGateway,
 }: AgentSettingsDrawerProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<DrawerTab>(initialTab);
@@ -100,7 +94,7 @@ export default function AgentSettingsDrawer({
           </span>
         </div>
 
-        {/* Tab bar — 6 equal-width tabs */}
+        {/* Tab bar — 5 equal-width tabs */}
         <div className="flex shrink-0 border-b border-slate-200 dark:border-slate-800">
           {TABS.map(({ key, icon, labelKey, fallback }) => (
             <button
@@ -121,7 +115,6 @@ export default function AgentSettingsDrawer({
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto">
-          {tab === 'monitor'   && <AgentMonitorTab agentId={agentId} onToggleGateway={onToggleGateway} onRestartGateway={onRestartGateway} />}
           {tab === 'analytics' && <AgentAnalyticsTab agentId={agentId} />}
           {tab === 'control'   && <AgentControlTab agentId={agentId} />}
           {tab === 'memory'    && <AgentMemoryTab agentWorkspace={agentWorkspace} />}

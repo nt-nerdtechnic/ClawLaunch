@@ -40,25 +40,27 @@ export default function PixelOfficeWidget({ compact = false, restartGateway }: P
         </div>
       )}
 
-      {/* ── Floating button ── */}
-      <button
-        type="button"
-        onClick={toggle}
-        className={`group relative inline-flex items-center justify-center rounded-2xl border bg-white/95 shadow-2xl transition-all hover:-translate-y-0.5 hover:bg-white dark:bg-slate-900/95 ${
-          isOpen
-            ? 'border-indigo-400 text-indigo-600 shadow-indigo-500/20 dark:border-indigo-600 dark:text-indigo-300'
-            : 'border-indigo-300/70 text-indigo-500 shadow-indigo-500/10 dark:border-indigo-700 dark:text-indigo-400'
-        } ${compact ? 'h-12 w-12' : 'h-12 w-12 sm:h-14 sm:w-14'}`}
-        title={isOpen ? t('pixelOffice.close') : t('pixelOffice.open')}
-        aria-label={isOpen ? t('pixelOffice.close') : t('pixelOffice.open')}
-      >
-        <Building2 size={22} />
-        {activeCount > 0 && !isOpen && (
-          <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-green-500 px-0.5 text-[8px] font-black text-white">
-            {activeCount}
-          </span>
-        )}
-      </button>
+      {/* ── Floating button (hidden: managed via AgentOfficePage) ── */}
+      {false && (
+        <button
+          type="button"
+          onClick={toggle}
+          className={`group relative inline-flex items-center justify-center rounded-2xl border bg-white/95 shadow-2xl transition-all hover:-translate-y-0.5 hover:bg-white dark:bg-slate-900/95 ${
+            isOpen
+              ? 'border-indigo-400 text-indigo-600 shadow-indigo-500/20 dark:border-indigo-600 dark:text-indigo-300'
+              : 'border-indigo-300/70 text-indigo-500 shadow-indigo-500/10 dark:border-indigo-700 dark:text-indigo-400'
+          } ${compact ? 'h-12 w-12' : 'h-12 w-12 sm:h-14 sm:w-14'}`}
+          title={isOpen ? t('pixelOffice.close') : t('pixelOffice.open')}
+          aria-label={isOpen ? t('pixelOffice.close') : t('pixelOffice.open')}
+        >
+          <Building2 size={22} />
+          {activeCount > 0 && !isOpen && (
+            <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-green-500 px-0.5 text-[8px] font-black text-white">
+              {activeCount}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 }

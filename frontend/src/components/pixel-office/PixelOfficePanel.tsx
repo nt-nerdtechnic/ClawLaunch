@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Building2, X, Users } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import PixelOfficeCanvas from './PixelOfficeCanvas';
 import OfficeHUD from './OfficeHUD';
@@ -87,7 +87,12 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [contextMenu, drawerState, showAddAgent, deleteConfirmState, renameState, onClose]);
 
-  // ── Agent click (left) → open chat ──────────────────────────────────────────
+  // ── Agent click (left) → open settings drawer ───────────────────────────────
+  const handleAgentClick = useCallback((agentId: string) => {
+    setDrawerState({ agentId, initialTab: 'analytics' });
+  }, []);
+
+  // ── Agent double-click → open chat ──────────────────────────────────────────
   const buildSessionKeyForAgent = useCallback((agentId: string) => {
     return `agent:${agentId}:local:${crypto.randomUUID()}`;
   }, []);
@@ -117,7 +122,7 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
     }
   }, [buildSessionKeyForAgent]);
 
-  const handleAgentClick = useCallback(async (agentId: string) => {
+  const handleAgentDoubleClick = useCallback(async (agentId: string) => {
     const targetSessionKey = await resolveSessionKeyForAgent(agentId);
     setActiveChatAgent(agentId);
     setActiveChatSession(targetSessionKey);
@@ -224,21 +229,7 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
   return (
     <div className={`relative flex flex-col w-full h-full overflow-hidden ${className}`}>
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-indigo-50/80 via-white to-white px-3 py-2 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
-        <div className="flex items-center gap-1.5">
-          <div className="rounded-lg bg-indigo-500/10 p-1 text-indigo-600 dark:text-indigo-300">
-            <Building2 size={13} />
-          </div>
-          <span className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
-            {t('pixelOffice.title')}
-          </span>
-          {summaries.length > 0 && (
-            <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300">
-              <Users size={8} />
-              {summaries.length}
-            </span>
-          )}
-        </div>
+      <div className="flex shrink-0 items-center justify-end border-b border-slate-200 bg-gradient-to-r from-indigo-50/80 via-white to-white px-3 py-2 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
         <div className="flex items-center gap-1">
           <ScenePicker />
           {onClose && (
@@ -257,7 +248,8 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
       <div className="relative min-h-0 flex-1">
         <PixelOfficeCanvas
           paused={false}
-          onAgentClick={(agentId) => { void handleAgentClick(agentId); }}
+          onAgentClick={(agentId) => { handleAgentClick(agentId); }}
+          onAgentDoubleClick={(agentId) => { void handleAgentDoubleClick(agentId); }}
           onAgentContextMenu={handleAgentContextMenu}
         />
 
