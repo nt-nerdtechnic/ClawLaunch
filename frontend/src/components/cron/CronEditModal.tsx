@@ -54,7 +54,15 @@ const label = 'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb
 
 export function CronEditModal({ draft, onChange, allAgents, modelOptionGroups, configuredBotChannels, authorizedRecipients, buildCronExpr, onSave, onCancel }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const set = (updates: Partial<CronEditDraft>) => onChange({ ...draft, ...updates });
+
+  useEffect(() => {
+    const el = promptRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [draft.payloadMessage]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
@@ -325,14 +333,12 @@ export function CronEditModal({ draft, onChange, allAgents, modelOptionGroups, c
           <div>
             <label className={label}>觸發訊息（Prompt）</label>
             <textarea
+              ref={promptRef}
               value={draft.payloadMessage}
               onChange={e => {
-                const el = e.target;
                 const saved = bodyRef.current?.scrollTop ?? 0;
-                el.style.height = 'auto';
-                el.style.height = el.scrollHeight + 'px';
-                if (bodyRef.current) bodyRef.current.scrollTop = saved;
                 set({ payloadMessage: e.target.value });
+                if (bodyRef.current) bodyRef.current.scrollTop = saved;
               }}
               rows={1}
               placeholder="每次觸發時送給 agent 的提示，留空則使用任務預設 prompt"
