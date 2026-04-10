@@ -261,8 +261,8 @@ export function parseOpenClawConfig(content: string) {
           return {
             id,
             name: String((a.identity as Record<string, unknown>)?.name ?? a.name ?? a.id ?? '').trim(),
-            workspace: String(a.workspace ?? parsed.agents?.defaults?.workspace ?? '').trim(),
-            agentDir: String(a.agentDir ?? `~/.openclaw/agents/${id}/agent`).trim(),
+            workspace: String(a.workspace || parsed.agents?.defaults?.workspace || '').trim(),
+            agentDir: String(a.agentDir || `~/.openclaw/agents/${id}/agent`).trim(),
             model: String(a.model ?? '').trim(),
           };
         })

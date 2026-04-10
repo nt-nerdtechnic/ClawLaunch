@@ -46,6 +46,12 @@ export default function AgentSettingsTab({
   const resolvedConfigDir = ConfigService.normalizeConfigDir(config.configPath);
   const resolvedConfigFilePath = resolvedConfigDir ? `${resolvedConfigDir}/openclaw.json` : '';
 
+  // Fallback workspace/agentDir when parent didn't pass values (agent not yet in detectedConfig.agentList)
+  const displayWorkspace = agentWorkspace
+    || String((runtimeProfile as Record<string, unknown> | null)?.workspace || config.workspacePath || '').trim();
+  const displayAgentDir = agentDir
+    || (resolvedConfigDir ? `${resolvedConfigDir}/agents/${agentId}/agent` : '');
+
   // ── Auth profiles ─────────────────────────────────────────────────────────
   const { authProfiles, loadAuthProfiles } = useAuthProfiles(resolvedConfigDir, 'runtimeSettings');
 
@@ -113,7 +119,7 @@ export default function AgentSettingsTab({
     dynamicModelOptions,
     runtimeDraftModel: draftModel,
     corePath: config.corePath,
-    workspacePath: agentWorkspace ?? config.workspacePath,
+    workspacePath: displayWorkspace,
     resolvedConfigDir,
     resolvedConfigFilePath,
     t,
@@ -289,8 +295,8 @@ export default function AgentSettingsTab({
           {t('settings.workspacePath', 'Workspace Paths')}
         </div>
         {([
-          { label: t('pixelOffice.drawer.info.workspace', 'Workspace'), value: agentWorkspace },
-          { label: t('pixelOffice.drawer.info.agentDir', 'Agent Dir'), value: agentDir },
+          { label: t('pixelOffice.drawer.info.workspace', 'Workspace'), value: displayWorkspace },
+          { label: t('pixelOffice.drawer.info.agentDir', 'Agent Dir'), value: displayAgentDir },
         ] as const).map(({ label, value }) => (
           <div key={label} className="space-y-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</label>
