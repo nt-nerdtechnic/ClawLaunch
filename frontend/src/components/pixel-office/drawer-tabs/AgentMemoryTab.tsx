@@ -6,6 +6,7 @@ import {
   Image as ImageIcon, Trash2, Database, CalendarDays, Info,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { CustomTooltip } from '../../common/CustomTooltip';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -49,14 +50,47 @@ function extToType(name: string): MemoryFile['type'] {
   const n = name.toLowerCase();
   const dotIdx = n.lastIndexOf('.');
   const ext = dotIdx > 0 ? n.slice(dotIdx) : (n.startsWith('.') ? n : '');
-  if (['.md', '.mdx', '.markdown'].includes(ext)) return 'md';
-  if (['.json', '.jsonl', '.json5'].includes(ext)) return 'json';
-  if (['.txt', '.log', '.out', '.csv', '.tsv', '.diff', '.patch'].includes(ext)) return 'txt';
-  if (['.yaml', '.yml', '.toml', '.ini', '.conf', '.cfg', '.xml', '.env',
-    '.gitignore', '.gitattributes', '.npmrc', '.nvmrc', '.editorconfig'].includes(ext)) return 'config';
-  if (['.sh', '.bash', '.zsh', '.py', '.js', '.ts', '.jsx', '.tsx',
-    '.go', '.rs', '.java', '.rb', '.php', '.c', '.cpp', '.swift', '.sql'].includes(ext)) return 'code';
-  if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.ico', '.svg', '.avif'].includes(ext)) return 'image';
+
+  if (ext === '.md' || ext === '.mdx' || ext === '.markdown') return 'md';
+  if (ext === '.json' || ext === '.jsonl' || ext === '.json5' || ext === '.geojson') return 'json';
+  if (['.txt', '.log', '.out', '.err', '.csv', '.tsv', '.diff', '.patch'].includes(ext)) return 'txt';
+
+  if ([
+    '.yaml', '.yml', '.toml', '.ini', '.conf', '.cfg', '.xml', '.plist',
+    '.properties', '.env', '.env.local', '.env.example', '.env.production',
+    '.gitignore', '.gitattributes', '.gitmodules', '.npmrc', '.nvmrc', '.yarnrc',
+    '.prettierrc', '.eslintrc', '.eslintignore', '.babelrc', '.stylelintrc',
+    '.editorconfig', '.dockerignore', '.htaccess', '.netrc',
+  ].includes(ext)) return 'config';
+
+  if (ext === '') {
+    const base = n;
+    if (['makefile', 'dockerfile', 'containerfile', 'vagrantfile', 'brewfile',
+         'gemfile', 'podfile', 'fastfile', 'procfile', 'rakefile', 'guardfile',
+         'gruntfile', 'gulpfile'].includes(base)) return 'code';
+    if (['readme', 'license', 'licence', 'changelog', 'notice', 'authors',
+         'contributors', 'copying', 'todo', 'notes', 'history'].includes(base)) return 'txt';
+    return 'other';
+  }
+
+  if (['.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh', '.ps1', '.bat', '.cmd'].includes(ext)) return 'code';
+  if (['.py', '.pyw', '.pyi', '.pyx', '.pxd'].includes(ext)) return 'code';
+  if (['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx',
+       '.vue', '.svelte', '.astro', '.html', '.htm', '.css', '.scss', '.sass', '.less'].includes(ext)) return 'code';
+  if (['.c', '.cc', '.cpp', '.cxx', '.c++', '.h', '.hh', '.hpp', '.hxx',
+       '.m', '.mm', '.swift', '.go', '.rs', '.zig',
+       '.java', '.kt', '.kts', '.groovy', '.scala', '.clj', '.cljs',
+       '.cs', '.vb', '.fs', '.fsi', '.fsx'].includes(ext)) return 'code';
+  if (['.rb', '.rake', '.gemspec', '.lua', '.pl', '.pm',
+       '.php', '.php3', '.php4', '.php5', '.phtml',
+       '.r', '.rmd', '.jl', '.ex', '.exs', '.erl', '.hrl',
+       '.hs', '.lhs', '.elm', '.dart', '.cr', '.nim',
+       '.tcl', '.awk', '.sed'].includes(ext)) return 'code';
+  if (['.sql', '.graphql', '.gql', '.proto', '.thrift', '.avsc'].includes(ext)) return 'code';
+  if (['.tf', '.tfvars', '.hcl', '.nomad', '.pkr'].includes(ext)) return 'config';
+  if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
+       '.ico', '.icns', '.svg'].includes(ext)) return 'image';
+
   return 'other';
 }
 
@@ -76,14 +110,94 @@ const KNOWN_WORKSPACE_DIRS = new Set([
   'SKILLS', 'EXTENSIONS', 'AGENT',
 ]);
 
-const ENCODING_GROUPS = [
-  { label: 'Unicode', options: [{ value: 'utf-8', label: 'UTF-8' }, { value: 'utf-16le', label: 'UTF-16 LE' }, { value: 'utf-16be', label: 'UTF-16 BE' }] },
-  { label: '中文', options: [{ value: 'gb18030', label: 'GB18030 / GBK' }, { value: 'big5', label: 'Big5 (繁體)' }] },
-  { label: '日本語', options: [{ value: 'shift-jis', label: 'Shift-JIS' }, { value: 'euc-jp', label: 'EUC-JP' }] },
-  { label: 'Other', options: [{ value: 'windows-1252', label: 'Win-1252' }, { value: 'iso-8859-1', label: 'ISO-8859-1' }] },
+const ENCODING_GROUPS: { label: string; options: { value: string; label: string }[] }[] = [
+  {
+    label: 'Unicode',
+    options: [
+      { value: 'utf-8',    label: 'UTF-8' },
+      { value: 'utf-16le', label: 'UTF-16 LE' },
+      { value: 'utf-16be', label: 'UTF-16 BE' },
+      { value: 'utf-32le', label: 'UTF-32 LE' },
+      { value: 'utf-32be', label: 'UTF-32 BE' },
+    ],
+  },
+  {
+    label: '中文',
+    options: [
+      { value: 'gb18030',    label: 'GB18030 / GBK (简体)' },
+      { value: 'big5',       label: 'Big5 (繁體)' },
+      { value: 'big5-hkscs', label: 'Big5-HKSCS (香港)' },
+      { value: 'hz-gb-2312', label: 'HZ-GB-2312' },
+    ],
+  },
+  {
+    label: '日本語',
+    options: [
+      { value: 'shift-jis',   label: 'Shift-JIS (SJIS)' },
+      { value: 'euc-jp',      label: 'EUC-JP' },
+      { value: 'iso-2022-jp', label: 'ISO-2022-JP (JIS)' },
+    ],
+  },
+  {
+    label: '한국어',
+    options: [
+      { value: 'euc-kr',      label: 'EUC-KR' },
+      { value: 'iso-2022-kr', label: 'ISO-2022-KR' },
+    ],
+  },
+  {
+    label: 'Cyrillic',
+    options: [
+      { value: 'windows-1251', label: 'Windows-1251' },
+      { value: 'koi8-r',       label: 'KOI8-R' },
+      { value: 'koi8-u',       label: 'KOI8-U' },
+      { value: 'iso-8859-5',   label: 'ISO-8859-5' },
+    ],
+  },
+  {
+    label: 'Western European',
+    options: [
+      { value: 'windows-1252', label: 'Windows-1252 (CP1252)' },
+      { value: 'iso-8859-1',   label: 'ISO-8859-1 (Latin-1)' },
+      { value: 'iso-8859-2',   label: 'ISO-8859-2 (Central EU)' },
+      { value: 'iso-8859-3',   label: 'ISO-8859-3 (South EU)' },
+      { value: 'iso-8859-4',   label: 'ISO-8859-4 (North EU)' },
+      { value: 'iso-8859-15',  label: 'ISO-8859-15 (Latin-9)' },
+      { value: 'windows-1250', label: 'Windows-1250 (Central EU)' },
+    ],
+  },
+  {
+    label: 'Other',
+    options: [
+      { value: 'windows-1254', label: 'Windows-1254 (Turkish)' },
+      { value: 'windows-1255', label: 'Windows-1255 (Hebrew)' },
+      { value: 'windows-1256', label: 'Windows-1256 (Arabic)' },
+      { value: 'windows-1257', label: 'Windows-1257 (Baltic)' },
+      { value: 'iso-8859-6',   label: 'ISO-8859-6 (Arabic)' },
+      { value: 'iso-8859-7',   label: 'ISO-8859-7 (Greek)' },
+      { value: 'iso-8859-8',   label: 'ISO-8859-8 (Hebrew)' },
+      { value: 'iso-8859-9',   label: 'ISO-8859-9 (Turkish)' },
+      { value: 'tis-620',      label: 'TIS-620 (Thai)' },
+      { value: 'ibm866',       label: 'IBM-866 (DOS Cyrillic)' },
+    ],
+  },
 ];
 
-const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'ico', 'svg', 'avif'];
+const ALL_ENCODINGS = ENCODING_GROUPS.flatMap(g => g.options);
+
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'ico', 'icns', 'svg', 'avif', 'heic'];
+
+// ── Skeleton ────────────────────────────────────────────────────────────────
+
+const SkeletonBrowserItem: React.FC<{ variant?: 'group' | 'file' }> = ({ variant = 'group' }) => (
+  <div className={`w-full flex items-center gap-2 px-3 py-2 animate-pulse ${variant === 'file' ? 'pl-8 py-1.5' : 'py-2.5'}`}>
+    <div className={`flex-shrink-0 bg-slate-100 dark:bg-slate-800 rounded ${variant === 'group' ? 'w-4 h-4' : 'w-3.5 h-3.5'}`} />
+    <div className="flex-1 space-y-1.5">
+      <div className={`bg-slate-100 dark:bg-slate-800 rounded ${variant === 'group' ? 'h-3 w-1/2' : 'h-2.5 w-3/4'}`} />
+    </div>
+    {variant === 'group' && <div className="w-4 h-2.5 bg-slate-100/50 dark:bg-slate-800/50 rounded ml-auto" />}
+  </div>
+);
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -98,6 +212,7 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
   const [fileError, setFileError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [totalScanning, setTotalScanning] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [lastScanAt, setLastScanAt] = useState('');
 
   const [isEditing, setIsEditing] = useState(false);
@@ -125,12 +240,18 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
       if (existRes.code === 0 && existRes.stdout.trim() === 'EXISTS') {
         const findCmd = [
           `find ${sq(dirPath)} -maxdepth 4 -type f`,
-          `! -path "*/.git/*" ! -path "*/node_modules/*" ! -name ".DS_Store"`,
-          `! -name "*.woff" ! -name "*.woff2" ! -name "*.ttf" ! -name "*.otf"`,
-          `! -name "*.mp4" ! -name "*.avi" ! -name "*.mov" ! -name "*.mp3" ! -name "*.wav"`,
-          `! -name "*.zip" ! -name "*.tar" ! -name "*.gz" ! -name "*.7z"`,
-          `! -name "*.pdf" ! -name "*.docx" ! -name "*.xlsx" ! -name "*.exe" ! -name "*.dll" ! -name "*.so"`,
-          `! -name "*.db" ! -name "*.sqlite" 2>/dev/null | head -200`,
+          `! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/__pycache__/*"`,
+          `! -name ".DS_Store" ! -name "*.DS_Store" ! -name "Thumbs.db"`,
+          `! -name "*.woff" ! -name "*.woff2" ! -name "*.ttf" ! -name "*.otf" ! -name "*.eot"`,
+          `! -name "*.mp4" ! -name "*.avi" ! -name "*.mov" ! -name "*.mkv" ! -name "*.wmv" ! -name "*.flv"`,
+          `! -name "*.mp3" ! -name "*.wav" ! -name "*.flac" ! -name "*.aac" ! -name "*.ogg" ! -name "*.m4a"`,
+          `! -name "*.zip" ! -name "*.tar" ! -name "*.gz" ! -name "*.bz2" ! -name "*.xz" ! -name "*.7z" ! -name "*.rar" ! -name "*.zst"`,
+          `! -name "*.pdf" ! -name "*.doc" ! -name "*.docx" ! -name "*.xls" ! -name "*.xlsx" ! -name "*.ppt" ! -name "*.pptx"`,
+          `! -name "*.exe" ! -name "*.dll" ! -name "*.so" ! -name "*.dylib" ! -name "*.bin"`,
+          `! -name "*.o" ! -name "*.a" ! -name "*.obj" ! -name "*.lib"`,
+          `! -name "*.pyc" ! -name "*.pyo" ! -name "*.class" ! -name "*.jar"`,
+          `! -name "*.db" ! -name "*.sqlite" ! -name "*.sqlite3"`,
+          `2>/dev/null | head -200`,
         ].join(' ');
         const findRes = await window.electronAPI.exec(findCmd);
         const paths = findRes.stdout.trim().split('\n').filter(Boolean);
@@ -181,7 +302,7 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
       const nameChecks = IMAGE_EXTS.map(e => `-iname "*.${e}"`).join(' -o ');
       const findCmd = [
         `find ${sq(agentWorkspace)} -maxdepth 6 -type f \\( ${nameChecks} \\)`,
-        `! -path "*/.git/*" ! -path "*/node_modules/*" ! -name ".DS_Store" 2>/dev/null | head -200`,
+        `! -path "*/.git/*" ! -path "*/node_modules/*" ! -name ".DS_Store" 2>/dev/null | head -400`,
       ].join(' ');
       const findRes = await window.electronAPI.exec(findCmd);
       const paths = findRes.stdout.trim().split('\n').filter(Boolean);
@@ -277,6 +398,7 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
     setGroups([...standardResults, ...uncategorizedResults, ...imageGroupResults]);
     setLastScanAt(new Date().toLocaleTimeString());
     setTotalScanning(false);
+    setInitialLoading(false);
   }, [agentWorkspace, buildGroupDefs, scanDir, scanImageGroups]);
 
   useEffect(() => { if (agentWorkspace) void runScan(); }, [agentWorkspace, runScan]);
@@ -334,6 +456,30 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
     } catch (e) { setFileError(String(e)); }
     finally { setFileLoading(false); }
   }, [selectedFile, isEditing, readFileContent]);
+
+  const enterEditMode = useCallback(() => {
+    setEditContent(fileContent);
+    setSaveError('');
+    setSaveSuccess(false);
+    setIsEditing(true);
+  }, [fileContent]);
+
+  const cancelEdit = useCallback(() => {
+    setIsEditing(false);
+    setSaveError('');
+  }, []);
+
+  const forceReadAsText = useCallback(async () => {
+    if (!selectedFile) return;
+    setIsBinaryFile(false);
+    setFileLoading(true);
+    setFileError('');
+    try {
+      const { content, error } = await readFileContent(selectedFile.fullPath, encoding);
+      if (error) setFileError(error); else setFileContent(content);
+    } catch (e) { setFileError(String(e)); }
+    finally { setFileLoading(false); }
+  }, [selectedFile, encoding, readFileContent]);
 
   const saveFile = useCallback(async () => {
     if (!selectedFile) return;
@@ -396,9 +542,14 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
             <span className={`flex-shrink-0 ${group.accent}`}>{group.icon}</span>
             <div className="flex-1 min-w-0 flex items-center gap-1.5">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">{group.label}</span>
-              <span className="text-slate-400 hover:text-slate-600 dark:text-slate-500 flex-shrink-0" title={group.description} onClick={e => e.stopPropagation()}>
-                <Info size={13} />
-              </span>
+              <CustomTooltip content={group.description} delay={0.1}>
+                <span
+                  className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help transition-colors flex-shrink-0"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <Info size={13} />
+                </span>
+              </CustomTooltip>
             </div>
             <span className="text-[10px] font-mono text-slate-400 ml-auto flex-shrink-0">
               {!isPendingDelete && (group.loading ? <Loader2 size={10} className="animate-spin" /> : group.exists ? group.files.length : '—')}
@@ -407,7 +558,7 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
           {isImgGroup && (
             <div className="absolute right-3 top-0 bottom-0 flex items-center gap-1 pointer-events-none">
               {!isPendingDelete && !isDeletingNow && (
-                <button type="button" onClick={e => { e.stopPropagation(); setImgDeleteConfirm(group.dirPath); }} className="pointer-events-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/40 text-slate-300 hover:text-red-400 transition-colors" title={t('memory.imgClearBtn', 'Clear images')}>
+                <button type="button" onClick={e => { e.stopPropagation(); setImgDeleteConfirm(group.dirPath); }} className="pointer-events-auto p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/40 text-slate-300 dark:text-slate-600 hover:text-red-400 transition-colors" title={t('memory.imgClearBtn', 'Clear images')}>
                   <Trash2 size={11} />
                 </button>
               )}
@@ -416,7 +567,7 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
                   <button type="button" onClick={e => { e.stopPropagation(); void deleteImageGroup(group); }} className="pointer-events-auto px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors">
                     {t('memory.imgClearConfirm', 'Delete')}
                   </button>
-                  <button type="button" onClick={e => { e.stopPropagation(); setImgDeleteConfirm(null); }} className="pointer-events-auto px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
+                  <button type="button" onClick={e => { e.stopPropagation(); setImgDeleteConfirm(null); }} className="pointer-events-auto px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition-colors">
                     {t('memory.imgClearCancel', 'Cancel')}
                   </button>
                 </>
@@ -474,7 +625,7 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left panel — file browser — w-80 matches MemoryPage exactly */}
+      {/* Left panel — file browser */}
       <div className="w-80 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
@@ -494,13 +645,13 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
 
         {/* Stats */}
         <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-800 flex gap-4">
-          <div className="flex items-center gap-1.5">
+          <div className={`flex items-center gap-1.5 ${initialLoading ? 'animate-pulse opacity-40' : ''}`}>
             <FileText size={11} className="text-slate-400" />
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{totalFiles} {t('memory.files', 'files')}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{initialLoading ? '—' : totalFiles} {t('memory.files', 'files')}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className={`flex items-center gap-1.5 ${initialLoading ? 'animate-pulse opacity-40' : ''}`}>
             <HardDrive size={11} className="text-slate-400" />
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{formatBytes(totalSize)}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{initialLoading ? '—' : formatBytes(totalSize)}</span>
           </div>
         </div>
 
@@ -533,7 +684,9 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
                 <div className="px-4 py-2 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
                   {t('memory.sections.soul', 'Soul')}
                 </div>
-                {soulGroups.map(renderGroup)}
+                {initialLoading
+                  ? Array.from({ length: 4 }).map((_, i) => <SkeletonBrowserItem key={i} />)
+                  : soulGroups.map(renderGroup)}
               </>
             );
           })()}
@@ -545,7 +698,9 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
                 <div className="px-4 py-2 mt-4 bg-slate-50/80 dark:bg-slate-900/40 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-t border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 backdrop-blur-sm">
                   {t('memory.sections.docs', 'Docs')}
                 </div>
-                {docsGroups.map(renderGroup)}
+                {initialLoading
+                  ? Array.from({ length: 3 }).map((_, i) => <SkeletonBrowserItem key={i} />)
+                  : docsGroups.map(renderGroup)}
               </>
             );
           })()}
@@ -571,7 +726,9 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
                   <div className="flex items-center gap-1.5"><ImageIcon size={10} /><span>{t('memory.sections.images', 'Images')}</span></div>
                   <span className="font-mono text-pink-300 dark:text-pink-600">{totalImgFiles}</span>
                 </div>
-                {imgGroups.map(renderGroup)}
+                {initialLoading
+                  ? Array.from({ length: 2 }).map((_, i) => <SkeletonBrowserItem key={i} />)
+                  : imgGroups.map(renderGroup)}
               </>
             );
           })()}
@@ -619,33 +776,31 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
                 </button>
 
                 {/* Encoding selector */}
-                {!isBinaryFile && !isImageFile && (
-                  <div className="relative" onClick={e => e.stopPropagation()}>
-                    <button type="button" onClick={() => setShowEncodingMenu(prev => !prev)} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-mono bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors">
-                      <span>{encoding.toUpperCase()}</span>
-                      {encodingAutoDetected && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0 ml-0.5" />}
-                      <ChevronDown size={9} />
-                    </button>
-                    {showEncodingMenu && (
-                      <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 min-w-[180px] max-h-64 overflow-y-auto">
-                        {ENCODING_GROUPS.map(group => (
-                          <div key={group.label}>
-                            <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/50 sticky top-0">{group.label}</div>
-                            {group.options.map(opt => (
-                              <button key={opt.value} type="button" onClick={() => void changeEncoding(opt.value)} className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors ${encoding === opt.value ? 'text-blue-500 font-semibold' : 'text-slate-600 dark:text-slate-300'}`}>
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                <div className="relative" onClick={e => e.stopPropagation()}>
+                  <button type="button" onClick={() => setShowEncodingMenu(prev => !prev)} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-mono bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors" title={t('memory.encoding', 'Encoding')}>
+                    <span>{ALL_ENCODINGS.find(e => e.value === encoding)?.label ?? encoding.toUpperCase()}</span>
+                    {encodingAutoDetected && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0 ml-0.5" />}
+                    <ChevronDown size={9} />
+                  </button>
+                  {showEncodingMenu && (
+                    <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 min-w-[180px] max-h-64 overflow-y-auto">
+                      {ENCODING_GROUPS.map(group => (
+                        <div key={group.label}>
+                          <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/50 sticky top-0">{group.label}</div>
+                          {group.options.map(opt => (
+                            <button key={opt.value} type="button" onClick={() => void changeEncoding(opt.value)} className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors ${encoding === opt.value ? 'text-blue-500 font-semibold' : 'text-slate-600 dark:text-slate-300'}`}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Edit toggle */}
-                {!isBinaryFile && !isImageFile && !isEditing && (
-                  <button type="button" onClick={() => { setEditContent(fileContent); setSaveError(''); setSaveSuccess(false); setIsEditing(true); }} disabled={fileLoading} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40" title={t('memory.edit', 'Edit')}>
+                {!isBinaryFile && !isEditing && (
+                  <button type="button" onClick={enterEditMode} disabled={fileLoading} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40" title={t('memory.edit', 'Edit')}>
                     <Pencil size={11} /><span>{t('memory.edit', 'Edit')}</span>
                   </button>
                 )}
@@ -655,7 +810,7 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
                       {isSaving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
                       <span>{isSaving ? t('memory.saving', 'Saving…') : t('memory.save', 'Save')}</span>
                     </button>
-                    <button type="button" onClick={() => { setIsEditing(false); setSaveError(''); }} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-500 hover:text-red-500 transition-colors">
+                    <button type="button" onClick={cancelEdit} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-500 hover:text-red-500 transition-colors">
                       <PencilOff size={11} /><span>{t('memory.cancelEdit', 'Cancel')}</span>
                     </button>
                   </>
@@ -679,12 +834,12 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
                 <div className="m-6 flex flex-col gap-3">
                   <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800">
                     <AlertCircle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-amber-700 dark:text-amber-400">{t('memory.binaryFile', 'Binary File')}</p>
                       <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-0.5">{t('memory.binaryFileHint', 'Cannot display')}</p>
                     </div>
                   </div>
-                  <button type="button" onClick={async () => { setIsBinaryFile(false); setFileLoading(true); try { const { content, error } = await readFileContent(selectedFile.fullPath, encoding); if (error) setFileError(error); else setFileContent(content); } catch (e) { setFileError(String(e)); } finally { setFileLoading(false); } }} className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
+                  <button type="button" onClick={() => void forceReadAsText()} className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
                     <Eye size={12} />{t('memory.forceReadAsText', 'Force read as text')}
                   </button>
                 </div>
@@ -694,6 +849,12 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
               )}
               {!fileLoading && !fileError && !isBinaryFile && !isEditing && !isImageFile && (
                 <div className="p-6">
+                  {selectedFile.type === 'other' && (
+                    <div className="mb-4 flex items-start gap-2 px-3 py-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <Info size={12} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{t('memory.unknownFormatHint', 'Unknown format — displaying as plain text')}</p>
+                    </div>
+                  )}
                   <pre className={`text-[12px] leading-relaxed font-mono whitespace-pre-wrap break-words ${
                     selectedFile.type === 'md' ? 'text-slate-700 dark:text-slate-300' :
                     selectedFile.type === 'json' ? 'text-emerald-700 dark:text-emerald-300' :
@@ -733,6 +894,31 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
               <Eye size={36} className="mx-auto text-slate-200 dark:text-slate-700" />
               <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">{t('memory.selectFile', 'Select a file to view')}</p>
               <p className="text-xs text-slate-300 dark:text-slate-600">{t('memory.selectFileHint', 'Click a file in the browser')}</p>
+            </div>
+
+            {/* Excluded formats notice */}
+            <div className="w-full max-w-xs space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Info size={11} className="text-slate-300 dark:text-slate-600 flex-shrink-0" />
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300 dark:text-slate-600">
+                  {t('memory.excludedTitle', 'Excluded formats')}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {([
+                  ['memory.excludedFonts',      'woff / ttf / otf / eot'],
+                  ['memory.excludedMedia',      'mp4 / mp3 / wav / flac'],
+                  ['memory.excludedArchives',   'zip / tar / gz / 7z'],
+                  ['memory.excludedDocs',       'pdf / docx / xlsx / pptx'],
+                  ['memory.excludedBinaries',   'exe / dll / so / dylib / .o'],
+                  ['memory.excludedDatabases',  'sqlite / db'],
+                ] as [string, string][]).map(([key, examples]) => (
+                  <div key={key} className="flex flex-col">
+                    <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">{t(key, examples)}</span>
+                    <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600 truncate">{examples}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
