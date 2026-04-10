@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { X, Wifi, WifiOff, Users, DollarSign, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import PixelOfficeCanvas from './PixelOfficeCanvas';
-import OfficeHUD from './OfficeHUD';
 import AgentContextMenu from './AgentContextMenu';
 import AgentSettingsDrawer, { type DrawerTab } from './AgentSettingsDrawer';
 import AddAgentModal from './AddAgentModal';
@@ -229,8 +228,39 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
   return (
     <div className={`relative flex flex-col w-full h-full overflow-hidden ${className}`}>
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-end border-b border-slate-200 bg-gradient-to-r from-indigo-50/80 via-white to-white px-3 py-2 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-indigo-50/80 via-white to-white px-3 py-2 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950">
+        {/* Left: HUD stats */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            {running ? <Wifi size={10} className="text-green-500 dark:text-green-400" /> : <WifiOff size={10} className="text-slate-400" />}
+            <span className={`text-[9px] font-black uppercase tracking-wider ${running ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
+              Gateway {running ? t('pixelOffice.hud.gatewayOn', 'ON') : t('pixelOffice.hud.gatewayOff', 'OFF')}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Users size={10} className="text-indigo-400" />
+            <span className="text-[9px] font-black uppercase tracking-wider text-indigo-500 dark:text-indigo-300">
+              {activeCount}/{summaries.length} {t('pixelOffice.hud.active', '運行中')}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <DollarSign size={10} className="text-amber-500 dark:text-amber-400" />
+            <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-300">
+              ${todayCost.toFixed(4)} {t('pixelOffice.hud.todayCost', '今日')}
+            </span>
+          </div>
+        </div>
+        {/* Right: Add + ScenePicker + close */}
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setShowAddAgent(true)}
+            title={t('pixelOffice.addAgent.title', 'New Agent')}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-wider text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-500/20 dark:hover:text-indigo-200 transition-colors"
+          >
+            <Plus size={11} />
+            {t('pixelOffice.hud.addAgent', '新增')}
+          </button>
           <ScenePicker />
           {onClose && (
             <button
@@ -251,14 +281,6 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
           onAgentClick={(agentId) => { handleAgentClick(agentId); }}
           onAgentDoubleClick={(agentId) => { void handleAgentDoubleClick(agentId); }}
           onAgentContextMenu={handleAgentContextMenu}
-        />
-
-        <OfficeHUD
-          running={running}
-          activeCount={activeCount}
-          totalCount={summaries.length}
-          todayCost={todayCost}
-          onAddAgent={() => setShowAddAgent(true)}
         />
 
         {contextMenu && (
