@@ -302,24 +302,24 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
         {showAddAgent && (
           <AddAgentModal
             onClose={() => setShowAddAgent(false)}
-            onCreated={() => {
-              // Re-run detect:paths to refresh detectedConfig.agentList with the new agent's workspace
+            onCreated={async () => {
+              // Await detect:paths before refreshing agents so detectedConfig.agentList
+              // has the new agent's workspace before it appears on the canvas
               if (window.electronAPI) {
-                window.electronAPI.exec('detect:paths').then(res => {
+                try {
+                  const res = await window.electronAPI.exec('detect:paths');
                   if (res.code === 0 && res.stdout) {
-                    try {
-                      const detected = JSON.parse(res.stdout);
-                      if (detected?.existingConfig) {
-                        setDetectedConfig({
-                          ...detected.existingConfig,
-                          corePath: detected.corePath || detected.existingConfig.corePath || '',
-                          configPath: detected.configPath || detected.existingConfig.configPath || '',
-                          workspacePath: detected.workspacePath || detected.existingConfig.workspacePath || detected.existingConfig.workspace || '',
-                        });
-                      }
-                    } catch { /* silent */ }
+                    const detected = JSON.parse(res.stdout);
+                    if (detected?.existingConfig) {
+                      setDetectedConfig({
+                        ...detected.existingConfig,
+                        corePath: detected.corePath || detected.existingConfig.corePath || '',
+                        configPath: detected.configPath || detected.existingConfig.configPath || '',
+                        workspacePath: detected.workspacePath || detected.existingConfig.workspacePath || detected.existingConfig.workspace || '',
+                      });
+                    }
                   }
-                }).catch(() => {});
+                } catch { /* silent */ }
               }
               refreshAgents();
               setShowAddAgent(false);

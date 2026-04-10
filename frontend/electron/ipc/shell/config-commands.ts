@@ -108,30 +108,32 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
     const newConfigPath = path.join(dir, 'clawlaunch.json');
     let corePath = '', configPath = '', workspacePath = '';
     let existingConfig: Record<string, unknown> = {};
+    const homeDir = app.getPath('home');
+    const expandTilde = (p: string) => p.startsWith('~/') || p === '~' ? p.replace('~', homeDir) : p;
     const detectArg = fullCommand.slice('detect:paths'.length).trim();
+    // Always read clawlaunch.json first for defaults; explicit args override individual fields
+    try {
+      const raw = await fs.readFile(newConfigPath, 'utf-8');
+      const cfg = JSON.parse(raw);
+      if (cfg.corePath) corePath = cfg.corePath;
+      if (cfg.configPath) configPath = cfg.configPath;
+      if (cfg.workspacePath) workspacePath = cfg.workspacePath;
+    } catch { /* no clawlaunch.json */ }
+    if (configPath && !detectArg) {
+      try {
+        const openclawFile = path.join(configPath, 'openclaw.json');
+        const content = await fs.readFile(openclawFile, 'utf-8');
+        existingConfig = parseOpenClawConfig(content);
+        if (existingConfig['workspace'] && !workspacePath) workspacePath = existingConfig['workspace'] as string;
+      } catch { /* no openclaw.json */ }
+    }
     if (detectArg) {
       try {
         const explicit = JSON.parse(detectArg);
-        if (explicit.corePath) corePath = String(explicit.corePath);
-        if (explicit.configPath) configPath = String(explicit.configPath);
-        if (explicit.workspacePath) workspacePath = String(explicit.workspacePath);
+        if (explicit.corePath) corePath = expandTilde(String(explicit.corePath));
+        if (explicit.configPath) configPath = expandTilde(String(explicit.configPath));
+        if (explicit.workspacePath) workspacePath = expandTilde(String(explicit.workspacePath));
       } catch { /* ignore */ }
-    } else {
-      try {
-        const raw = await fs.readFile(newConfigPath, 'utf-8');
-        const cfg = JSON.parse(raw);
-        if (cfg.corePath) corePath = cfg.corePath;
-        if (cfg.configPath) configPath = cfg.configPath;
-        if (cfg.workspacePath) workspacePath = cfg.workspacePath;
-        if (configPath) {
-          const openclawFile = path.join(configPath, 'openclaw.json');
-          try {
-            const content = await fs.readFile(openclawFile, 'utf-8');
-            existingConfig = parseOpenClawConfig(content);
-            if (existingConfig['workspace'] && !workspacePath) workspacePath = existingConfig['workspace'] as string;
-          } catch { /* no openclaw.json */ }
-        }
-      } catch { /* no clawlaunch.json */ }
     }
     const coreSkills = corePath ? await scanSkillsInDir(path.join(corePath, 'skills')) : [];
     const workspaceSkills = workspacePath ? await scanInstalledSkills(workspacePath) : [];
