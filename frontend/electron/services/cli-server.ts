@@ -137,10 +137,46 @@ export function startCliServer(ctx: CliServerContext): void {
     if (req.method === 'GET' && req.url === '/commands') {
       res.writeHead(200);
       res.end(JSON.stringify({
+        version: app.getVersion(),
+        exitCodes: {
+          0:  'success',
+          1:  'execution error',
+          2:  'usage error / unknown command',
+          69: 'NT-ClawLaunch app not running',
+          78: 'configuration error (onboarding not complete)',
+        },
+        workflow: [
+          'Always call `health` first to confirm the app is running (exit 69 = not running).',
+          'Use `gateway:start` to start the gateway; it returns immediately — the process runs in background with watchdog.',
+          'Use `gateway:stop` before quitting or reconfiguring.',
+          'Use `gateway:restart` when you need a clean cycle; it waits up to 8 s for the port to free.',
+        ],
         commands: [
-          { command: 'gateway:start',   description: '背景啟動 OpenClaw Gateway（含 watchdog）' },
-          { command: 'gateway:stop',    description: '停止 OpenClaw Gateway 與所有 watchdog' },
-          { command: 'gateway:restart', description: '重啟 OpenClaw Gateway（stop → wait → start）' },
+          {
+            command: 'health',
+            description: 'Check if NT-ClawLaunch is running and return uptime / version info.',
+            when: 'Always call this first before any gateway command.',
+            successShape: '{ ok: true, version, uptime, serverUptime, port }',
+          },
+          {
+            command: 'gateway:start',
+            description: 'Start OpenClaw Gateway in the background with watchdog restarts.',
+            when: 'When the gateway is not running and you want to start it.',
+            successShape: '{ pid, command, status: "started" }',
+            notes: 'Requires onboarding to be complete (corePath configured). Exit 78 if not.',
+          },
+          {
+            command: 'gateway:stop',
+            description: 'Stop OpenClaw Gateway and all watchdog processes.',
+            when: 'When you need to shut down the gateway cleanly.',
+            successShape: '{ stopped: true }',
+          },
+          {
+            command: 'gateway:restart',
+            description: 'Stop then restart the gateway; waits up to 8 s for the port to free.',
+            when: 'After configuration changes or when the gateway is unresponsive.',
+            successShape: '{ pid, command, status: "started" }',
+          },
         ],
       }));
       return;

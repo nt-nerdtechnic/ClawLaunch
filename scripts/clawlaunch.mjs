@@ -3,16 +3,27 @@
  * clawlaunch — NT-ClawLaunch CLI
  *
  * Usage:
- *   clawlaunch gateway:start    啟動 OpenClaw Gateway
- *   clawlaunch gateway:stop     停止 OpenClaw Gateway
- *   clawlaunch gateway:restart  重啟 OpenClaw Gateway
- *   clawlaunch health           確認 App 是否在執行
+ *   clawlaunch <command> [--json]
+ *
+ * Commands:
+ *   health           Check if NT-ClawLaunch is running
+ *   gateway:start    Start OpenClaw Gateway (background + watchdog)
+ *   gateway:stop     Stop OpenClaw Gateway and all watchdogs
+ *   gateway:restart  Restart the gateway (stop → wait → start)
+ *   commands         List all available commands (add --json for machine-readable output)
  *
  * Exit Codes:
- *   0  成功
- *   1  執行錯誤
- *   2  用法錯誤 / 未知命令
- *   69 NT-ClawLaunch App 未執行
+ *   0  success
+ *   1  execution error
+ *   2  usage error / unknown command
+ *   69 NT-ClawLaunch app is not running
+ *   78 configuration error (onboarding not complete)
+ *
+ * Agent Workflow:
+ *   1. Run `clawlaunch health` first — exit 69 means the app is not open.
+ *   2. Run `clawlaunch gateway:start` to start the gateway.
+ *   3. Run `clawlaunch gateway:stop` to shut it down cleanly.
+ *   4. Run `clawlaunch commands --json` to discover all commands programmatically.
  */
 
 import fs from 'fs/promises';
@@ -83,6 +94,15 @@ async function getHealth(port) {
   });
 }
 
+async function getCommands(port) {
+  return httpRequest({
+    hostname: '127.0.0.1',
+    port,
+    path: '/commands',
+    method: 'GET',
+  });
+}
+
 function formatResult(result) {
   try {
     const parsed = JSON.parse(result.stdout || '{}');
@@ -95,15 +115,29 @@ function formatResult(result) {
 // ── 主程式 ────────────────────────────────────────────────────────────────────
 
 const COMMAND = process.argv[2];
-const VALID_COMMANDS = ['gateway:start', 'gateway:stop', 'gateway:restart', 'health'];
+const FLAGS = process.argv.slice(3);
+const JSON_FLAG = FLAGS.includes('--json');
+const VALID_COMMANDS = ['gateway:start', 'gateway:stop', 'gateway:restart', 'health', 'commands'];
 
 if (!COMMAND || COMMAND === '--help' || COMMAND === '-h') {
-  console.log('Usage: clawlaunch <command>\n');
+  console.log('Usage: clawlaunch <command> [--json]\n');
   console.log('Commands:');
-  console.log('  gateway:start    Start OpenClaw Gateway');
-  console.log('  gateway:stop     Stop OpenClaw Gateway');
-  console.log('  gateway:restart  Restart OpenClaw Gateway');
-  console.log('  health           Check if NT-ClawLaunch is running');
+  console.log('  health              Check if NT-ClawLaunch is running');
+  console.log('  gateway:start       Start OpenClaw Gateway (background + watchdog)');
+  console.log('  gateway:stop        Stop OpenClaw Gateway and all watchdogs');
+  console.log('  gateway:restart     Restart the gateway (stop → wait → start)');
+  console.log('  commands            List all available commands');
+  console.log('  commands --json     Machine-readable command list (for agents)');
+  console.log('\nExit Codes:');
+  console.log('  0   success');
+  console.log('  1   execution error');
+  console.log('  2   usage error / unknown command');
+  console.log('  69  NT-ClawLaunch app is not running');
+  console.log('  78  configuration error (onboarding not complete)');
+  console.log('\nAgent Workflow:');
+  console.log('  1. clawlaunch health           → confirm app is open (exit 69 = not running)');
+  console.log('  2. clawlaunch gateway:start    → start the gateway');
+  console.log('  3. clawlaunch gateway:stop     → shut down cleanly');
   process.exit(COMMAND ? 0 : 2);
 }
 
@@ -121,6 +155,34 @@ if (COMMAND === 'health') {
     process.exit(69);
   });
   console.log(JSON.stringify(result, null, 2));
+  process.exit(0);
+}
+
+if (COMMAND === 'commands') {
+  const result = await getCommands(port).catch((err) => {
+    console.error('NT-ClawLaunch CLI server is not responding:', err.message);
+    process.exit(69);
+  });
+  if (JSON_FLAG) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`NT-ClawLaunch v${result.version ?? '?'} — Available Commands\n`);
+    for (const cmd of result.commands ?? []) {
+      console.log(`  ${cmd.command.padEnd(22)} ${cmd.description}`);
+      if (cmd.when)  console.log(`  ${''.padEnd(22)} When: ${cmd.when}`);
+      if (cmd.notes) console.log(`  ${''.padEnd(22)} Note: ${cmd.notes}`);
+    }
+    if (result.workflow?.length) {
+      console.log('\nWorkflow:');
+      result.workflow.forEach((w, i) => console.log(`  ${i + 1}. ${w}`));
+    }
+    if (result.exitCodes) {
+      console.log('\nExit Codes:');
+      for (const [code, meaning] of Object.entries(result.exitCodes)) {
+        console.log(`  ${String(code).padEnd(4)} ${meaning}`);
+      }
+    }
+  }
   process.exit(0);
 }
 
