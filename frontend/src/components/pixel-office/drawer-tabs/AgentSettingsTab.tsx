@@ -592,34 +592,6 @@ export default function AgentSettingsTab({
         <TelegramPairingSection />
       </div>
 
-      {/* Usage Stats */}
-      <div className="p-6 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-[24px] space-y-4 shadow-lg shadow-slate-200/50 dark:shadow-none">
-        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-          {t('pixelOffice.drawer.tabs.analytics', '使用統計')}
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <StatCard label={t('pixelOffice.drawer.info.sessions', 'Sessions')} value={String(summary?.sessionCount ?? 0)} />
-          <StatCard
-            label={t('pixelOffice.drawer.info.tokensIn', 'In')}
-            value={(summary?.tokensIn ?? 0) >= 1000 ? `${((summary?.tokensIn ?? 0) / 1000).toFixed(1)}K` : String(summary?.tokensIn ?? 0)}
-          />
-          <StatCard
-            label={t('pixelOffice.drawer.info.tokensOut', 'Out')}
-            value={(summary?.tokensOut ?? 0) >= 1000 ? `${((summary?.tokensOut ?? 0) / 1000).toFixed(1)}K` : String(summary?.tokensOut ?? 0)}
-          />
-        </div>
-        {(summary?.cost ?? 0) > 0 && (
-          <div className="rounded-2xl border border-amber-200 dark:border-amber-800/40 bg-amber-50/60 dark:bg-amber-950/10 px-4 py-2.5 flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              {t('pixelOffice.drawer.info.cost', 'Cost')}
-            </span>
-            <span className="font-mono text-xs font-bold text-amber-700 dark:text-amber-300">
-              ${summary!.cost.toFixed(6)}
-            </span>
-          </div>
-        )}
-      </div>
-
       {/* Save Button */}
       <button
         onClick={() => { void handleSave(); }}
@@ -636,15 +608,6 @@ export default function AgentSettingsTab({
       >
         {saveButtonLabel}
       </button>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 px-3 py-2.5 text-center">
-      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{label}</div>
-      <div className="mt-1 font-mono text-sm font-bold text-slate-700 dark:text-slate-200">{value}</div>
     </div>
   );
 }
