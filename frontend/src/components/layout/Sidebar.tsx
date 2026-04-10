@@ -1,4 +1,4 @@
-import { Layout, Activity, BarChart3, Radar, Brain, Boxes, Database, MonitorPlay, Building2 } from 'lucide-react';
+import { Layout, Activity, BarChart3, Radar, MonitorPlay, Building2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import type { ReactNode } from 'react';
 

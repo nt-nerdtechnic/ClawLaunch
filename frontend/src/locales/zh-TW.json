@@ -77,7 +77,7 @@
       "launcherSettings": "啟動器配置",
       "runtimeSettings": "龍蝦配置",
       "memory": "記憶資料",
-      "agentOffice": "代理管理"
+      "agentOffice": "Agent 辦公室"
     },
     "webPreview": {
       "title": "Web Preview 模式",
@@ -92,7 +92,7 @@
       "launcherSettings": "Launcher 配置",
       "runtimeSettings": "openclaw.json 配置",
       "memory": "記憶體與資料瀏覽器",
-      "agentOffice": "代理管理"
+      "agentOffice": "Agent 辦公室"
     },
     "logoutConfirm": "確定要重置並返回引導流程嗎？目前的配置將被保留，但您需要重新完成設定步驟。",
     "logoutTooltip": "登出並重新設定",
