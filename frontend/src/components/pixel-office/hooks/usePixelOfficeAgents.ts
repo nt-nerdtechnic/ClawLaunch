@@ -202,11 +202,11 @@ export function usePixelOfficeAgents(): UsePixelOfficeAgentsResult {
       if (byScannedAgent.has(agentId)) {
         const sessions = byScannedAgent.get(agentId)!;
         const isActive = sessions.some(s => s.isRunning === true);
-        const displayName = sessions.length === 1 && sessions[0].displayName ? sessions[0].displayName : agentId;
         const configEntry = configAgentList?.find(a => a.id === agentId);
+        const displayName = configEntry?.name || agentId;
         results.push({
           id: agentId,
-          displayName: configEntry?.name || displayName,
+          displayName,
           color: AGENT_COLORS[colorIdx],
           snapshotState: isActive ? 'active' : 'idle',
           model: sessions[0]?.model || configEntry?.model || undefined,

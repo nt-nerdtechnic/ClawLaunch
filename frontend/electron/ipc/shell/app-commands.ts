@@ -56,5 +56,11 @@ export async function handleAppCommands(fullCommand: string): Promise<CommandRes
     return { code: 0, stdout: '', stderr: '', exitCode: 0 };
   }
 
+  if (fullCommand === 'app:relaunch') {
+    app.relaunch();
+    app.exit(0);
+    return { code: 0, stdout: '', stderr: '', exitCode: 0 };
+  }
+
   return null;
 }

@@ -107,7 +107,7 @@ const UpdateBanner = () => {
               </div>
             </div>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => void window.electronAPI?.exec('app:relaunch').catch(() => window.location.reload())}
               className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black rounded-xl transition-all shadow-lg active:scale-95"
             >
               {t('updateBanner.success.restartNow')}
