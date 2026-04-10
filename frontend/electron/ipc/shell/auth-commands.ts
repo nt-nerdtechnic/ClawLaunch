@@ -491,6 +491,45 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
     }
   }
 
+  if (fullCommand.startsWith('agent:set-model')) {
+    try {
+      const payloadStr = fullCommand.replace('agent:set-model', '').trim();
+      const payload = payloadStr ? JSON.parse(payloadStr) : {};
+      const agentId = String(payload?.agentId || '').trim();
+      const model = String(payload?.model ?? '').trim();
+      const configDir = normalizeConfigDir(String(payload?.configPath || ''));
+
+      if (!agentId) return { code: 1, stdout: '', stderr: 'Missing agentId', exitCode: 1 };
+      if (!configDir) return { code: 1, stdout: '', stderr: 'Missing configPath', exitCode: 1 };
+
+      const configFilePath = path.join(configDir, 'openclaw.json');
+      const configJson = ((await loadJsonFile(configFilePath)) as Record<string, unknown>) || {};
+      const agentsList = Array.isArray((configJson as Record<string, unknown> & { agents?: { list?: unknown[] } })?.agents?.list)
+        ? ((configJson as Record<string, unknown> & { agents: { list: Array<Record<string, unknown>> } }).agents.list)
+        : [];
+      const agentIndex = agentsList.findIndex((a) => String(a?.id || '') === agentId);
+      if (agentIndex < 0) return { code: 1, stdout: '', stderr: 'Agent not found in agents.list', exitCode: 1 };
+
+      if (model) {
+        agentsList[agentIndex] = { ...agentsList[agentIndex], model };
+      } else {
+        const updated = { ...agentsList[agentIndex] };
+        delete updated.model;
+        agentsList[agentIndex] = updated;
+      }
+      if (!(configJson as Record<string, unknown> & { agents?: unknown }).agents) {
+        (configJson as Record<string, unknown>).agents = {};
+      }
+      (configJson as Record<string, unknown> & { agents: { list: unknown[] } }).agents.list = agentsList;
+
+      try { await fs.copyFile(configFilePath, `${configFilePath}.bak`); } catch { /* ignore */ }
+      await saveJsonFile(configFilePath, configJson);
+      return { code: 0, stdout: JSON.stringify({ agentId, model }), stderr: '', exitCode: 0 };
+    } catch (e) {
+      return { code: 1, stdout: '', stderr: (e as Error)?.message || 'agent:set-model failed', exitCode: 1 };
+    }
+  }
+
   if (fullCommand.startsWith('config:model-options')) {
     try {
       const payloadStr = fullCommand.replace('config:model-options', '').trim();
