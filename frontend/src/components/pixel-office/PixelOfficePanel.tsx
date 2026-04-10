@@ -303,6 +303,24 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
           <AddAgentModal
             onClose={() => setShowAddAgent(false)}
             onCreated={() => {
+              // Re-run detect:paths to refresh detectedConfig.agentList with the new agent's workspace
+              if (window.electronAPI) {
+                window.electronAPI.exec('detect:paths').then(res => {
+                  if (res.code === 0 && res.stdout) {
+                    try {
+                      const detected = JSON.parse(res.stdout);
+                      if (detected?.existingConfig) {
+                        setDetectedConfig({
+                          ...detected.existingConfig,
+                          corePath: detected.corePath || detected.existingConfig.corePath || '',
+                          configPath: detected.configPath || detected.existingConfig.configPath || '',
+                          workspacePath: detected.workspacePath || detected.existingConfig.workspacePath || detected.existingConfig.workspace || '',
+                        });
+                      }
+                    } catch { /* silent */ }
+                  }
+                }).catch(() => {});
+              }
               refreshAgents();
               setShowAddAgent(false);
             }}
