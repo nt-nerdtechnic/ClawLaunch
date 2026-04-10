@@ -1,6 +1,9 @@
 {
   "name": "nt-clawlaunch-workspace",
   "private": true,
+  "bin": {
+    "clawlaunch": "scripts/clawlaunch.mjs"
+  },
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",

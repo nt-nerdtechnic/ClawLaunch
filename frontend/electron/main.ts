@@ -32,8 +32,7 @@ import { registerWindowHandler } from './ipc/window-handler.js';
 import { registerEventsHandler } from './ipc/events-handler.js';
 import { registerUsageHandler } from './ipc/usage-handler.js';
 import { registerActivityHandler } from './ipc/activity-handler.js';
-import { registerShellExecHandler } from './ipc/shell-exec-handler.js';
-
+import { registerShellExecHandler } from './ipc/shell-exec-handler.js';import { startCliServer, stopCliServer } from './services/cli-server.js';
 // ── Multi-instance support ──────────────────────────────────────────────────
 // Isolate userData by PID to prevent Chromium singleton lock causing the second instance to crash.
 // However, config.json (user settings) is stored in a fixed path PERSISTENT_CONFIG_DIR,
@@ -330,10 +329,13 @@ app.whenReady().then(async () => {
     killAllSubprocesses,
     startActivityWatcher,
   });
+
+  startCliServer({ spawnWatchedGatewayProcess, stopGatewayWatchdog, stopGatewayHttpWatchdog, runShellCommand });
 });
 
 app.on('before-quit', () => {
   console.error(`[launcher-trace] ts=${new Date().toISOString()} action=before-quit`);
+  stopCliServer().catch(() => {});
   killAllSubprocesses();
   const lockPath = getActiveLockFilePath();
   if (lockPath) {
