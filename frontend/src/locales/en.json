@@ -92,7 +92,7 @@
       "launcherSettings": "Launcher Configuration",
       "runtimeSettings": "openclaw.json Configuration",
       "memory": "Memory & Data Browser",
-      "agentOffice": "Agents"
+      "agentOffice": "Agents Office"
     },
     "logoutConfirm": "Are you sure you want to reset and return to onboarding? Current configuration will be kept, but you will need to go through the setup steps again.",
     "logoutTooltip": "Logout & Reconfigure",
