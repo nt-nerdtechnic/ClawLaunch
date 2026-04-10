@@ -142,7 +142,6 @@ export default function AddAgentModal({ onClose, onCreated, restartGateway }: Ad
           secret: secret.trim(),
           corePath: config.corePath,
           configPath: config.configPath,
-          workspacePath: config.workspacePath,
         };
       }
       const res = await window.electronAPI.exec(`auth:create-agent ${JSON.stringify(payload)}`);

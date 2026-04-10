@@ -396,7 +396,10 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
         return { code: 1, stdout: '', stderr: 'Credential is required for this authChoice', exitCode: 1 };
       }
       const envPrefix = `cross-env OPENCLAW_STATE_DIR=${shellQuote(configDir)} OPENCLAW_CONFIG_PATH=${shellQuote(configFilePath)} OPENCLAW_AGENT_DIR=${shellQuote(agentDir)} `;
-      const workspaceFlag = String(payload?.workspacePath || '').trim() ? ` --workspace ${shellQuote(String(payload.workspacePath).trim())}` : '';
+      // Each agent gets its own independent workspace path
+      const agentWorkspaceAbs = path.join(homeDir, '.openclaw', `workspace-${agentId}`);
+      const agentWorkspaceTilde = `~/.openclaw/workspace-${agentId}`;
+      const workspaceFlag = ` --workspace ${shellQuote(agentWorkspaceAbs)}`;
       let authFlags = '';
       if (authChoice === 'token') {
         authFlags = ` --token-provider anthropic --token ${shellQuote(secret)}`;
@@ -412,7 +415,7 @@ export async function handleAuthCommands(fullCommand: string, ctx: ShellExecCont
       }
       await restoreMainDefaultAgentDir();
       const agentDisplayName = String(payload?.name || '').trim();
-      await registerAgentInConfig(String(payload?.workspacePath || '').trim() || undefined, agentDisplayName || agentId);
+      await registerAgentInConfig(agentWorkspaceTilde, agentDisplayName || agentId);
       if (agentDisplayName) {
         void ctx.runShellCommand(buildSetIdentityCmd(corePath, configFilePath, agentId, agentDisplayName)).catch(() => {/* best-effort */});
       }
