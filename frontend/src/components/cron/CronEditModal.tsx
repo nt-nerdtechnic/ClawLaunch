@@ -336,9 +336,12 @@ export function CronEditModal({ draft, onChange, allAgents, modelOptionGroups, c
               ref={promptRef}
               value={draft.payloadMessage}
               onChange={e => {
+                const el = e.target;
                 const saved = bodyRef.current?.scrollTop ?? 0;
-                set({ payloadMessage: e.target.value });
+                el.style.height = 'auto';
+                el.style.height = el.scrollHeight + 'px';
                 if (bodyRef.current) bodyRef.current.scrollTop = saved;
+                set({ payloadMessage: e.target.value });
               }}
               rows={1}
               placeholder="每次觸發時送給 agent 的提示，留空則使用任務預設 prompt"
