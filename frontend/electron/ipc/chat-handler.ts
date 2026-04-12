@@ -485,7 +485,13 @@ export function registerChatHandler(_ctx: ChatHandlerContext): void {
             continue;
           }
 
-          const isRunning = isRunningFromIndex && (hasExplicitRunningState || (!hasExplicitStoppedState && isHeartbeatFresh));
+          // isRunning is true only if:
+          // 1. Session is not yet marked as completed/failed/aborted in index AND
+          // 2. Either: (a) has explicit running state OR (b) no explicit stopped state AND heartbeat is fresh
+          // 3. AND: not marked completed by content analysis (e.g., contains ✅ or "完成")
+          const isRunning = isRunningFromIndex 
+            && (hasExplicitRunningState || (!hasExplicitStoppedState && isHeartbeatFresh))
+            && !isCompletedByContent;
 
           byKey.set(groupKey, {
             key: groupKey,
