@@ -395,7 +395,7 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
         }
         if (payload.payloadMessage !== undefined) {
           const msg = String(payload.payloadMessage).trim();
-          next['payload'] = { ...(next['payload'] as Record<string, unknown> || job['payload'] as Record<string, unknown>), message: msg || undefined };
+          next['payload'] = { ...(next['payload'] as Record<string, unknown> || job['payload'] as Record<string, unknown>), message: msg };
         }
         if (payload.delivery !== undefined && typeof payload.delivery === 'object' && payload.delivery !== null) {
           const incoming = payload.delivery as Record<string, unknown>;
