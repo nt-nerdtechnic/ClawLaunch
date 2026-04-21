@@ -228,7 +228,7 @@ export default function AgentSkillsTab({ agentWorkspace }: AgentSkillsTabProps) 
       <div className="flex flex-col items-center justify-center h-full gap-2 py-12 text-slate-400">
         <Boxes size={24} className="opacity-30" />
         <p className="text-[11px] text-center px-4">
-          {t('pixelOffice.drawer.skills.noWorkspace', 'Configure agents.list[].workspace in openclaw.json')}
+          {t('memory.noWorkspaceHint')}
         </p>
       </div>
     );

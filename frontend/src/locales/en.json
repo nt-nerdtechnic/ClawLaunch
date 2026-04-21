@@ -1724,7 +1724,7 @@
     "selectFileHint": "Click on a memory or data file in the left panel",
     "emptyFile": "(File is empty)",
     "noWorkspace": "Workspace path not configured",
-    "noWorkspaceHint": "Please complete path setup in Launcher Config or onboarding",
+    "noWorkspaceHint": "Configure agents.list[].workspace in openclaw.json or setup in Launcher Config",
     "noGroups": "No memory directories found",
     "dirNotFound": "Directory not found",
     "empty": "Directory is empty",

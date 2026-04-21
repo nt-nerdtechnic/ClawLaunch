@@ -614,8 +614,8 @@ export default function AgentMemoryTab({ agentWorkspace }: AgentMemoryTabProps) 
       <div className="flex-1 flex items-center justify-center p-12">
         <div className="text-center space-y-3">
           <Brain size={40} className="mx-auto text-slate-400 opacity-50" />
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{t('memory.noWorkspace', 'No workspace')}</p>
-          <p className="text-slate-400 dark:text-slate-500 text-xs">{t('memory.noWorkspaceHint', 'Configure agents.list[].workspace in openclaw.json')}</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{t('memory.noWorkspace')}</p>
+          <p className="text-slate-400 dark:text-slate-500 text-xs">{t('memory.noWorkspaceHint')}</p>
         </div>
       </div>
     );

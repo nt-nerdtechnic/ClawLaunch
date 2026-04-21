@@ -1795,7 +1795,7 @@
     "selectFileHint": "從左側選單點選記憶與資料檔案",
     "emptyFile": "（檔案內容為空）",
     "noWorkspace": "尚未設定工作區路徑",
-    "noWorkspaceHint": "請先至「啟動器配置」或「onboarding」完成路徑設定",
+    "noWorkspaceHint": "請先至「啟動器配置」完成設定，或在 openclaw.json 的 agents.list 中配置工作區",
     "noGroups": "無法找到記憶相關目錄",
     "dirNotFound": "目錄不存在",
     "empty": "目錄為空",
