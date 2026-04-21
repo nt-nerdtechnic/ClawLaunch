@@ -137,7 +137,15 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
     }
     const coreSkills = corePath ? await scanSkillsInDir(path.join(corePath, 'skills')) : [];
     const workspaceSkills = workspacePath ? await scanInstalledSkills(workspacePath) : [];
-    const agentList = (existingConfig as Record<string, unknown>)['agentList'] ?? [];
+    const rawAgentList = (existingConfig as Record<string, unknown>)['agentList'] ?? [];
+    const agentList = Array.isArray(rawAgentList)
+      ? rawAgentList.map((a: any) => ({
+        ...a,
+        workspace: a.workspace ? expandTilde(String(a.workspace)) : a.workspace,
+        agentDir: a.agentDir ? expandTilde(String(a.agentDir)) : a.agentDir,
+      }))
+      : [];
+
     return {
       code: 0,
       stdout: JSON.stringify({ corePath, configPath, workspacePath, agentList, existingConfig: { ...existingConfig, workspaceSkills }, coreSkills }),
@@ -184,6 +192,15 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
         const coreSkills = configData.corePath ? await scanSkillsInDir(path.join(configData.corePath, 'skills')) : [];
         const workspaceSkills = configData.workspace ? await scanInstalledSkills(configData.workspace) : [];
         const existingConfig = { ...configData, workspaceSkills };
+
+        const homeDir = app.getPath('home');
+        const expandTilde = (p: string) => p.startsWith('~/') || p === '~' ? p.replace('~', homeDir) : p;
+        const agentList = (configData.agentList ?? []).map((a: any) => ({
+          ...a,
+          workspace: a.workspace ? expandTilde(String(a.workspace)) : a.workspace,
+          agentDir: a.agentDir ? expandTilde(String(a.agentDir)) : a.agentDir,
+        }));
+
         return {
           code: 0,
           stdout: JSON.stringify({
@@ -191,7 +208,7 @@ export async function handleConfigCommands(fullCommand: string, ctx: ShellExecCo
             corePath: configData.corePath,
             configPath: finalConfigDirPath,
             workspacePath: configData.workspace,
-            agentList: configData.agentList ?? [],
+            agentList,
             coreSkills,
             existingConfig,
           }),

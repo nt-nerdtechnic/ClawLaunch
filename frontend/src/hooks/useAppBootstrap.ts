@@ -112,17 +112,28 @@ export function useAppBootstrap({
           detectedResult = detected;
 
           if (detected && detected.existingConfig) {
+            const { setConfig } = useStore.getState();
+            const detWorkspace =
+              detected.workspacePath ||
+              detected.existingConfig.workspacePath ||
+              detected.existingConfig.workspace ||
+              detected.configPath ||
+              detected.existingConfig.configPath ||
+              '';
+
             setDetectedConfig({
               ...detected.existingConfig,
+              agentList: detected.agentList ?? detected.existingConfig.agentList ?? [],
               corePath: detected.corePath || detected.existingConfig.corePath || '',
               configPath: detected.configPath || detected.existingConfig.configPath || '',
-              workspacePath:
-                detected.workspacePath ||
-                detected.existingConfig.workspacePath ||
-                detected.existingConfig.workspace ||
-                detected.configPath ||
-                detected.existingConfig.configPath ||
-                '',
+              workspacePath: detWorkspace,
+            });
+
+            // Sync detected paths to config store immediately so views like MemoryPage can see them
+            setConfig({
+              corePath: detected.corePath || detected.existingConfig.corePath || '',
+              configPath: detected.configPath || detected.existingConfig.configPath || '',
+              workspacePath: detWorkspace,
             });
           }
 

@@ -313,6 +313,7 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
                     if (detected?.existingConfig) {
                       setDetectedConfig({
                         ...detected.existingConfig,
+                        agentList: detected.agentList ?? detected.existingConfig.agentList ?? [],
                         corePath: detected.corePath || detected.existingConfig.corePath || '',
                         configPath: detected.configPath || detected.existingConfig.configPath || '',
                         workspacePath: detected.workspacePath || detected.existingConfig.workspacePath || detected.existingConfig.workspace || '',
@@ -337,6 +338,7 @@ export default function PixelOfficePanel({ restartGateway, onClose, className = 
           agentWorkspace={
             detectedConfig?.agentList?.find(a => a.id === drawerState.agentId)?.workspace
             || summaries.find(s => s.id === drawerState.agentId)?.workspace
+            || detectedConfig?.workspacePath
           }
           agentDir={
             detectedConfig?.agentList?.find(a => a.id === drawerState.agentId)?.agentDir
