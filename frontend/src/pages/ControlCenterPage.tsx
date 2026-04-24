@@ -541,8 +541,11 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
     try {
       setError('');
       setTriggeringJobIds((prev) => { const next = new Set(prev); next.add(jobId); return next; });
-      // Fire-and-forget: cron:trigger spins up the job in background, no need to await completion.
-      window.electronAPI.exec(`cron:trigger ${JSON.stringify({ jobId, stateDir, fireAndForget: true })}`);
+      const res = await window.electronAPI.exec(`cron:trigger ${JSON.stringify({ jobId, stateDir, fireAndForget: true })}`);
+      if ((res.code ?? res.exitCode ?? 1) !== 0) {
+        setError(res.stderr || 'Trigger cron job failed');
+        return;
+      }
       // Brief visual feedback then remove spinner
       await new Promise(r => setTimeout(r, 800));
       await loadCron();
@@ -562,7 +565,11 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       // Step 1: Clear consecutiveErrors / lastError in jobs.json (OpenClaw's own cron state file)
       await execCmd(`cron:reset-errors ${JSON.stringify({ jobId, stateDir })}`);
       // Step 2: Fire `openclaw cron run <jobId>` natively in background
-      window.electronAPI.exec(`cron:trigger ${JSON.stringify({ jobId, stateDir, fireAndForget: true })}`);
+      const triggerRes = await window.electronAPI.exec(`cron:trigger ${JSON.stringify({ jobId, stateDir, fireAndForget: true })}`);
+      if ((triggerRes.code ?? triggerRes.exitCode ?? 1) !== 0) {
+        setError(triggerRes.stderr || 'Trigger cron job failed');
+        return;
+      }
       // Brief visual feedback then remove spinner
       await new Promise(r => setTimeout(r, 1200));
       await loadCron();

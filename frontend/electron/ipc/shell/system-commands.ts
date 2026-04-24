@@ -234,15 +234,21 @@ export async function handleSystemCommands(_fullCommand: string, _ctx: ShellExec
       const jobId = String(payload?.jobId || '').trim();
       if (!jobId) return { code: 1, stdout: '', stderr: 'jobId is required', exitCode: 1 };
       const runtime = await resolveOpenClawRuntime();
-      if (!runtime.openclawPrefix) {
-        return { code: 1, stdout: '', stderr: 'OpenClaw runtime not configured', exitCode: 1 };
+      if (!runtime.corePath) {
+        return { code: 1, stdout: '', stderr: 'OpenClaw runtime not configured: corePath is missing', exitCode: 1 };
       }
 
       const fireAndForget = payload?.fireAndForget === true;
       const timeoutMs = Math.max(1000, Number(payload?.timeoutMs || 30000));
       const expectFinal = payload?.expectFinal === true;
       const expectFinalArg = expectFinal ? ' --expect-final' : '';
-      const runCmd = `${runtime.openclawPrefix} cron run ${shellQuote(jobId)} --timeout ${timeoutMs}${expectFinalArg}`;
+
+      // Prefer the stateDir explicitly passed from the UI; fall back to runtime-resolved configDir.
+      const effectiveStateDir = String(payload?.stateDir || runtime.configDir || '').trim();
+      const stateDirEnv = effectiveStateDir ? `OPENCLAW_STATE_DIR=${shellQuote(effectiveStateDir)} ` : '';
+      const cdPrefix = `cd ${shellQuote(runtime.corePath)} && `;
+      const envPrefix = `${stateDirEnv}${runtime.configFilePath ? `OPENCLAW_CONFIG_PATH=${shellQuote(runtime.configFilePath)} ` : ''}`;
+      const runCmd = `${cdPrefix}cross-env ${envPrefix}pnpm openclaw cron run ${shellQuote(jobId)} --timeout ${timeoutMs}${expectFinalArg}`;
 
       if (fireAndForget) {
         // Spawn detached so the IPC returns immediately and the job runs in background
