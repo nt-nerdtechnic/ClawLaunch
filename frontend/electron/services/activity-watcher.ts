@@ -134,11 +134,15 @@ export async function readLauncherConfigPaths(): Promise<{
   try {
     const raw = await fs.readFile(_getClawlaunchFile(), 'utf-8');
     const cfg = JSON.parse(raw);
+    const configPath = String(cfg.configPath || '').trim();
+    // Derive stateDir the same way resolveOpenClawRuntime does: strip /openclaw.json from configPath.
+    // clawlaunch.json never stores a stateDir field directly, so this keeps the two in sync.
+    const derivedStateDir = configPath ? configPath.replace(/[\\/]openclaw\.json$/i, '') : '';
     return {
       corePath:      String(cfg.corePath      || '').trim(),
       workspacePath: String(cfg.workspacePath || '').trim(),
-      configPath:    String(cfg.configPath    || '').trim(),
-      stateDir:      String(cfg.stateDir      || process.env['OPENCLAW_STATE_DIR'] || path.join(HOME, '.openclaw')).trim(),
+      configPath,
+      stateDir:      String(cfg.stateDir || derivedStateDir || process.env['OPENCLAW_STATE_DIR'] || path.join(HOME, '.openclaw')).trim(),
     };
   } catch { return fallback; }
 }
