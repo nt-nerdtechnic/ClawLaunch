@@ -75,7 +75,13 @@ export function createMainHall(): RoomConfig {
     walkable[p.y][p.x] = false;
   }
 
-  return { widthTiles: W, heightTiles: H, walkable, furniture, deskSlots, spawnPoint: { x: 10 * TILE_SIZE, y: 16 * TILE_SIZE }, renderTheme: 'office' };
+  // Main corridor anchors: horizontal row at y=15, plus vertical mid-lane at x=10,13
+  const routeAnchors = [
+    { x: 6,  y: 15 }, { x: 9,  y: 15 }, { x: 12, y: 15 }, { x: 15, y: 15 }, { x: 20, y: 15 },
+    { x: 9,  y: 6  }, { x: 9,  y: 10 }, { x: 12, y: 6  }, { x: 12, y: 10 },
+    { x: 20, y: 6  }, { x: 20, y: 10 },
+  ];
+  return { widthTiles: W, heightTiles: H, walkable, furniture, deskSlots, spawnPoint: { x: 10 * TILE_SIZE, y: 16 * TILE_SIZE }, renderTheme: 'office', routeAnchors };
 }
 
 /** Small Room — 4 desks in a 2×2 grid, intimate layout, 30×20 tiles. */
@@ -108,7 +114,13 @@ export function createSmallRoom(): RoomConfig {
     walkable[p.y][p.x] = false;
   }
 
-  return { widthTiles: W, heightTiles: H, walkable, furniture, deskSlots, spawnPoint: { x: 14 * TILE_SIZE, y: 17 * TILE_SIZE }, renderTheme: 'serverRoom' };
+  // Center corridor: horizontal band y=9-10, vertical mid x=14
+  const routeAnchors = [
+    { x: 10, y: 9  }, { x: 14, y: 9  }, { x: 18, y: 9  },
+    { x: 10, y: 15 }, { x: 14, y: 15 }, { x: 18, y: 15 },
+    { x: 14, y: 4  }, { x: 14, y: 17 },
+  ];
+  return { widthTiles: W, heightTiles: H, walkable, furniture, deskSlots, spawnPoint: { x: 14 * TILE_SIZE, y: 17 * TILE_SIZE }, renderTheme: 'serverRoom', routeAnchors };
 }
 
 /** Open Plan — 12 desks in a 4 rows × 3 cols open-floor layout, 30×20 tiles. */
@@ -144,7 +156,13 @@ export function createOpenPlan(): RoomConfig {
     walkable[p.y][p.x] = false;
   }
 
-  return { widthTiles: W, heightTiles: H, walkable, furniture, deskSlots, spawnPoint: { x: 15 * TILE_SIZE, y: 17 * TILE_SIZE }, renderTheme: 'cafe' };
+  // Column corridors at x=7,16; row corridors between desk rows at y=6,9,12,15
+  const routeAnchors = [
+    { x: 7,  y: 6  }, { x: 7,  y: 9  }, { x: 7,  y: 12 }, { x: 7,  y: 15 },
+    { x: 16, y: 6  }, { x: 16, y: 9  }, { x: 16, y: 12 }, { x: 16, y: 15 },
+    { x: 15, y: 15 }, { x: 15, y: 16 }, { x: 8,  y: 16 },
+  ];
+  return { widthTiles: W, heightTiles: H, walkable, furniture, deskSlots, spawnPoint: { x: 15 * TILE_SIZE, y: 17 * TILE_SIZE }, renderTheme: 'cafe', routeAnchors };
 }
 
 /** Override desk slots from an external config object. */

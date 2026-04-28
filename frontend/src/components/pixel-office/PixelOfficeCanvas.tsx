@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { PixelAgent, RoomConfig } from './engine/types';
-import { CANVAS_W, CANVAS_H, AGENT_COLORS, SPRITE_DRAW_W, SPRITE_DRAW_H } from './engine/constants';
+import { CANVAS_W, CANVAS_H, AGENT_COLORS, SPRITE_DRAW_W, SPRITE_DRAW_H, BUBBLE_DURATION_MS } from './engine/constants';
 import { buildSpriteCache, type SpriteCache } from './engine/spriteCache';
 import { getScene } from './engine/scenes';
 import { createAgent, syncAgentWithSnapshot } from './engine/agent';
@@ -23,11 +23,15 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentDoubleC
   const theme = useStore(s => s.theme);
   const dark = theme === 'dark';
   const officeSceneId = useStore(s => s.officeSceneId);
+  const chatMessages = useStore(s => s.chat.messages);
+  const activeChatAgentId = useStore(s => s.chat.activeAgentId);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const agentsRef = useRef<PixelAgent[]>([]);
   const prevRoomRef = useRef<RoomConfig | null>(null);
+  /** Stable per-agentId desk assignment — ensures each slot is used by at most one agent. */
+  const deskAssignmentRef = useRef<Map<string, number>>(new Map());
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingClickRef = useRef<{ agentId: string; displayName: string } | null>(null);
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
@@ -77,22 +81,44 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentDoubleC
   const { summaries } = usePixelOfficeAgents();
 
   // Sync pixel agents with snapshot summaries.
-  // When room reference changes (scene switch), clear agents first so they respawn at new spawn point.
+  // When room changes (scene switch), clear agents and desk assignments so they respawn fresh.
   useEffect(() => {
     if (prevRoomRef.current !== null && prevRoomRef.current !== room) {
       agentsRef.current = [];
+      deskAssignmentRef.current.clear();
     }
     prevRoomRef.current = room;
+
+    const deskAssignment = deskAssignmentRef.current;
+
+    // Clean up removed agents and free their desk slots
+    const summaryIds = new Set(summaries.map(s => s.id));
+    for (const id of [...deskAssignment.keys()]) {
+      if (!summaryIds.has(id)) deskAssignment.delete(id);
+    }
+
+    // Assign desks: one slot per agent, first-come first-served, -1 for overflow
+    const takenDesks = new Set([...deskAssignment.values()].filter(d => d >= 0));
+    for (const summary of summaries) {
+      if (!deskAssignment.has(summary.id)) {
+        let assigned = -1;
+        for (let d = 0; d < room.deskSlots.length; d++) {
+          if (!takenDesks.has(d)) { assigned = d; takenDesks.add(d); break; }
+        }
+        deskAssignment.set(summary.id, assigned);
+      }
+    }
 
     const existing = agentsRef.current;
     const existingMap = new Map(existing.map(a => [a.id, a]));
     const newAgents: PixelAgent[] = [];
 
     for (const summary of summaries) {
+      const deskIdx = deskAssignment.get(summary.id) ?? -1;
       const agent = existingMap.get(summary.id);
       if (agent) {
-        // Update existing agent in-place
         agent.displayName = summary.displayName;
+        agent.deskIndex = deskIdx;
         agent.model = summary.model;
         agent.tokensIn = summary.tokensIn;
         agent.tokensOut = summary.tokensOut;
@@ -101,8 +127,6 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentDoubleC
         syncAgentWithSnapshot(agent, summary.snapshotState, room);
         newAgents.push(agent);
       } else {
-        // Create new agent at spawn point (first time or scene change)
-        const deskIdx = summaries.indexOf(summary) % Math.max(1, room.deskSlots.length);
         const newAgent = createAgent(
           summary.id,
           summary.displayName,
@@ -122,6 +146,32 @@ export default function PixelOfficeCanvas({ paused, onAgentClick, onAgentDoubleC
 
     agentsRef.current = newAgents;
   }, [summaries, room]);
+
+  // Inject latest assistant message per agent — dedup by message id to avoid re-triggering.
+  useEffect(() => {
+    if (!chatMessages.length) return;
+    // Group messages: find latest assistant message per agentId
+    const latestPerAgent = new Map<string, { id: string; content: string }>();
+    for (const m of chatMessages) {
+      if (m.role !== 'assistant' || m.status === 'error' || !m.content) continue;
+      const key = m.agentId || activeChatAgentId;
+      const existing = latestPerAgent.get(key);
+      if (!existing || m.createdAt > (chatMessages.find(x => x.id === existing.id)?.createdAt ?? 0)) {
+        latestPerAgent.set(key, { id: m.id, content: m.content });
+      }
+    }
+    for (const [agentId, msg] of latestPerAgent) {
+      const agent = agentsRef.current.find(a => a.id === agentId);
+      if (!agent) continue;
+      if (agent.lastBubbleMessageId === msg.id) continue; // already displayed
+      const text = msg.content.trim();
+      if (text) {
+        agent.bubbleText = text;
+        agent.bubbleUntil = Date.now() + BUBBLE_DURATION_MS;
+        agent.lastBubbleMessageId = msg.id;
+      }
+    }
+  }, [chatMessages, activeChatAgentId]);
 
   // Run game loop
   usePixelOfficeLoop({

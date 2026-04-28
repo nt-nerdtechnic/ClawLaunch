@@ -19,11 +19,8 @@ export interface PixelAgent {
   animFrame: number;
   animTimer: number;
   deskIndex: number;
-  /** Timer for how long agent has been idle before wandering */
   idleTimer: number;
-  /** How long to wait before starting to wander */
   idleDelay: number;
-  /** Number of wanders done in current idle cycle */
   wanderCount: number;
   // Snapshot data for tooltip
   snapshotState: 'active' | 'idle';
@@ -32,6 +29,12 @@ export interface PixelAgent {
   tokensOut: number;
   cost: number;
   sessionCount: number;
+  // Dialogue bubble (text overrides dots; bubbleUntil=0 means no active bubble)
+  bubbleText: string;
+  bubbleUntil: number;
+  lastBubbleMessageId: string;
+  // Collision / pathfinding
+  blockedTimer: number;
 }
 
 export type SpriteData = string[][];
@@ -78,4 +81,16 @@ export interface RoomConfig {
   deskSlots: DeskSlot[];
   spawnPoint: Vec2;
   renderTheme: RenderTheme;
+  /** Preferred wander targets — agents preferentially idle-walk to these tiles */
+  routeAnchors?: Vec2[];
+}
+
+/**
+ * Per-frame occupancy context built in the game loop before any agent updates.
+ * `occupied` is a snapshot of all agents' foot tiles at frame start.
+ * `reserved` accumulates tiles claimed this frame by walking agents (first-come wins).
+ */
+export interface FrameContext {
+  occupied: Set<string>;
+  reserved: Map<string, string>;
 }

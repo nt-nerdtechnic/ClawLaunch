@@ -546,9 +546,12 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         setError(res.stderr || 'Trigger cron job failed');
         return;
       }
-      // Brief visual feedback then remove spinner
+      // Brief visual feedback then refresh cron state
       await new Promise(r => setTimeout(r, 800));
       await loadCron();
+      // OpenClaw process needs 2–4 s to initialise and write sessions.json;
+      // schedule a follow-up session scan so the card appears without waiting for the 5 s poll.
+      setTimeout(() => { void loadActiveSessions(); }, 3000);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Trigger cron job failed');
     } finally {
@@ -570,9 +573,10 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
         setError(triggerRes.stderr || 'Trigger cron job failed');
         return;
       }
-      // Brief visual feedback then remove spinner
+      // Brief visual feedback then refresh cron state
       await new Promise(r => setTimeout(r, 1200));
       await loadCron();
+      setTimeout(() => { void loadActiveSessions(); }, 3000);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Fix and retry failed');
     } finally {

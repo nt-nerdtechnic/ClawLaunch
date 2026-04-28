@@ -26,6 +26,14 @@ export const IDLE_WANDER_DELAY_MIN = 6000;
 export const IDLE_WANDER_DELAY_MAX = 14000;
 export const MAX_WANDER_COUNT      = 2;
 
+// Collision / pathfinding
+export const BLOCKED_REPATH_DELAY_MS = 1500;  // ms blocked before re-routing
+
+// Dialogue bubbles
+export const BUBBLE_DURATION_MS  = 6000;  // default bubble lifetime for chat messages
+export const BUBBLE_PHRASE_MS    = 3000;  // lifetime for auto status phrases
+export const BUBBLE_FADE_MS      = 800;   // fade-out duration at end of bubble
+
 // ─── 8 agent base colours (one per theme) ─────────────────────────────────────
 export const AGENT_COLORS = [
   '#3498db', // 0 blue

@@ -8,6 +8,7 @@ import {
   LIGHT_PALETTE, DARK_PALETTE,
   SERVER_ROOM_LIGHT_PALETTE, SERVER_ROOM_DARK_PALETTE,
   CAFE_LIGHT_PALETTE, CAFE_DARK_PALETTE,
+  BUBBLE_FADE_MS,
 } from './constants';
 
 // Window columns (tile X) along north wall
@@ -520,15 +521,77 @@ function drawNameLabel(ctx: CanvasRenderingContext2D, agent: PixelAgent, dark: b
 }
 
 function drawStatusBubble(ctx: CanvasRenderingContext2D, agent: PixelAgent, dark: boolean): void {
-  if (agent.state !== 'working') return;
+  const now = Date.now();
+  const hasText = agent.bubbleText && agent.bubbleUntil > now;
 
+  if (hasText) {
+    drawTextBubble(ctx, agent, dark, now);
+  } else if (agent.state === 'working') {
+    drawDotsBubble(ctx, agent, dark);
+  }
+}
+
+const BUBBLE_MAX_CHARS = 22;
+const BUBBLE_MAX_W = 130;
+
+function drawTextBubble(
+  ctx: CanvasRenderingContext2D,
+  agent: PixelAgent,
+  dark: boolean,
+  now: number,
+): void {
+  const raw = agent.bubbleText;
+  const text = raw.length > BUBBLE_MAX_CHARS ? raw.slice(0, BUBBLE_MAX_CHARS - 1) + '…' : raw;
+
+  ctx.font = '8px monospace';
+  const tw = ctx.measureText(text).width;
+  const bw = Math.min(tw + 14, BUBBLE_MAX_W);
+  const bh = 14;
+  const bx = agent.x - bw / 2;
+  const by = agent.y - SPRITE_DRAW_H - 24;
+  const br = 4;
+
+  const fadeStart = agent.bubbleUntil - BUBBLE_FADE_MS;
+  const alpha = now >= fadeStart
+    ? Math.max(0, (agent.bubbleUntil - now) / BUBBLE_FADE_MS)
+    : 1;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  ctx.fillStyle = dark ? 'rgba(22,26,46,0.93)' : 'rgba(255,255,255,0.95)';
+  drawRoundRect(ctx, bx, by, bw, bh, br);
+  ctx.fill();
+
+  ctx.strokeStyle = dark ? '#4a6fa5' : '#c8d5e8';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Tail pointing downward toward agent
+  ctx.fillStyle = dark ? 'rgba(22,26,46,0.93)' : 'rgba(255,255,255,0.95)';
+  ctx.beginPath();
+  ctx.moveTo(agent.x - 4, by + bh);
+  ctx.lineTo(agent.x,     by + bh + 5);
+  ctx.lineTo(agent.x + 4, by + bh);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = dark ? '#b8c8e8' : '#2a3a5a';
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, agent.x, by + bh / 2);
+
+  ctx.restore();
+}
+
+function drawDotsBubble(ctx: CanvasRenderingContext2D, agent: PixelAgent, dark: boolean): void {
   const bx = agent.x + SPRITE_DRAW_W / 2 + 2;
   const by = agent.y - SPRITE_DRAW_H - 8;
   const bw = 24;
   const bh = 15;
   const br = 4;
 
-  // Bubble
   ctx.fillStyle = dark ? 'rgba(22,26,46,0.93)' : 'rgba(255,255,255,0.95)';
   drawRoundRect(ctx, bx, by - bh, bw, bh, br);
   ctx.fill();
@@ -537,7 +600,6 @@ function drawStatusBubble(ctx: CanvasRenderingContext2D, agent: PixelAgent, dark
   ctx.lineWidth = 0.8;
   ctx.stroke();
 
-  // Tail
   ctx.fillStyle = dark ? 'rgba(22,26,46,0.93)' : 'rgba(255,255,255,0.95)';
   ctx.beginPath();
   ctx.moveTo(bx + 4, by);
@@ -546,7 +608,6 @@ function drawStatusBubble(ctx: CanvasRenderingContext2D, agent: PixelAgent, dark
   ctx.closePath();
   ctx.fill();
 
-  // Animated dots
   const time = Date.now();
   for (let i = 0; i < 3; i++) {
     const bounce = Math.sin((time / 280) + i * 1.15) * 2;

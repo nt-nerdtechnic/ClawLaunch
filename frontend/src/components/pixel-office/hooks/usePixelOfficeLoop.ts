@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, type RefObject, type MutableRefObject } from 'react';
-import type { PixelAgent, RoomConfig } from '../engine/types';
+import type { PixelAgent, RoomConfig, FrameContext } from '../engine/types';
 import type { SpriteCache } from '../engine/spriteCache';
-import { updateAgent } from '../engine/agent';
+import { updateAgent, pixelToTile, tileKey } from '../engine/agent';
 import { renderFrame } from '../engine/renderer';
 
 interface UsePixelOfficeLoopParams {
@@ -45,23 +45,33 @@ export function usePixelOfficeLoop({
 
     const dt = lastTimeRef.current === 0
       ? 16
-      : Math.min(time - lastTimeRef.current, 100); // Cap at 100ms
+      : Math.min(time - lastTimeRef.current, 100);
     lastTimeRef.current = time;
 
-    // Update all agents
-    for (const agent of agentsRef.current) {
-      updateAgent(agent, dt, room);
+    const agents = agentsRef.current;
+
+    // Build per-frame occupancy context before any agent is updated.
+    // `occupied` is a snapshot of all foot tiles at frame start.
+    // `reserved` accumulates tile claims as agents are processed in order.
+    const occupied = new Set<string>();
+    for (const a of agents) {
+      const ft = pixelToTile(a.x, a.y);
+      occupied.add(tileKey(ft.x, ft.y));
+    }
+    const reserved = new Map<string, string>();
+    const frameCtx: FrameContext = { occupied, reserved };
+
+    for (const agent of agents) {
+      updateAgent(agent, dt, room, frameCtx);
     }
 
-    // Render
-    renderFrame(ctx, room, agentsRef.current, cache, hoveredAgentId, dark, bgImage, scaleX, scaleY, offsetX, offsetY);
+    renderFrame(ctx, room, agents, cache, hoveredAgentId, dark, bgImage, scaleX, scaleY, offsetX, offsetY);
 
     if (loopRef.current) {
       rafRef.current = requestAnimationFrame(loopRef.current);
     }
   }, [canvasRef, agentsRef, room, cache, hoveredAgentId, dark, bgImage, loopRef, scaleX, scaleY, offsetX, offsetY]);
 
-  // Store latest loop in ref to avoid circular dependency (in effect to prevent render-phase update)
   useEffect(() => {
     loopRef.current = loop;
   }, [loop]);
@@ -85,3 +95,4 @@ export function usePixelOfficeLoop({
     };
   }, [paused, cache]);
 }
+
