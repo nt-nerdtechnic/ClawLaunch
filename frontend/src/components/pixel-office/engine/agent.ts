@@ -13,7 +13,13 @@ const WORKING_PHRASES = [
   '正在分析...', '讓我想想...', '整理任務中...', '查找資料...',
   '計算結果...', '撰寫回覆...', '處理中...', '深度思考中...',
 ];
+const IDLE_PHRASES = [
+  '閒逛中...', '休息一下', '等待任務...', '東張西望', '在想什麼...', '到處看看',
+];
 const BLOCKED_PHRASES = ['稍等一下...', '找個位子...', '等待中...', '路被佔了...'];
+
+const IDLE_BUBBLE_COOLDOWN_MIN = 10_000;
+const IDLE_BUBBLE_COOLDOWN_MAX = 20_000;
 
 export function tileKey(x: number, y: number): string {
   return `${x},${y}`;
@@ -137,6 +143,21 @@ function updateIdle(
       agent.wanderCount = 0;
       agent.idleTimer = 0;
       agent.idleDelay = randomDelay() * 2;
+    }
+  }
+
+  // Idle phrase cycling: show phrase → cooldown → show phrase → ...
+  // bubbleText='' + bubbleUntil expired means cooldown done; show next phrase.
+  // bubbleText≠'' + bubbleUntil expired means phrase just ended; start cooldown.
+  const now = Date.now();
+  if (now >= agent.bubbleUntil) {
+    if (agent.bubbleText === '') {
+      agent.bubbleText = IDLE_PHRASES[Math.floor(Math.random() * IDLE_PHRASES.length)];
+      agent.bubbleUntil = now + BUBBLE_PHRASE_MS;
+    } else {
+      agent.bubbleText = '';
+      agent.bubbleUntil = now + IDLE_BUBBLE_COOLDOWN_MIN +
+        Math.random() * (IDLE_BUBBLE_COOLDOWN_MAX - IDLE_BUBBLE_COOLDOWN_MIN);
     }
   }
 }
