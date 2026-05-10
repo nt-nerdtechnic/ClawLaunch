@@ -31,12 +31,13 @@ const wrapWithZsh = (cmd: string, stderrRedir = '2>&1'): string => {
   if (process.platform === 'win32') return cmd;
   // Escape backslashes and double quotes so the command survives the outer double-quote wrapper.
   const escaped = cmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const unsetCmd = 'unset npm_config_prefix && ';
   if (process.platform === 'linux') {
     // Linux: prefer bash login shell; fall back to direct invocation
-    return `bash -ilc "${escaped}" ${stderrRedir} || ${cmd}`;
+    return `${unsetCmd}bash -ilc "${unsetCmd}${escaped}" ${stderrRedir} || ${unsetCmd}${cmd}`;
   }
   // macOS: prefer zsh login shell; fall back to bash then direct
-  return `zsh -ilc "${escaped}" ${stderrRedir} || bash -ilc "${escaped}" ${stderrRedir} || ${cmd}`;
+  return `${unsetCmd}zsh -ilc "${unsetCmd}${escaped}" ${stderrRedir} || ${unsetCmd}bash -ilc "${unsetCmd}${escaped}" ${stderrRedir} || ${unsetCmd}${cmd}`;
 };
 
 /**

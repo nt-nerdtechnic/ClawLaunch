@@ -74,7 +74,11 @@ export function initGatewayWatchdog(
 /** macOS：透過 osascript 在 Terminal.app 開啟新視窗執行指令 */
 export const buildMacTerminalLaunchScript = (command: string, title = 'OpenClaw Gateway Auto-Restart'): string => {
   const marker = `${NT_CLAW_TERMINAL_MARKER_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-  const finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; ${command}; printf "\\n${t('main.shell.terminal.footer')}"; read -r _`;
+  
+  // Wrap the command in a login shell after unsetting the conflicting variable to fix NVM issues.
+  const wrappedCmd = `unset npm_config_prefix && zsh -ilc '${command.replace(/'/g, "'\\''")}'`;
+  
+  const finalCmd = `clear; echo '🚀 ${title}...'; echo '${marker}'; ${wrappedCmd}; printf "\\n${t('main.shell.terminal.footer')}"; read -r _`;
   const line1 = `tell application "Terminal" to do script "${escapeAppleScriptString(finalCmd)}"`;
   const line2 = 'tell application "Terminal" to activate';
   return `osascript -e ${shellQuote(line1)} -e ${shellQuote(line2)}`;
@@ -160,7 +164,12 @@ export const stopGatewayWatchdog = (reason = 'manual stop'): void => {
 };
 
 export const spawnWatchedGatewayProcess = (command: string): ReturnType<typeof spawn> => {
-  const child = spawn(command, { shell: true });
+  const isMac = process.platform === 'darwin';
+  const finalCmd = isMac 
+    ? `unset npm_config_prefix && zsh -ilc '${command.replace(/'/g, "'\\''")}'`
+    : command;
+
+  const child = spawn(finalCmd, { shell: true });
   gatewayWatchdog.child = child;
   _activeProcesses.add(child);
 

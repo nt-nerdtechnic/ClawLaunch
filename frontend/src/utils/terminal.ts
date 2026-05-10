@@ -35,8 +35,17 @@ export async function execInTerminal(command: string, options: ExecOptions = {})
   if (cwd) {
     finalCmd += `cd "${cwd}"; `;
   }
-  
-  finalCmd += command;
+
+  // Support for fixing NVM environment issues on macOS
+  const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
+  if (isMac) {
+    // We wrap the command in a login shell after unsetting the conflicting variable.
+    // This allows NVM to initialize correctly in the child shell.
+    const wrappedCmd = `unset npm_config_prefix && zsh -ilc ${shellSingleQuote(command)}`;
+    finalCmd += wrappedCmd;
+  } else {
+    finalCmd += command;
+  }
   
   if (holdOpen) {
     finalCmd += `; printf "\\n${waitMsg}\\n"; read -r _`;

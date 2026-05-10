@@ -72,7 +72,7 @@ const ALL_DEPS: Dep[] = [
     description: 'JavaScript 執行環境，OpenClaw CLI 核心依賴（需要 v22+）',
     checkCmd: isWin
       ? 'node --version 2>&1'
-      : 'zsh -ilc "node --version" 2>/dev/null || node --version 2>/dev/null',
+      : 'zsh -ilc "unset npm_config_prefix && node --version" 2>/dev/null || node --version 2>/dev/null',
     parseVersion: (out: string) => {
       const m = out.match(/v(\d+\.\d+\.\d+)/);
       return m ? m[1] : null;
@@ -92,14 +92,14 @@ const ALL_DEPS: Dep[] = [
     description: 'Node.js 套件管理器，OpenClaw 安裝與執行的直接依賴',
     checkCmd: isWin
       ? 'cmd /c pnpm --version 2>&1'
-      : 'zsh -ilc "pnpm --version" 2>/dev/null || pnpm --version 2>/dev/null',
+      : 'zsh -ilc "unset npm_config_prefix && pnpm --version" 2>/dev/null || pnpm --version 2>/dev/null',
     parseVersion: (out: string) => {
       const lines = out.trim().split('\n').filter((l: string) => /^\d+\.\d+/.test(l));
       return lines[0]?.trim() || null;
     },
     installCmd: isWin
       ? 'cmd /c npm install -g pnpm'
-      : 'zsh -ilc "npm install -g pnpm" 2>&1 || npm install -g pnpm 2>&1',
+      : 'zsh -ilc "unset npm_config_prefix && npm install -g pnpm" 2>&1 || npm install -g pnpm 2>&1',
     installTitle: '安裝 pnpm',
   },
   {
