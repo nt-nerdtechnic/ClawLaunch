@@ -241,7 +241,7 @@ export function SkillManager() {
       } else {
         alert(result?.stderr || t('skillManager.status.importError', { msg: 'Unknown' }));
       }
-    } catch (_e) {}
+    } catch (e) { console.warn('[SkillManager] import failed:', e); }
     setActing(false);
   };
 
@@ -263,7 +263,7 @@ export function SkillManager() {
       }
       await window.electronAPI.exec(`skill:delete ${baseDir}/skills/${skill.id}`);
       await rescan();
-    } catch (_e) {}
+    } catch (e) { console.warn('[SkillManager] remove failed:', e); }
     setActing(false);
     setRemovingSkillId(null);
   };

@@ -108,14 +108,20 @@ export function useRuntimeConfig(
         };
 
         // 30 秒保守超時，避免後端卡死導致 UI 永久轉圈
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Sync timeout')), 30000)
-        );
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('Sync timeout')), 30000);
+        });
 
-        const res = await Promise.race([
-          window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`),
-          timeoutPromise,
-        ]);
+        let res: Awaited<ReturnType<typeof window.electronAPI.exec>>;
+        try {
+          res = await Promise.race([
+            window.electronAPI.exec(`config:model-options ${JSON.stringify(payload)}`),
+            timeoutPromise,
+          ]);
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
 
         // 若已有更新的呼叫在進行中，丟棄此結果
         if (seq !== loadCallSeqRef.current) return;

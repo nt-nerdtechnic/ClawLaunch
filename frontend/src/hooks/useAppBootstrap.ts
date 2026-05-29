@@ -34,6 +34,7 @@ export function useAppBootstrap({
 }: UseAppBootstrapParams) {
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState<Error | null>(null);
 
   const checkOnboardingStatus = useCallback((loadedConfig?: LoadedConfig, _detected?: DetectedConfig | null) => {
     const persisted = loadedConfig || {};
@@ -209,7 +210,9 @@ export function useAppBootstrap({
         if (window.electronAPI) {
           const currentConfig = useStore.getState().config;
           const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, ...launcherPayload } = currentConfig;
-          await window.electronAPI.exec(`config:write ${JSON.stringify(launcherPayload)}`).catch(() => {});
+          await window.electronAPI.exec(`config:write ${JSON.stringify(launcherPayload)}`).catch((e: unknown) => {
+            console.warn('[useAppBootstrap] auto-complete config:write failed:', e);
+          });
         }
 
         localStorage.setItem(ONBOARDING_FINISHED_KEY, 'true');
@@ -224,9 +227,26 @@ export function useAppBootstrap({
     checkOnboardingStatus(loadedConfig ?? undefined, detected);
   }, [checkEnvironment, checkOnboardingStatus, detectPaths, loadConfig, setOnboardingFinished, setActiveTab, syncGatewayStatus]);
 
+  const retryBootstrap = useCallback(() => {
+    initPromiseRef.current = null;
+    setBootstrapError(null);
+    setBootstrapping(true);
+    initPromiseRef.current = initializeApp()
+      .catch((e: unknown) => {
+        console.error('Bootstrap failed', e);
+        setBootstrapError(e instanceof Error ? e : new Error(String(e)));
+      })
+      .finally(() => setBootstrapping(false));
+  }, [initializeApp]);
+
   useEffect(() => {
     if (!initPromiseRef.current) {
-      initPromiseRef.current = initializeApp().finally(() => setBootstrapping(false));
+      initPromiseRef.current = initializeApp()
+        .catch((e: unknown) => {
+          console.error('Bootstrap failed', e);
+          setBootstrapError(e instanceof Error ? e : new Error(String(e)));
+        })
+        .finally(() => setBootstrapping(false));
     }
   }, [initializeApp]);
 
@@ -249,12 +269,16 @@ export function useAppBootstrap({
       } = currentConfig;
       window.electronAPI.exec(
         `config:write ${JSON.stringify({ ...launcherPayload, onboardingFinished: true })}`
-      ).catch(() => {});
+      ).catch((e: unknown) => {
+        console.warn('[useAppBootstrap] config:write failed:', e);
+      });
     }
   }, [setActiveTab, setOnboardingFinished]);
 
   return {
     bootstrapping,
+    bootstrapError,
+    retryBootstrap,
     handleOnboardingComplete,
   };
 }

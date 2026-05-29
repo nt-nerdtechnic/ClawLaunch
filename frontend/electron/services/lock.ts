@@ -53,7 +53,7 @@ export async function checkConfigPathConflict(configPathDir: string): Promise<Co
         break;
       }
       // Stale lock from dead process — clean up opportunistically
-      try { await fs.unlink(path.join(configPathDir, entry)); } catch {}
+      try { await fs.unlink(path.join(configPathDir, entry)); } catch { /* stale lock cleanup, ignore errors */ }
     }
   } catch {
     return { conflictPid: null, suggestionPath: '' };

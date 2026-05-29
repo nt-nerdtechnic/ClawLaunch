@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../store';
 import { execInTerminal } from '../utils/terminal';
@@ -47,6 +47,11 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<{ text: string; source: string; time: string }[]>([]);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const hasOAuthProfile = (authChoice: string, rawConfig: string) => {
     const parsed = JSON.parse(rawConfig);
@@ -355,6 +360,7 @@ export const useOnboardingAction = (): UseOnboardingActionReturn => {
     let didTimeout = false;
     addLocalLog(`[${label}] started`, 'system');
     const timerId = window.setInterval(() => {
+      if (!mountedRef.current) return;
       elapsedSeconds += heartbeatMs / 1000;
       addLocalLog(`[${label}] running... ${elapsedSeconds}s`, 'system');
     }, heartbeatMs);

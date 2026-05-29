@@ -358,7 +358,7 @@ export const ControlCenterPage: React.FC<ControlCenterPageProps> = ({ onRefreshS
       const res = await window.electronAPI.exec(`test -f ${ConfigService.shellQuote(telegramAllowFromFile)} && cat ${ConfigService.shellQuote(telegramAllowFromFile)}`);
       if (res.code === 0 && res.stdout) {
         const parsed = JSON.parse(res.stdout);
-        const ids = Array.isArray(parsed?.allowFrom) ? parsed.allowFrom.map((v: any) => String(v)) : [];
+        const ids = Array.isArray(parsed?.allowFrom) ? parsed.allowFrom.map((v: unknown) => String(v)) : [];
         setAuthorizedRecipients(prev => ({ ...prev, telegram: ids }));
       }
     } catch {

@@ -110,7 +110,14 @@ export function useAppLifecycleEffects({
   // When runtimeProfile is first available, perform immediate gateway status check,
   // then keep polling to avoid stale dashboard status.
   const prevRuntimeProfileRef = useRef<Record<string, unknown> | null | undefined>(undefined);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
+    // Clear any existing interval before creating a new one
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
     const wasNull = prevRuntimeProfileRef.current === undefined || prevRuntimeProfileRef.current === null;
     const isNowLoaded = runtimeProfile !== null && runtimeProfile !== undefined;
 
@@ -119,10 +126,15 @@ export function useAppLifecycleEffects({
     }
     prevRuntimeProfileRef.current = runtimeProfile;
 
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       void syncGatewayStatus();
     }, 10000);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [runtimeProfile, syncGatewayStatus]);
 }

@@ -4,6 +4,9 @@
   "bin": {
     "clawlaunch": "scripts/clawlaunch.mjs"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "electron-winstaller", "esbuild"]
+  },
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",

@@ -1,5 +1,3 @@
-// TODO: Refactor setup wizard with complete type definitions
-// onboarding component has incomplete types, resolvable with proper auth/config typings
 import React, { useEffect, useRef, useState } from 'react';
 import SetupStepWelcome from './SetupStepWelcome';
 import SetupStepModel from './SetupStepModel';
@@ -46,7 +44,9 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
 
       const latestConfig = latestConfigRef.current;
 
-      window.electronAPI.exec('process:kill-all').catch(() => {});
+      window.electronAPI.exec('process:kill-all').catch((e: unknown) => {
+        console.warn('[SetupWizard] process:kill-all failed:', e);
+      });
 
       const stateDirEnv = latestConfig.workspacePath ? `OPENCLAW_STATE_DIR=${shellQuote(latestConfig.workspacePath)} ` : '';
       const configPathEnv = latestConfig.configPath ? `OPENCLAW_CONFIG_PATH=${shellQuote(latestConfig.configPath + '/openclaw.json')} ` : '';
@@ -55,7 +55,9 @@ const SetupWizard = ({ onFinished }: SetupWizardProps) => {
         ? `cd ${shellQuote(latestConfig.corePath)} && ${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`
         : `${envPrefix}(pnpm openclaw gateway stop || openclaw gateway stop)`;
 
-      window.electronAPI.exec(stopCmd).catch(() => {});
+      window.electronAPI.exec(stopCmd).catch((e: unknown) => {
+        console.warn('[SetupWizard] gateway stop failed:', e);
+      });
     };
 
     window.addEventListener('beforeunload', stopOnboardingRuntime);

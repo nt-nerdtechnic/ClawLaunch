@@ -22,10 +22,10 @@ export default defineConfig([
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn', // Phase 2: gradually reduce any usage
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      '@typescript-eslint/ban-ts-comment': 'warn', // TODO: Remove @ts-nocheck in onboarding first
+      '@typescript-eslint/ban-ts-comment': 'error',
       '@typescript-eslint/prefer-as-const': 'warn',
-      '@typescript-eslint/no-empty-object-type': 'warn', // TODO: Phase 2 - add proper empty props interfaces
-      'no-empty': 'warn', // TODO: Phase 2 - properly handle empty catch blocks
+      '@typescript-eslint/no-empty-object-type': 'error',
+      'no-empty': 'error',
       'no-control-regex': 'warn', // ANSI escape sequences in gateway output parsing
       'prefer-const': 'warn',
       'react-hooks/exhaustive-deps': 'warn',

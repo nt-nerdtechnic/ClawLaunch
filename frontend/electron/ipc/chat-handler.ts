@@ -45,7 +45,9 @@ async function readLastJsonlMessage(filePath: string): Promise<{ lastMessage: st
   } catch {
     return { lastMessage: '', lastTimestamp: '' };
   } finally {
-    await fd?.close().catch(() => {});
+    await fd?.close().catch((e: unknown) => {
+      console.warn('[chat-handler] Failed to close file descriptor:', e);
+    });
   }
 }
 

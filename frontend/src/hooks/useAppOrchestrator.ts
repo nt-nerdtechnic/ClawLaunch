@@ -57,8 +57,17 @@ export function useAppOrchestrator() {
   });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [workspaceBannerDismissed, setWorkspaceBannerDismissed] = useState(
-    () => sessionStorage.getItem('workspace_banner_dismissed') === '1'
+    () => localStorage.getItem('workspace_banner_dismissed') === '1'
   );
+
+  // Reset banner dismissal when config paths are cleared (so user sees the warning again)
+  useEffect(() => {
+    const hasAllPaths = Boolean(config.corePath?.trim() && config.configPath?.trim() && config.workspacePath?.trim());
+    if (!hasAllPaths) {
+      localStorage.removeItem('workspace_banner_dismissed');
+      setWorkspaceBannerDismissed(false);
+    }
+  }, [config.corePath, config.configPath, config.workspacePath]);
 
   const { t, i18n } = useTranslation();
   const shellQuote = ConfigService.shellQuote;
@@ -179,7 +188,7 @@ export function useAppOrchestrator() {
     closeStopServiceModal,
   });
 
-  const { bootstrapping, handleOnboardingComplete } = useAppBootstrap({
+  const { bootstrapping, bootstrapError, retryBootstrap, handleOnboardingComplete } = useAppBootstrap({
     setOnboardingFinished,
     setActiveTab,
     syncGatewayStatus,
@@ -231,6 +240,8 @@ export function useAppOrchestrator() {
     handleResetOnboarding,
     dismissWorkspaceBanner,
     bootstrapping,
+    bootstrapError,
+    retryBootstrap,
     handleOnboardingComplete,
     t,
   };

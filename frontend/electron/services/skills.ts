@@ -79,9 +79,9 @@ export async function scanSkillsInDir(dir: string): Promise<unknown[]> {
           const meta = await parseSkillMetadata(fullPath, item);
           results.push(meta);
         }
-      } catch (_e) {}
+      } catch { /* skip unreadable skill entry */ }
     }
-  } catch (_e) {}
+  } catch { /* skip unreadable base dir */ }
   return results;
 }
 
@@ -110,7 +110,7 @@ export async function scanInstalledSkills(...basePaths: string[]): Promise<unkno
           fromExtensions.push(meta);
         }
       }
-    } catch (_e) {}
+    } catch { /* no extensions dir, continue */ }
 
     for (const skill of [...fromSkills, ...fromExtensions]) {
       const s = skill as Record<string, unknown>;

@@ -308,8 +308,12 @@ export const getProviderGroups = (t: TFunction): ProviderGroupItem[] => [
 /**
  * List of auth choices that use OAuth flow.
  */
+// Identity function used to extract provider IDs without actual i18n translation.
+// Cast is required because TFunction has complex overloads; behaviour is safe here
+// since getProviderGroups only uses t(key) to produce string labels and we discard them.
+const identityT = (key: string): string => key;
 export const OAUTH_AUTH_CHOICES = new Set(
-  getProviderGroups(((key: string) => key) as unknown as TFunction) // Workaround to get IDs without actual TFunction
+  getProviderGroups(identityT as unknown as TFunction)
     .flatMap(g => g.choices)
     .filter(c => c.oauthFlow)
     .map(c => c.id)

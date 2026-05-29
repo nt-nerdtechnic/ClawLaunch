@@ -23,6 +23,7 @@ import {
   initActivityWatcher,
   loadActivityStore,
   startActivityWatcher,
+  stopActivityWatcher,
   scanAllSessions,
   scanCronJobs,
   readLauncherConfigPaths,
@@ -336,10 +337,11 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   console.error(`[launcher-trace] ts=${new Date().toISOString()} action=before-quit`);
   stopCliServer().catch(() => {});
+  stopActivityWatcher();
   killAllSubprocesses();
   const lockPath = getActiveLockFilePath();
   if (lockPath) {
-    try { unlinkSync(lockPath); } catch {}
+    try { unlinkSync(lockPath); } catch { /* best-effort cleanup */ }
   }
 });
 

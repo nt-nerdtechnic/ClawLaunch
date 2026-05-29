@@ -67,6 +67,8 @@ function App() {
     handleResetOnboarding,
     dismissWorkspaceBanner,
     bootstrapping,
+    bootstrapError,
+    retryBootstrap,
     handleOnboardingComplete,
     t,
   } = useAppOrchestrator();
@@ -91,8 +93,8 @@ function App() {
   }
 
   // If not finished onboarding, show the wizard
-  if (bootstrapping) {
-    return <BootstrappingScreen />;
+  if (bootstrapping || bootstrapError) {
+    return <BootstrappingScreen error={bootstrapError?.message} onRetry={bootstrapError ? retryBootstrap : undefined} />;
   }
 
   if (!onboardingFinished) {

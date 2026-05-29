@@ -112,7 +112,7 @@ export function useAppInteractionHandlers({
   }, [running, config, addLog, t, stopGateway, setConfig, setDetectedConfig, setOnboardingFinished, setActiveTab, setShowLogoutConfirm]);
 
   const dismissWorkspaceBanner = useCallback(() => {
-    sessionStorage.setItem('workspace_banner_dismissed', '1');
+    localStorage.setItem('workspace_banner_dismissed', '1');
     setWorkspaceBannerDismissed(true);
   }, [setWorkspaceBannerDismissed]);
 

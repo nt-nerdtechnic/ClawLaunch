@@ -21,9 +21,7 @@ interface UpdateInfo {
   noReleases?: boolean;
 }
 
-interface LauncherSettingsPageProps {}
-
-export const LauncherSettingsPage: React.FC<LauncherSettingsPageProps> = () => {
+export const LauncherSettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const config = useStore((s) => s.config);
   const setConfig = useStore((s) => s.setConfig);

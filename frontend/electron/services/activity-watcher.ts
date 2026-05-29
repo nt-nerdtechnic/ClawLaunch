@@ -164,9 +164,13 @@ export async function buildWatchDirs(): Promise<string[]> {
 
 export const activeWatchers: ReturnType<typeof fsWatch>[] = [];
 
-export async function startActivityWatcher(extraDirs: string[] = []): Promise<void> {
-  for (const w of activeWatchers) { try { w.close(); } catch {} }
+export function stopActivityWatcher(): void {
+  for (const w of activeWatchers) { try { w.close(); } catch { /* ignore close errors */ } }
   activeWatchers.length = 0;
+}
+
+export async function startActivityWatcher(extraDirs: string[] = []): Promise<void> {
+  stopActivityWatcher();
 
   const configDirs = await buildWatchDirs();
   const dirsToWatch = [...new Set([...configDirs, ...extraDirs])];

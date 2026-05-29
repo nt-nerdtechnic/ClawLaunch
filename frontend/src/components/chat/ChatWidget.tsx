@@ -367,7 +367,7 @@ export function ChatWidget({ compact = false }: ChatWidgetProps) {
   const composingRef = useRef(false);
   const messageQueueRef = useRef<string[]>([]);
   const [queueCount, setQueueCount] = useState(0);
-  const handleSendRef = useRef<(msgOverride?: string) => Promise<void>>(undefined as unknown as (msgOverride?: string) => Promise<void>);
+  const handleSendRef = useRef<((msgOverride?: string) => Promise<void>) | null>(null);
 
   const activeMessages = useMemo(
     () => chat.messages.filter((item) => item.sessionKey === chat.activeSessionKey && item.agentId === chat.activeAgentId),

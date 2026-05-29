@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand';
+import type { Config } from './configSlice';
 
 export interface ToolCall {
   id: string;
@@ -109,12 +110,14 @@ export const createChatSlice: StateCreator<ChatSlice> = (set, get) => ({
       },
     }));
     if (typeof window !== 'undefined' && window.electronAPI) {
-      const state = get() as any;
+      const state = get() as ChatSlice & { setConfig?: (c: Partial<Config>) => void; config?: Config };
       if (state.setConfig) {
         state.setConfig({ activeAgentId: agentId });
         const currentConfig = state.config;
         const { model: _m, botToken: _b, authChoice: _a, apiKey: _k, platform: _p, appToken: _at, ...launcherPayload } = currentConfig;
-        window.electronAPI.exec(`config:write ${JSON.stringify({ ...launcherPayload, activeAgentId: agentId })}`).catch(() => {});
+        window.electronAPI.exec(`config:write ${JSON.stringify({ ...launcherPayload, activeAgentId: agentId })}`).catch((e: unknown) => {
+          console.warn('[chatSlice] config:write failed:', e);
+        });
       }
     }
   },

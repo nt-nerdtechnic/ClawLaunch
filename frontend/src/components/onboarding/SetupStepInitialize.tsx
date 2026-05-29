@@ -1,4 +1,3 @@
-// TODO: Refactor onboarding steps with complete type definitions
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Package, Settings, Database, ArrowRight, Loader2, CheckCircle2, AlertCircle, Monitor, FolderOpen } from 'lucide-react';
 import { useStore } from '../../store';
@@ -114,7 +113,7 @@ const SetupStepInitialize = ({ onNext }: { onNext?: () => void }) => {
                     if (Array.isArray(tagList) && tagList.every((item) => typeof item === 'string')) {
                         setVersions(tagList);
                     }
-                } catch { }
+                } catch { /* fetch failed, keep empty versions list */ }
             }
         };
         fetchVersions();

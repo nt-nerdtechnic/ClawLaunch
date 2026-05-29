@@ -83,7 +83,8 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
 
   ipcMain.handle('dialog:selectDirectory', async () => {
     const win = ctx.getMainWindow();
-    const result = await dialog.showOpenDialog(win!, {
+    if (!win || win.isDestroyed()) return null;
+    const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory'],
     });
     if (result.canceled) return null;
@@ -176,7 +177,14 @@ export function registerWindowHandler(ctx: WindowHandlerContext): void {
     }
 
     if (termSent.length > 0) {
-      await sleep(450);
+      // Poll until all processes exit, max 2s (8 attempts × 250ms)
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await sleep(250);
+        const anyAlive = termSent.some((pid) => {
+          try { process.kill(pid, 0); return true; } catch { return false; }
+        });
+        if (!anyAlive) break;
+      }
     }
 
     for (const pid of termSent) {
